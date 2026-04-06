@@ -6,11 +6,10 @@
 //
 #include "td/mtproto/TlsInit.h"
 
-#include "td/mtproto/stealth/TlsHelloBuilder.h"
+#include "td/mtproto/ClientHelloFactory.h"
 
-#include "td/utils/common.h"
-#include "td/utils/crypto.h"
 #include "td/utils/Random.h"
+#include "td/utils/crypto.h"
 #include "td/utils/Time.h"
 
 #include <algorithm>
@@ -31,20 +30,8 @@ void Grease::init(MutableSlice res) {
 }
 
 void TlsInit::send_hello() {
-  hello_unix_time_ = static_cast<int32>(Time::now() + server_time_difference_);
-  auto decision = stealth::get_runtime_ech_decision(username_, hello_unix_time_, route_hints_);
-#if TD_DARWIN
-  hello_uses_ech_ = decision.ech_mode == stealth::EchMode::Rfc9180Outer;
-  auto hello = stealth::build_default_tls_client_hello(username_, password_, hello_unix_time_, route_hints_);
-#else
-  auto platform = stealth::default_runtime_platform_hints();
-  auto profile = stealth::pick_runtime_profile(username_, hello_unix_time_, platform);
-  hello_uses_ech_ = profile_spec(profile).allows_ech && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
-  auto hello = stealth::build_tls_client_hello_for_profile(
-      username_, password_, hello_unix_time_, profile,
-      hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
-#endif
-  stealth::note_runtime_ech_decision(decision, hello_uses_ech_);
+  auto hello =
+      ClientHelloFactory::build_default(username_, password_, static_cast<int32>(Time::now() + server_time_difference_));
   hello_rand_ = hello.substr(11, 32);
   fd_.output_buffer().append(hello);
   state_ = State::WaitHelloResponse;
@@ -60,9 +47,6 @@ Status TlsInit::wait_hello_response() {
     string response_prefix(prefix.size(), '\0');
     it.advance(prefix.size(), response_prefix);
     if (prefix != response_prefix) {
-      if (hello_uses_ech_) {
-        stealth::note_runtime_ech_failure(username_, hello_unix_time_);
-      }
       return Status::Error("First part of response to hello is invalid");
     }
 
@@ -82,14 +66,7 @@ Status TlsInit::wait_hello_response() {
   string hash_dest(32, '\0');
   hmac_sha256(password_, PSLICE() << hello_rand_ << response.as_slice(), hash_dest);
   if (hash_dest != response_rand) {
-    if (hello_uses_ech_) {
-      stealth::note_runtime_ech_failure(username_, hello_unix_time_);
-    }
     return Status::Error("Response hash mismatch");
-  }
-
-  if (hello_uses_ech_) {
-    stealth::note_runtime_ech_success(username_, hello_unix_time_);
   }
 
   stop();
