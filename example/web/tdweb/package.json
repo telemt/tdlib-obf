@@ -43,7 +43,7 @@
     "lint-staged": "^8.1.5",
     "prettier": "^1.17.0",
     "typescript": "^3.4.5",
-    "webpack": "^4.44.1",
+    "webpack": "^5.106.1",
     "webpack-cli": "^3.3.12",
     "worker-loader": "^2.0.0"
   },
