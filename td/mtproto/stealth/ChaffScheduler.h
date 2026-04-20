@@ -36,6 +36,7 @@ class ChaffScheduler final {
 
   void schedule_after_activity(double now);
   void schedule_after_chaff(double now);
+  void disarm_due_to_invalid_time();
   void prune_budget_window(double now);
   double budget_resume_at(double now) const;
   bool budget_allows(double now) const;

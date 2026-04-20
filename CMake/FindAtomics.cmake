@@ -30,6 +30,7 @@ set(ATOMIC_CODE
     int main() {
       ++n8;
       ++n64;
+      return 0;
     }")
 
 set(ATOMICS_LIBS " " "-latomic")
