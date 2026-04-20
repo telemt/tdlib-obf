@@ -35,16 +35,29 @@ td::string make_tls_secret(td::Slice domain) {
 struct RuntimeFirefoxCandidate final {
   td::string domain;
   td::int32 unix_time{0};
+  BrowserProfile profile{BrowserProfile::Firefox148};
 };
 
+bool is_firefox_family(BrowserProfile profile) {
+  return profile == BrowserProfile::Firefox148 || profile == BrowserProfile::Firefox149_MacOS26_3 ||
+         profile == BrowserProfile::Firefox149_Windows;
+}
+
+// Find any Firefox-family profile reachable from the current build
+// platform's allowed-profile list. Linux desktop only exposes
+// `Firefox148`; Windows desktop only exposes `Firefox149_Windows`;
+// macOS desktop only exposes `Firefox149_MacOS26_3`. All three carry
+// the same record_size_limit (0x4001), which is what this test
+// actually checks downstream.
 RuntimeFirefoxCandidate find_firefox_runtime_candidate() {
   auto platform = default_runtime_platform_hints();
   for (td::uint32 bucket = 20000; bucket < 20384; bucket++) {
     auto unix_time = static_cast<td::int32>(bucket * 86400 + 3600);
     for (td::uint32 i = 0; i < 256; i++) {
       td::string domain = "runtime-firefox-" + td::to_string(i) + ".example.com";
-      if (pick_runtime_profile(domain, unix_time, platform) == BrowserProfile::Firefox148) {
-        return {std::move(domain), unix_time};
+      auto picked = pick_runtime_profile(domain, unix_time, platform);
+      if (is_firefox_family(picked)) {
+        return {std::move(domain), unix_time, picked};
       }
     }
   }
@@ -59,7 +72,7 @@ TEST(StealthConfigProfileRecordLimit, TlsSecretsUseRuntimeProfileSelectionKey) {
 
   auto config = StealthConfig::from_secret(secret, rng, candidate.unix_time, default_runtime_platform_hints());
 
-  ASSERT_EQ(static_cast<int>(BrowserProfile::Firefox148), static_cast<int>(config.profile));
+  ASSERT_EQ(static_cast<int>(candidate.profile), static_cast<int>(config.profile));
   ASSERT_EQ(0x4001u, profile_spec(config.profile).record_size_limit);
   ASSERT_EQ(static_cast<td::int32>(profile_spec(config.profile).record_size_limit) - 1,
             config.drs_policy.max_payload_cap);

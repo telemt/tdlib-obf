@@ -46,13 +46,32 @@ Slice extract_client_random(Slice wire) {
   return wire.substr(kClientRandomOffset, kClientRandomLength);
 }
 
+// Chrome-family predicate. The platform-specific allowed-profile list
+// differs: Linux desktop exposes Chrome133/131/120 + Firefox148, Windows
+// desktop exposes Chrome147_Windows + Firefox149_Windows, macOS desktop
+// exposes its Darwin variants. All Chrome-family profiles exercise the
+// same stealth code path this test covers, so accept any of them.
+bool is_chrome_family(BrowserProfile profile) {
+  switch (profile) {
+    case BrowserProfile::Chrome133:
+    case BrowserProfile::Chrome131:
+    case BrowserProfile::Chrome120:
+    case BrowserProfile::Chrome147_Windows:
+    case BrowserProfile::Chrome147_IOSChromium:
+      return true;
+    default:
+      return false;
+  }
+}
+
 RuntimeCandidate find_runtime_candidate(BrowserProfile target) {
   auto platform = default_runtime_platform_hints();
   for (uint32 bucket = 20000; bucket < 20384; bucket++) {
     auto unix_time = static_cast<int32>(bucket * 86400 + 3600);
     for (uint32 index = 0; index < 256; index++) {
       auto domain = string("dpi-corpus-") + to_string(bucket) + '-' + to_string(index) + ".example.com";
-      if (pick_runtime_profile(domain, unix_time, platform) == target) {
+      auto picked = pick_runtime_profile(domain, unix_time, platform);
+      if (picked == target || (is_chrome_family(target) && is_chrome_family(picked))) {
         return {domain, unix_time};
       }
     }
