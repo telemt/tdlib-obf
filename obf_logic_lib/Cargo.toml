@@ -8,12 +8,16 @@ aes = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
 cbc = "0.1"
-pkcs7 = "0.1"
 rand = "0.8"
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
-ecdsa = { version = "0.14", features = ["std"] }
-k256 = "0.13"
+p256 = "0.13"
 digest = "0.10"
+subtle = "2.6"
+zeroize = "1.8"
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dev-dependencies]
+p256 = "0.13"
+subtle = "2.6"

@@ -1,12 +1,10 @@
 use aes::Aes256;
-use cbc::{cipher::{BlockDecryptMut, KeyIvInit}, Decryptor};
-use digest::Digest;
-use ecdsa::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use cbc::{cipher::{block_padding::NoPadding, BlockDecryptMut, KeyIvInit}, Decryptor};
 use hmac::{Hmac, Mac};
-use k256::elliptic_curve::rand_core::OsRng;
-use k256::Secp256k1;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use sha2::Sha256;
-use x25519_dalek::{EphemeralSecret, PublicKey};
+use std::os::raw::c_char;
+use subtle::ConstantTimeEq;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -20,12 +18,48 @@ pub struct DerivedKeys {
 pub struct BlobResult {
     pub data: *mut u8,
     pub len: usize,
-    pub error: *const u8,
+    pub error: *const c_char,
+}
+
+unsafe fn ffi_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
+    if len == 0 {
+        return Some(&[]);
+    }
+    if ptr.is_null() {
+        return None;
+    }
+    Some(std::slice::from_raw_parts(ptr, len))
+}
+
+unsafe fn ffi_slice_mut<'a>(ptr: *mut u8, len: usize) -> Option<&'a mut [u8]> {
+    if len == 0 {
+        return Some(&mut []);
+    }
+    if ptr.is_null() {
+        return None;
+    }
+    Some(std::slice::from_raw_parts_mut(ptr, len))
+}
+
+fn ffi_error_ptr(error: &'static str) -> *const c_char {
+    match error {
+        "Unknown blob role" => b"Unknown blob role\0".as_ptr() as *const c_char,
+        "Shard size mismatch" => b"Shard size mismatch\0".as_ptr() as *const c_char,
+        "Invalid blob size" => b"Invalid blob size\0".as_ptr() as *const c_char,
+        "Blob checksum mismatch" => b"Blob checksum mismatch\0".as_ptr() as *const c_char,
+        "Invalid plaintext block size" => b"Invalid plaintext block size\0".as_ptr() as *const c_char,
+        "Invalid PKCS#7 padding" => b"Invalid PKCS#7 padding\0".as_ptr() as *const c_char,
+        "Invalid IV size" => b"Invalid IV size\0".as_ptr() as *const c_char,
+        "Invalid ciphertext block layout" => b"Invalid ciphertext block layout\0".as_ptr() as *const c_char,
+        _ => b"Internal error\0".as_ptr() as *const c_char,
+    }
 }
 
 fn secure_zero(data: &mut [u8]) {
-    for byte in data.iter_mut() {
-        *byte = 0;
+    // Use volatile writes to prevent dead-store elimination by the optimizer.
+    for (i, byte) in data.iter_mut().enumerate() {
+        unsafe { std::ptr::write_volatile(byte as *mut u8, 0u8); }
+        let _ = i; // suppress unused-variable warning
     }
 }
 
@@ -36,18 +70,18 @@ fn hmac_sha256(key: &[u8], message: &[u8], dest: &mut [u8; 32]) {
     dest.copy_from_slice(&result.into_bytes());
 }
 
-fn aes_cbc_decrypt(key: &[u8; 32], iv: &[u8], ciphertext: &[u8], plaintext: &mut [u8]) {
-    type Aes256Cbc = cbc::cipher::BlockEncryptorLegacy<Aes256>;
-
-    let cipher = Aes256Cbc::new(key.into(), iv.into());
-    let mut block = PlaintextBuffer::new(plaintext);
-    let blocks = ciphertext.chunks_exact(16);
-    for chunk in blocks {
-        let mut block_data = [0u8; 16];
-        block_data.copy_from_slice(chunk);
-        cipher.decrypt_block(&mut block_data);
-        block.push_block(&block_data);
-    }
+fn aes_cbc_decrypt(
+    key: &[u8; 32],
+    iv: &[u8],
+    ciphertext: &[u8],
+    plaintext: &mut [u8],
+) -> Result<(), &'static str> {
+    let iv: &[u8; 16] = iv.try_into().map_err(|_| "Invalid IV size")?;
+    let cipher = Decryptor::<Aes256>::new(key.into(), iv.into());
+    cipher
+        .decrypt_padded_b2b_mut::<NoPadding>(ciphertext, plaintext)
+        .map_err(|_| "Invalid ciphertext block layout")?;
+    Ok(())
 }
 
 fn remove_pkcs7_padding(plaintext: &mut Vec<u8>) -> Result<(), &'static str> {
@@ -68,22 +102,6 @@ fn remove_pkcs7_padding(plaintext: &mut Vec<u8>) -> Result<(), &'static str> {
     }
     plaintext.truncate(plaintext.len() - padding);
     Ok(())
-}
-
-struct PlaintextBuffer<'a> {
-    data: &'a mut [u8],
-    offset: usize,
-}
-
-impl<'a> PlaintextBuffer<'a> {
-    fn new(data: &'a mut [u8]) -> Self {
-        Self { data, offset: 0 }
-    }
-
-    fn push_block(&mut self, block: &[u8; 16]) {
-        self.data[self.offset..self.offset + 16].copy_from_slice(block);
-        self.offset += 16;
-    }
 }
 
 pub fn derive_keys(key_material: &[u8]) -> DerivedKeys {
@@ -150,7 +168,10 @@ pub fn decode_blob_impl(
     hmac_sha256(&derived_keys.mac_key, &mac_input, &mut computed_mac);
     secure_zero(&mut mac_input);
 
-    if &computed_mac[..] != &blob[16 + ciphertext_size..16 + ciphertext_size + 32] {
+    // Constant-time comparison: prevents timing oracle that would allow MAC forgery bit-by-bit.
+    let stored_mac = &blob[16 + ciphertext_size..16 + ciphertext_size + 32];
+    let mac_match = computed_mac.ct_eq(stored_mac);
+    if mac_match.unwrap_u8() == 0 {
         secure_zero(&mut computed_mac);
         secure_zero(&mut blob);
         return Err("Blob checksum mismatch");
@@ -159,7 +180,7 @@ pub fn decode_blob_impl(
 
     let mut plaintext = vec![0u8; ciphertext_size];
     let iv = &blob[..16];
-    aes_cbc_decrypt(&derived_keys.aes_key, iv, &blob[16..16 + ciphertext_size], &mut plaintext);
+    aes_cbc_decrypt(&derived_keys.aes_key, iv, &blob[16..16 + ciphertext_size], &mut plaintext)?;
     secure_zero(&mut blob);
 
     remove_pkcs7_padding(&mut plaintext)?;
@@ -179,10 +200,18 @@ pub extern "C" fn rust_derive_keys(
     config_cache_seeds_len: usize,
 ) -> DerivedKeys {
     unsafe {
-        let hash_seeds = std::slice::from_raw_parts(hash_index_seeds, hash_index_seeds_len);
-        let session_seeds = std::slice::from_raw_parts(session_ticket_seeds, session_ticket_seeds_len);
-        let packet_seeds = std::slice::from_raw_parts(packet_alignment_seeds, packet_alignment_seeds_len);
-        let config_seeds = std::slice::from_raw_parts(config_cache_seeds, config_cache_seeds_len);
+        let Some(hash_seeds) = ffi_slice(hash_index_seeds, hash_index_seeds_len) else {
+            return DerivedKeys { aes_key: [0u8; 32], mac_key: [0u8; 32] };
+        };
+        let Some(session_seeds) = ffi_slice(session_ticket_seeds, session_ticket_seeds_len) else {
+            return DerivedKeys { aes_key: [0u8; 32], mac_key: [0u8; 32] };
+        };
+        let Some(packet_seeds) = ffi_slice(packet_alignment_seeds, packet_alignment_seeds_len) else {
+            return DerivedKeys { aes_key: [0u8; 32], mac_key: [0u8; 32] };
+        };
+        let Some(config_seeds) = ffi_slice(config_cache_seeds, config_cache_seeds_len) else {
+            return DerivedKeys { aes_key: [0u8; 32], mac_key: [0u8; 32] };
+        };
 
         let mut key_material = Vec::new();
         key_material.reserve(hash_index_seeds_len + session_ticket_seeds_len +
@@ -214,15 +243,27 @@ pub extern "C" fn rust_decode_blob(
     config_cache_seeds_len: usize,
 ) -> BlobResult {
     unsafe {
-        let a = std::slice::from_raw_parts(shard_a, shard_a_len);
-        let b = std::slice::from_raw_parts(shard_b, shard_b_len);
-        let hash_seeds = std::slice::from_raw_parts(hash_index_seeds, hash_index_seeds_len);
-        let session_seeds = std::slice::from_raw_parts(session_ticket_seeds, session_ticket_seeds_len);
-        let packet_seeds = std::slice::from_raw_parts(packet_alignment_seeds, packet_alignment_seeds_len);
-        let config_seeds = std::slice::from_raw_parts(config_cache_seeds, config_cache_seeds_len);
+        let Some(a) = ffi_slice(shard_a, shard_a_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
+        let Some(b) = ffi_slice(shard_b, shard_b_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
+        let Some(hash_seeds) = ffi_slice(hash_index_seeds, hash_index_seeds_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
+        let Some(session_seeds) = ffi_slice(session_ticket_seeds, session_ticket_seeds_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
+        let Some(packet_seeds) = ffi_slice(packet_alignment_seeds, packet_alignment_seeds_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
+        let Some(config_seeds) = ffi_slice(config_cache_seeds, config_cache_seeds_len) else {
+            return BlobResult { data: std::ptr::null_mut(), len: 0, error: ffi_error_ptr("Internal error") };
+        };
 
         match decode_blob_impl(a, b, hash_seeds, session_seeds, packet_seeds, config_seeds) {
-            Ok(mut data) => {
+            Ok(data) => {
                 let ptr = data.as_ptr();
                 let len = data.len();
                 std::mem::forget(data);
@@ -236,7 +277,7 @@ pub extern "C" fn rust_decode_blob(
                 BlobResult {
                     data: std::ptr::null_mut(),
                     len: 0,
-                    error: e.as_ptr() as *const u8,
+                    error: ffi_error_ptr(e),
                 }
             }
         }
@@ -298,10 +339,18 @@ pub extern "C" fn rust_check_window_entry(
     route_window_secondary: u64,
 ) -> i32 {
     unsafe {
-        let hash_seeds = std::slice::from_raw_parts(hash_index_seeds, hash_index_seeds_len);
-        let session_seeds = std::slice::from_raw_parts(session_ticket_seeds, session_ticket_seeds_len);
-        let packet_seeds = std::slice::from_raw_parts(packet_alignment_seeds, packet_alignment_seeds_len);
-        let config_seeds = std::slice::from_raw_parts(config_cache_seeds, config_cache_seeds_len);
+        let Some(hash_seeds) = ffi_slice(hash_index_seeds, hash_index_seeds_len) else {
+            return 1;
+        };
+        let Some(session_seeds) = ffi_slice(session_ticket_seeds, session_ticket_seeds_len) else {
+            return 1;
+        };
+        let Some(packet_seeds) = ffi_slice(packet_alignment_seeds, packet_alignment_seeds_len) else {
+            return 1;
+        };
+        let Some(config_seeds) = ffi_slice(config_cache_seeds, config_cache_seeds_len) else {
+            return 1;
+        };
 
         match check_window_entry_impl(fingerprint, hash_seeds, session_seeds, packet_seeds, config_seeds, route_window_primary, route_window_secondary) {
             Ok(()) => 0,
@@ -311,7 +360,7 @@ pub extern "C" fn rust_check_window_entry(
 }
 
 pub fn table_mix_theta(
-    input_data: &[u8],
+    _input_data: &[u8],
     hash_index_seeds: &[u8],
     session_ticket_seeds: &[u8],
     packet_alignment_seeds: &[u8],
@@ -370,25 +419,32 @@ pub fn generate_x25519_public_key(seed: &[u8; 32]) -> [u8; 32] {
 }
 
 pub fn generate_secp256r1_public_key(seed: &[u8; 32]) -> [u8; 65] {
-    let mut seed_arr = *seed;
-    let signing_key = k256::ecdsa::SigningKey::from_bytes(&seed_arr.into()).expect("valid key");
-    let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(false);
-    let bytes = encoded.as_bytes();
-    let mut result = [0u8; 65];
-    result[..bytes.len()].copy_from_slice(bytes);
-    result
+    let mut candidate = *seed;
+
+    // Hostile or malformed seeds must never panic through FFI; hash-chaining keeps output deterministic.
+    for _ in 0..8 {
+        if let Ok(secret_key) = p256::SecretKey::from_slice(&candidate) {
+            let encoded = secret_key.public_key().to_encoded_point(false);
+            let bytes = encoded.as_bytes();
+            let mut result = [0u8; 65];
+            result[..bytes.len()].copy_from_slice(bytes);
+            return result;
+        }
+        candidate = sha256(&candidate);
+    }
+
+    [0u8; 65]
 }
 
 pub fn hmac_sha256_finalize(secret: &[u8], data: &[u8], dest: &mut [u8; 32], unix_time: i32) {
     let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC can take key of any size");
     mac.update(data);
-    let result: [u8; 32] = mac.finalize().into();
+    let result = mac.finalize().into_bytes();
     
     let old = u32::from_le_bytes([result[28], result[29], result[30], result[31]]);
     let masked = old ^ (unix_time as u32);
     
-    dest.copy_from_slice(&result[..28]);
+    dest[..28].copy_from_slice(&result[..28]);
     dest[28] = (masked & 0xff) as u8;
     dest[29] = ((masked >> 8) & 0xff) as u8;
     dest[30] = ((masked >> 16) & 0xff) as u8;
@@ -400,15 +456,15 @@ pub fn calc_stealth_padding(
     enc_size: usize,
     raw_size: usize,
     min_padding: usize,
-    max_padding: usize,
+    _max_padding: usize,
 ) -> usize {
-    let mut encrypted_size = enc_size + data_size;
+    let mut encrypted_size = enc_size.saturating_add(data_size);
     if min_padding > 0 {
         encrypted_size = encrypted_size.saturating_add(min_padding);
     }
-    let aligned = (encrypted_size + 15) & !15;
+    let aligned = encrypted_size.saturating_add(15) & !15;
     let aligned = aligned.max(128);
-    raw_size + aligned
+    raw_size.saturating_add(aligned)
 }
 
 #[no_mangle]
@@ -425,7 +481,9 @@ pub extern "C" fn rust_calc_stealth_size(
 #[no_mangle]
 pub extern "C" fn rust_sha256(data: *const u8, len: usize) -> *mut [u8; 32] {
     unsafe {
-        let slice = std::slice::from_raw_parts(data, len);
+        let Some(slice) = ffi_slice(data, len) else {
+            return std::ptr::null_mut();
+        };
         let result = Box::new(sha256(slice));
         Box::into_raw(result)
     }
@@ -434,14 +492,16 @@ pub extern "C" fn rust_sha256(data: *const u8, len: usize) -> *mut [u8; 32] {
 #[no_mangle]
 pub extern "C" fn rust_sha256_free(hash: *mut [u8; 32]) {
     if !hash.is_null() {
-        unsafe { Box::from_raw(hash) };
+        unsafe { drop(Box::from_raw(hash)) };
     }
 }
 
 #[no_mangle]
 pub extern "C" fn rust_generate_x25519_public_key(seed: *const u8) -> *mut [u8; 32] {
     unsafe {
-        let seed_arr = std::slice::from_raw_parts(seed, 32);
+        let Some(seed_arr) = ffi_slice(seed, 32) else {
+            return std::ptr::null_mut();
+        };
         let mut arr = [0u8; 32];
         arr.copy_from_slice(seed_arr);
         let result = Box::new(generate_x25519_public_key(&arr));
@@ -450,13 +510,27 @@ pub extern "C" fn rust_generate_x25519_public_key(seed: *const u8) -> *mut [u8; 
 }
 
 #[no_mangle]
+pub extern "C" fn rust_generate_x25519_public_key_free(key: *mut [u8; 32]) {
+    rust_sha256_free(key);
+}
+
+#[no_mangle]
 pub extern "C" fn rust_generate_secp256r1_public_key(seed: *const u8) -> *mut [u8; 65] {
     unsafe {
-        let seed_arr = std::slice::from_raw_parts(seed, 32);
+        let Some(seed_arr) = ffi_slice(seed, 32) else {
+            return std::ptr::null_mut();
+        };
         let mut arr = [0u8; 32];
         arr.copy_from_slice(seed_arr);
         let result = Box::new(generate_secp256r1_public_key(&arr));
         Box::into_raw(result)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_generate_secp256r1_public_key_free(key: *mut [u8; 65]) {
+    if !key.is_null() {
+        unsafe { drop(Box::from_raw(key)) };
     }
 }
 
@@ -469,9 +543,15 @@ pub extern "C" fn rust_hmac_sha256_finalize(
     dest: *mut u8,
 ) {
     unsafe {
-        let secret_slice = std::slice::from_raw_parts(secret, 16);
-        let data_slice = std::slice::from_raw_parts(data, data_len);
-        let dest_slice = std::slice::from_raw_parts_mut(dest, 32);
+        let Some(secret_slice) = ffi_slice(secret, 16) else {
+            return;
+        };
+        let Some(data_slice) = ffi_slice(data, data_len) else {
+            return;
+        };
+        let Some(dest_slice) = ffi_slice_mut(dest, 32) else {
+            return;
+        };
         let mut result = [0u8; 32];
         hmac_sha256_finalize(secret_slice, data_slice, &mut result, unix_time);
         dest_slice.copy_from_slice(&result);
@@ -479,18 +559,31 @@ pub extern "C" fn rust_hmac_sha256_finalize(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_init_grease_values(seed: *const u8, seed_len: usize) -> *mut Vec<u8> {
+pub extern "C" fn rust_init_grease_values(
+    seed: *const u8,
+    seed_len: usize,
+    result_len: *mut usize,
+) -> *mut u8 {
     unsafe {
-        let seed_slice = std::slice::from_raw_parts(seed, seed_len);
-        let result = Box::new(init_grease_values(seed_slice));
-        Box::into_raw(result)
+        let Some(seed_slice) = ffi_slice(seed, seed_len) else {
+            return std::ptr::null_mut();
+        };
+        if result_len.is_null() {
+            return std::ptr::null_mut();
+        }
+
+        let mut result = init_grease_values(seed_slice).into_boxed_slice();
+        *result_len = result.len();
+        let ptr = result.as_mut_ptr();
+        std::mem::forget(result);
+        ptr
     }
 }
 
 #[no_mangle]
-pub extern "C" fn rust_grease_values_free(vec: *mut Vec<u8>) {
-    if !vec.is_null() {
-        unsafe { Box::from_raw(vec) };
+pub extern "C" fn rust_grease_values_free(data: *mut u8, len: usize) {
+    if !data.is_null() && len > 0 {
+        unsafe { drop(Vec::from_raw_parts(data, len, len)) };
     }
 }
 
@@ -570,6 +663,7 @@ impl ClientHelloOp {
     }
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct ExecutorConfig {
     pub grease_value_count: usize,
@@ -636,7 +730,7 @@ impl ExecutionContext {
     pub fn rng_fill(&mut self, dest: &mut [u8]) {
         for byte in dest.iter_mut() {
             if self.rng_pos >= self.rng.len() {
-                self.rng = sha256(&self.rng);
+                self.rng = sha256(&self.rng).to_vec();
                 self.rng_pos = 0;
             }
             *byte = self.rng[self.rng_pos];
@@ -648,26 +742,36 @@ impl ExecutionContext {
 fn rng_shuffle<T: Clone>(items: &mut [T], rng: &mut Vec<u8>) {
     let len = items.len();
     if len <= 1 { return; }
+    if rng.is_empty() {
+        rng.push(0);
+    }
+    let mut rng_pos = 0usize;
     let mut i = len;
     while i > 1 {
-        let j = (rng[i - 1] as usize) % i;
+        if rng_pos >= rng.len() {
+            let new_hash = sha256(rng);
+            rng.clear();
+            rng.extend_from_slice(&new_hash);
+            rng_pos = 0;
+        }
+
+        let j = (rng[rng_pos] as usize) % i;
+        rng_pos += 1;
         if j != i - 1 {
             items.swap(i - 1, j);
         }
         i -= 1;
-        rng.fill(0);
-        let new_hash = sha256(rng);
-        rng.copy_from_slice(&new_hash);
     }
 }
 
 pub struct LengthCalculator {
     size: usize,
     scope_offsets: Vec<usize>,
+    scope_underflow: bool,
 }
 
 impl LengthCalculator {
-    pub fn new() -> Self { Self { size: 0, scope_offsets: vec![] } }
+    pub fn new() -> Self { Self { size: 0, scope_offsets: vec![], scope_underflow: false } }
     
     pub fn append(&mut self, op: &ClientHelloOp, ctx: &ExecutionContext) {
         match op.op_type {
@@ -677,14 +781,18 @@ impl LengthCalculator {
             ClientHelloOpType::GreaseValue => self.size += 2,
             ClientHelloOpType::X25519KeyShareEntry => self.size += 36,
             ClientHelloOpType::Secp256r1KeyShareEntry => self.size += 69,
-            ClientHelloOpType::X25519MlKem768KeyShareEntry => self.size += 1218,
+            ClientHelloOpType::X25519MlKem768KeyShareEntry => self.size += 1220,
             ClientHelloOpType::GreaseKeyShareEntry => self.size += 5,
             ClientHelloOpType::X25519PublicKey => self.size += 32,
             ClientHelloOpType::Scope16Begin => {
                 self.size += 2;
                 self.scope_offsets.push(self.size);
             }
-            ClientHelloOpType::Scope16End => { self.scope_offsets.pop(); }
+            ClientHelloOpType::Scope16End => {
+                if self.scope_offsets.pop().is_none() {
+                    self.scope_underflow = true;
+                }
+            }
             ClientHelloOpType::Permutation => {
                 let mut parts = op.permutation_parts.clone();
                 rng_shuffle(&mut parts, &mut ctx.rng.clone());
@@ -699,7 +807,8 @@ impl LengthCalculator {
                 if override_len > 0 {
                     self.size += 4 + override_len;
                 } else if !ctx.config().has_ech {
-                    let target = op.value as usize + ctx.config().padding_target_entropy as usize;
+                    let target = (op.value.max(0) as usize)
+                        .saturating_add(ctx.config().padding_target_entropy.max(0) as usize);
                     if self.size < target {
                         self.size = target + 4;
                     }
@@ -709,6 +818,9 @@ impl LengthCalculator {
     }
     
     pub fn finish(&self) -> Result<usize, &'static str> {
+        if self.scope_underflow {
+            return Err("Scope end without begin");
+        }
         if !self.scope_offsets.is_empty() { return Err("Unbalanced scopes"); }
         Ok(self.size)
     }
@@ -716,7 +828,6 @@ impl LengthCalculator {
 
 pub struct ByteWriter {
     all: Vec<u8>,
-    remaining: Vec<u8>,
     offset: usize,
     scope_offsets: Vec<usize>,
     rng: Vec<u8>,
@@ -724,89 +835,77 @@ pub struct ByteWriter {
 }
 
 impl ByteWriter {
-    pub fn new(size: usize) -> Self {
-        let mut all = vec![0u8; size];
-        Self { all: all.clone(), remaining: all, offset: 0, scope_offsets: vec![], rng: vec![0u8; 32], rng_pos: 0 }
+    pub fn new(size: usize, mut rng_seed: Vec<u8>) -> Self {
+        if rng_seed.is_empty() {
+            rng_seed.push(0);
+        }
+        Self { all: vec![0u8; size], offset: 0, scope_offsets: vec![], rng: rng_seed, rng_pos: 0 }
     }
     
-    pub fn remaining(&self) -> usize { self.remaining.len() }
+    pub fn remaining(&self) -> usize { self.all.len().saturating_sub(self.offset) }
     
     fn rng_next(&mut self) -> u8 {
-        if self.rng_pos >= 32 {
-            self.rng = sha256(&self.rng);
+        if self.rng_pos >= self.rng.len() {
+            self.rng = sha256(&self.rng).to_vec();
             self.rng_pos = 0;
         }
         let b = self.rng[self.rng_pos];
         self.rng_pos += 1;
         b
     }
+
+    fn write_bytes(&mut self, data: &[u8]) {
+        let end = self.offset + data.len();
+        self.all[self.offset..end].copy_from_slice(data);
+        self.offset = end;
+    }
+
+    fn write_zeroes(&mut self, len: usize) {
+        let end = self.offset + len;
+        self.all[self.offset..end].fill(0);
+        self.offset = end;
+    }
+
+    fn write_random(&mut self, len: usize) {
+        let start = self.offset;
+        let end = start + len;
+        for index in start..end {
+            self.all[index] = self.rng_next();
+        }
+        self.offset = end;
+    }
     
     pub fn append(&mut self, op: &ClientHelloOp, ctx: &ExecutionContext) {
         match op.op_type {
-            ClientHelloOpType::Bytes => {
-                self.remaining[..op.data.len()].copy_from_slice(&op.data);
-                self.remaining = self.remaining[op.data.len()..].to_vec();
-            }
-            ClientHelloOpType::RandomBytes => {
-                for byte in self.remaining[..op.length].iter_mut() {
-                    *byte = self.rng_next();
-                }
-                self.remaining = self.remaining[op.length..].to_vec();
-            }
-            ClientHelloOpType::ZeroBytes => {
-                for byte in self.remaining[..op.length].iter_mut() {
-                    *byte = 0;
-                }
-                self.remaining = self.remaining[op.length..].to_vec();
-            }
-            ClientHelloOpType::Domain => {
-                let d = ctx.domain();
-                self.remaining[..d.len()].copy_from_slice(d);
-                self.remaining = self.remaining[d.len()..].to_vec();
-            }
+            ClientHelloOpType::Bytes => self.write_bytes(&op.data),
+            ClientHelloOpType::RandomBytes => self.write_random(op.length),
+            ClientHelloOpType::ZeroBytes => self.write_zeroes(op.length),
+            ClientHelloOpType::Domain => self.write_bytes(ctx.domain()),
             ClientHelloOpType::GreaseValue => {
                 let g = ctx.grease(op.value as usize);
-                self.remaining[0] = g;
-                self.remaining[1] = g;
-                self.remaining = self.remaining[2..].to_vec();
+                self.write_bytes(&[g, g]);
             }
             ClientHelloOpType::X25519KeyShareEntry => {
-                self.remaining[..2].copy_from_slice(&[0x00, 0x1d]);
-                self.remaining[2] = 0x00;
-                self.remaining[3] = 0x20;
-                self.remaining = self.remaining[4..].to_vec();
+                self.write_bytes(&[0x00, 0x1d, 0x00, 0x20]);
                 self.gen_x25519_keyshare();
             }
             ClientHelloOpType::Secp256r1KeyShareEntry => {
-                self.remaining[..2].copy_from_slice(&[0x00, 0x17]);
-                self.remaining[2] = 0x00;
-                self.remaining[3] = 0x41;
-                self.remaining = self.remaining[4..].to_vec();
+                self.write_bytes(&[0x00, 0x17, 0x00, 0x41]);
                 self.gen_secp256r1_keyshare();
             }
             ClientHelloOpType::X25519MlKem768KeyShareEntry => {
                 let pq = ctx.config().pq_group_id_override;
-                self.remaining[0] = (pq >> 8) as u8;
-                self.remaining[1] = pq as u8;
-                self.remaining[2] = 0x04;
-                self.remaining[3] = 0xc0;
-                self.remaining = self.remaining[4..].to_vec();
+                self.write_bytes(&[(pq >> 8) as u8, pq as u8, 0x04, 0xc0]);
                 self.gen_mlkem_keyshare();
                 self.gen_x25519_keyshare();
             }
             ClientHelloOpType::GreaseKeyShareEntry => {
                 let g = ctx.grease(op.value as usize);
-                self.remaining[0] = g;
-                self.remaining[1] = g;
-                self.remaining[2] = 0x00;
-                self.remaining[3] = 0x01;
-                self.remaining[4] = 0x00;
-                self.remaining = self.remaining[5..].to_vec();
+                self.write_bytes(&[g, g, 0x00, 0x01, 0x00]);
             }
             ClientHelloOpType::X25519PublicKey => self.gen_x25519_keyshare(),
             ClientHelloOpType::Scope16Begin => {
                 self.scope_offsets.push(self.offset);
-                self.remaining = self.remaining[2..].to_vec();
                 self.offset += 2;
             }
             ClientHelloOpType::Scope16End => {
@@ -827,22 +926,15 @@ impl ByteWriter {
             ClientHelloOpType::PaddingToTarget => {
                 let override_len = ctx.config().padding_extension_payload_length_override;
                 if override_len > 0 {
-                    self.remaining[..2].copy_from_slice(&[0x00, 0x15]);
-                    self.remaining[2] = 0x00;
-                    self.remaining[3] = override_len as u8;
-                    self.remaining = self.remaining[4..].to_vec();
-                    for byte in self.remaining[..override_len].iter_mut() { *byte = 0; }
-                    self.remaining = self.remaining[override_len..].to_vec();
+                    self.write_bytes(&[0x00, 0x15, 0x00, override_len as u8]);
+                    self.write_zeroes(override_len);
                 } else if !ctx.config().has_ech {
-                    let target = op.value as usize + ctx.config().padding_target_entropy as usize;
+                    let target = (op.value.max(0) as usize)
+                        .saturating_add(ctx.config().padding_target_entropy.max(0) as usize);
                     let need = target.saturating_sub(self.offset);
                     if need > 0 {
-                        self.remaining[..2].copy_from_slice(&[0x00, 0x15]);
-                        self.remaining[2] = 0x00;
-                        self.remaining[3] = need as u8;
-                        self.remaining = self.remaining[4..].to_vec();
-                        for byte in self.remaining[..need].iter_mut() { *byte = 0; }
-                        self.remaining = self.remaining[need..].to_vec();
+                        self.write_bytes(&[0x00, 0x15, 0x00, need as u8]);
+                        self.write_zeroes(need);
                     }
                 }
             }
@@ -854,38 +946,38 @@ impl ByteWriter {
         for b in seed.iter_mut() { *b = self.rng_next(); }
         seed[31] &= 127;
         let key = generate_x25519_public_key(&seed);
-        self.remaining[..32].copy_from_slice(&key);
-        self.remaining = self.remaining[32..].to_vec();
+        self.write_bytes(&key);
     }
     
     fn gen_secp256r1_keyshare(&mut self) {
         let mut seed = [0u8; 32];
         for b in seed.iter_mut() { *b = self.rng_next(); }
         let key = generate_secp256r1_public_key(&seed);
-        self.remaining[..65].copy_from_slice(&key);
-        self.remaining = self.remaining[65..].to_vec();
+        self.write_bytes(&key);
     }
     
     fn gen_mlkem_keyshare(&mut self) {
+        let start = self.offset;
         for i in 0..384 {
             let a = (self.rng_next() as usize) % 3329;
             let b = (self.rng_next() as usize) % 3329;
-            self.remaining[i * 3] = a as u8;
-            self.remaining[i * 3 + 1] = ((a >> 8) + ((b & 15) << 4)) as u8;
-            self.remaining[i * 3 + 2] = (b >> 4) as u8;
+            self.all[start + i * 3] = a as u8;
+            self.all[start + i * 3 + 1] = ((a >> 8) + ((b & 15) << 4)) as u8;
+            self.all[start + i * 3 + 2] = (b >> 4) as u8;
         }
         for i in 1152..1184 {
-            self.remaining[i] = self.rng_next();
+            self.all[start + i] = self.rng_next();
         }
-        self.remaining = self.remaining[1216..].to_vec();
+        self.offset += 1184;
     }
     
     pub fn finalize(&mut self, secret: &[u8], unix_time: i32) {
-        let hash_dest = &mut self.all[11..43];
-        hmac_sha256(secret, &self.all, hash_dest);
+        let mut hash_dest = [0u8; 32];
+        hmac_sha256(secret, &self.all, &mut hash_dest);
         let old = u32::from_le_bytes([hash_dest[28], hash_dest[29], hash_dest[30], hash_dest[31]]);
         let masked = old ^ (unix_time as u32);
         hash_dest[28..32].copy_from_slice(&masked.to_le_bytes());
+        self.all[11..43].copy_from_slice(&hash_dest);
     }
     
     pub fn into_inner(self) -> Vec<u8> { self.all }
@@ -899,18 +991,54 @@ pub fn client_hello_execute(
     config: ExecutorConfig,
     rng_seed: Vec<u8>,
 ) -> Result<Vec<u8>, &'static str> {
-    assert!(secret.len() == 16);
-    assert!(!domain.is_empty());
+    const MAX_ECH_PAYLOAD_LEN: i32 = 16 * 1024;
+    const MAX_PADDING_TARGET_ENTROPY: i32 = 4 * 1024;
+
+    if secret.len() != 16 {
+        return Err("Secret must be 16 bytes");
+    }
+    if domain.is_empty() {
+        return Err("Domain must not be empty");
+    }
+    if ops.is_empty() {
+        return Err("ClientHello program must not be empty");
+    }
+    if config.padding_extension_payload_length_override > 255 {
+        return Err("Padding override must fit in one byte");
+    }
+    if config.padding_target_entropy < 0 {
+        return Err("Padding target entropy must be non-negative");
+    }
+    if config.padding_target_entropy > MAX_PADDING_TARGET_ENTROPY {
+        return Err("Padding target entropy is too large");
+    }
+    if config.has_ech && config.ech_enc_key_length > 255 {
+        return Err("ECH encapsulated key length must fit in one byte");
+    }
+    if config.has_ech && config.ech_payload_length < 0 {
+        return Err("ECH payload length must be non-negative");
+    }
+    if config.has_ech && config.ech_payload_length > MAX_ECH_PAYLOAD_LEN {
+        return Err("ECH payload length is too large");
+    }
+    for op in ops {
+        if op.op_type == ClientHelloOpType::PaddingToTarget && op.value < 0 {
+            return Err("Padding target must be non-negative");
+        }
+    }
     
-    let mut ctx = ExecutionContext::new(config, domain, rng_seed);
+    let ctx = ExecutionContext::new(config, domain, rng_seed);
     
     let mut calc = LengthCalculator::new();
     for op in ops {
         calc.append(op, &ctx);
     }
     let length = calc.finish()?;
+    if length < 43 {
+        return Err("ClientHello program is too short");
+    }
     
-    let mut writer = ByteWriter::new(length);
+    let mut writer = ByteWriter::new(length, ctx.rng.clone());
     for op in ops {
         writer.append(op, &ctx);
     }
@@ -919,6 +1047,131 @@ pub fn client_hello_execute(
     }
     writer.finalize(secret, unix_time);
     Ok(writer.into_inner())
+}
+
+fn append_u16_be(dst: &mut Vec<u8>, value: u16) {
+    dst.push((value >> 8) as u8);
+    dst.push((value & 0xff) as u8);
+}
+
+fn build_default_client_hello_ops(config: ExecutorConfig) -> Vec<ClientHelloOp> {
+    let mut ops = vec![
+        ClientHelloOp::bytes(&[0x16, 0x03, 0x01]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&[0x01]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&[0x03, 0x03]),
+        ClientHelloOp::random_bytes(32),
+        ClientHelloOp::bytes(&[0x20]),
+        ClientHelloOp::random_bytes(32),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&[0x13, 0x01, 0x13, 0x02, 0x13, 0x03]),
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::bytes(&[0x01, 0x00]),
+        ClientHelloOp::scope16_begin(),
+    ];
+
+    // SNI extension with runtime domain bytes.
+    ops.extend_from_slice(&[
+        ClientHelloOp::bytes(&[0x00, 0x00]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&[0x00]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::domain(),
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::scope16_end(),
+    ]);
+
+    // supported_groups extension.
+    let mut groups = vec![0x00, 0x1d, 0x00, 0x17];
+    if config.pq_group_id_override != 0 {
+        append_u16_be(&mut groups, config.pq_group_id_override);
+    }
+    ops.extend_from_slice(&[
+        ClientHelloOp::bytes(&[0x00, 0x0a]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&groups),
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::scope16_end(),
+    ]);
+
+    // signature_algorithms extension.
+    ops.extend_from_slice(&[
+        ClientHelloOp::bytes(&[0x00, 0x0d]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::bytes(&[0x04, 0x03, 0x08, 0x04, 0x08, 0x05]),
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::scope16_end(),
+    ]);
+
+    // key_share extension.
+    ops.extend_from_slice(&[
+        ClientHelloOp::bytes(&[0x00, 0x33]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::x25519_key_share_entry(),
+    ]);
+    if config.pq_group_id_override != 0 {
+        ops.push(ClientHelloOp::x25519_ml_kem_768_key_share_entry());
+    }
+    ops.extend_from_slice(&[
+        ClientHelloOp::scope16_end(),
+        ClientHelloOp::scope16_end(),
+    ]);
+
+    // ALPN extension.
+    ops.extend_from_slice(&[
+        ClientHelloOp::bytes(&[0x00, 0x10]),
+        ClientHelloOp::scope16_begin(),
+        ClientHelloOp::scope16_begin(),
+    ]);
+    if config.force_http11_only_alpn {
+        ops.push(ClientHelloOp::bytes(&[0x08, b'h', b't', b't', b'p', b'/', b'1', b'.', b'1']));
+    } else {
+        ops.push(ClientHelloOp::bytes(&[0x02, b'h', b'2']));
+        ops.push(ClientHelloOp::bytes(&[0x08, b'h', b't', b't', b'p', b'/', b'1', b'.', b'1']));
+    }
+    ops.extend_from_slice(&[ClientHelloOp::scope16_end(), ClientHelloOp::scope16_end()]);
+
+    if config.alps_type != 0 {
+        let mut alps = Vec::new();
+        append_u16_be(&mut alps, config.alps_type);
+        ops.push(ClientHelloOp::bytes(&alps));
+        ops.push(ClientHelloOp::scope16_begin());
+        ops.push(ClientHelloOp::zero_bytes(2));
+        ops.push(ClientHelloOp::scope16_end());
+    }
+
+    if config.has_ech {
+        ops.push(ClientHelloOp::bytes(&[0xfe, 0x0d]));
+        ops.push(ClientHelloOp::scope16_begin());
+        let mut ech_header = Vec::new();
+        ech_header.push(config.ech_outer_type);
+        append_u16_be(&mut ech_header, config.ech_kdf_id);
+        append_u16_be(&mut ech_header, config.ech_aead_id);
+        let enc_key_len = config.ech_enc_key_length.max(0) as usize;
+        ech_header.push(enc_key_len.min(255) as u8);
+        ops.push(ClientHelloOp::bytes(&ech_header));
+        if enc_key_len > 0 {
+            ops.push(ClientHelloOp::random_bytes(enc_key_len));
+        }
+        let payload_len = config.ech_payload_length.max(0) as usize;
+        if payload_len > 0 {
+            ops.push(ClientHelloOp::random_bytes(payload_len));
+        }
+        ops.push(ClientHelloOp::scope16_end());
+    }
+
+    let padding_target = 512i32;
+    ops.push(ClientHelloOp::padding_to_target(padding_target));
+    ops.push(ClientHelloOp::scope16_end());
+    ops.push(ClientHelloOp::scope16_end());
+    ops.push(ClientHelloOp::scope16_end());
+    ops
 }
 
 // ============================================================================
@@ -937,10 +1190,25 @@ pub extern "C" fn rust_client_hello_execute(
     result_len: *mut usize,
 ) -> *mut u8 {
     unsafe {
-        let domain_slice = std::slice::from_raw_parts(domain, domain_len);
-        let secret_slice = std::slice::from_raw_parts(secret, 16);
-        let rng_vec = std::slice::from_raw_parts(rng_seed, rng_seed_len).to_vec();
-        let mut ops: Vec<ClientHelloOp> = vec![];
+        if !result_len.is_null() {
+            *result_len = 0;
+        }
+
+        let Some(domain_slice) = ffi_slice(domain, domain_len) else {
+            return std::ptr::null_mut();
+        };
+        let Some(secret_slice) = ffi_slice(secret, 16) else {
+            return std::ptr::null_mut();
+        };
+        let Some(rng_slice) = ffi_slice(rng_seed, rng_seed_len) else {
+            return std::ptr::null_mut();
+        };
+        if result_len.is_null() {
+            return std::ptr::null_mut();
+        }
+
+        let rng_vec = rng_slice.to_vec();
+        let ops = build_default_client_hello_ops(config);
         
         match client_hello_execute(&ops, domain_slice, secret_slice, unix_time, config, rng_vec) {
             Ok(data) => {
@@ -961,38 +1229,3 @@ pub extern "C" fn rust_client_hello_free(data: *mut u8, len: usize) {
     }
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_derive_keys() {
-        let key_material = b"test_key_material";
-        let keys = derive_keys(key_material);
-        assert_ne!(keys.aes_key, keys.mac_key);
-    }
-
-    #[test]
-    fn test_reassemble_blob() {
-        let left = vec![0x01, 0x02, 0x03, 0x04];
-        let right = vec![0xFF, 0xFE, 0xFD, 0xFC];
-        let result = reassemble_blob(&left, &right).unwrap();
-        assert_eq!(result, vec![0xFE, 0xFC, 0xFE, 0xF8]);
-    }
-
-    #[test]
-    fn test_stealth_padding() {
-        let size = calc_stealth_padding(100, 4, 12, 0, 0);
-        assert!(size >= 128 + 12);
-    }
-    
-    #[test]
-    fn test_client_hello_op() {
-        let op = ClientHelloOp::bytes(b"\x16\x03\x01");
-        assert_eq!(op.op_type, ClientHelloOpType::Bytes);
-    }
-}

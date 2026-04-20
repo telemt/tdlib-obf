@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <stdexcept>
 #include <string>
 
 #ifdef __cplusplus
@@ -59,7 +60,9 @@ uint8_t* rust_sha256(const uint8_t* data, size_t len);
 void rust_sha256_free(uint8_t* hash);
 
 uint8_t* rust_generate_x25519_public_key(const uint8_t* seed);
+void rust_generate_x25519_public_key_free(uint8_t* key);
 uint8_t* rust_generate_secp256r1_public_key(const uint8_t* seed);
+void rust_generate_secp256r1_public_key_free(uint8_t* key);
 
 void rust_hmac_sha256_finalize(
     const uint8_t* secret,
@@ -69,8 +72,8 @@ void rust_hmac_sha256_finalize(
     uint8_t* dest
 );
 
-uint8_t* rust_init_grease_values(const uint8_t* seed, size_t seed_len);
-void rust_grease_values_free(uint8_t* vec);
+uint8_t* rust_init_grease_values(const uint8_t* seed, size_t seed_len, size_t* result_len);
+void rust_grease_values_free(uint8_t* data, size_t len);
 
 struct ExecutorConfig {
     size_t grease_value_count;
@@ -102,6 +105,10 @@ void rust_client_hello_free(uint8_t* data, size_t len);
 
 namespace td {
 namespace mtproto {
+
+using ::BlobResult;
+using ::DerivedKeys;
+using ::ExecutorConfig;
 
 class ObfuscationLib {
 public:
@@ -177,22 +184,37 @@ public:
 
     static std::string sha256(const std::string& data) {
         uint8_t* hash = rust_sha256(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+        if (hash == nullptr) {
+            throw std::runtime_error("SHA-256 calculation failed");
+        }
         std::string result(reinterpret_cast<char*>(hash), 32);
         rust_sha256_free(hash);
         return result;
     }
 
     static std::string generate_x25519_public_key(const std::string& seed) {
+        if (seed.size() != 32) {
+            throw std::runtime_error("X25519 seed must be exactly 32 bytes");
+        }
         uint8_t* key = rust_generate_x25519_public_key(reinterpret_cast<const uint8_t*>(seed.data()));
+        if (key == nullptr) {
+            throw std::runtime_error("X25519 public key generation failed");
+        }
         std::string result(reinterpret_cast<char*>(key), 32);
-        rust_sha256_free(key);
+        rust_generate_x25519_public_key_free(key);
         return result;
     }
 
     static std::string generate_secp256r1_public_key(const std::string& seed) {
+        if (seed.size() != 32) {
+            throw std::runtime_error("secp256r1 seed must be exactly 32 bytes");
+        }
         uint8_t* key = rust_generate_secp256r1_public_key(reinterpret_cast<const uint8_t*>(seed.data()));
+        if (key == nullptr) {
+            throw std::runtime_error("secp256r1 public key generation failed");
+        }
         std::string result(reinterpret_cast<char*>(key), 65);
-        rust_sha256_free(key);
+        rust_generate_secp256r1_public_key_free(key);
         return result;
     }
 
@@ -208,9 +230,16 @@ public:
     }
 
     static std::string init_grease_values(const std::string& seed) {
-        uint8_t* vec = rust_init_grease_values(reinterpret_cast<const uint8_t*>(seed.data()), seed.size());
-        std::string result(reinterpret_cast<char*>(vec), seed.size());
-        rust_grease_values_free(vec);
+        size_t result_len = 0;
+        uint8_t* vec = rust_init_grease_values(reinterpret_cast<const uint8_t*>(seed.data()), seed.size(), &result_len);
+        if (vec == nullptr) {
+            if (result_len == 0) {
+                return std::string();
+            }
+            throw std::runtime_error("GREASE initialization failed");
+        }
+        std::string result(reinterpret_cast<char*>(vec), result_len);
+        rust_grease_values_free(vec, result_len);
         return result;
     }
 
