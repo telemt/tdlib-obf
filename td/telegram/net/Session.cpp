@@ -78,7 +78,7 @@ ActiveConnectionLifecyclePolicy make_active_connection_lifecycle_policy(
       td::min(flow_behavior.max_conn_lifetime_ms,
               td::max(static_cast<uint32>(500), flow_behavior.anti_churn_min_reconnect_interval_ms * 4));
   policy.rotation_backoff_ms = flow_behavior.anti_churn_min_reconnect_interval_ms;
-  policy.max_overlap_connections_per_destination = 1;
+  // max_overlap_connections_per_destination already defaults to 1
   return policy;
 }
 

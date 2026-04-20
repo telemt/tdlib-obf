@@ -374,7 +374,7 @@ Result<vector<SampleFeatures>> load_real_features_for_family_lane(Slice family_i
   const std::filesystem::path root(client_hello_fixture_root());
   std::filesystem::recursive_directory_iterator iter(root, iter_error);
   if (iter_error) {
-    return Status::Error(PSLICE() << "Failed to open ClientHello fixture root: " << root.native());
+    return Status::Error(PSLICE() << "Failed to open ClientHello fixture root: " << root.string());
   }
 
   vector<SampleFeatures> out;

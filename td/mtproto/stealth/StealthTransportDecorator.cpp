@@ -73,7 +73,8 @@ int32 adjust_tls_record_size_for_payload_overhead(int32 payload_cap_bytes, Trans
 
 size_t required_record_padding_append_reserve(int32 target_bytes) {
   auto clamped_target = clamp_tls_record_size(target_bytes);
-  return clamped_target > 4 ? static_cast<size_t>(clamped_target - 4) : 0;
+  // clamp_tls_record_size guarantees result >= kMinTlsRecordSize (256), so always > 4.
+  return static_cast<size_t>(clamped_target - 4);
 }
 
 BufferWriter ensure_write_capacity(BufferWriter &&message, size_t prepend_bytes, size_t append_bytes) {
@@ -474,9 +475,9 @@ void StealthTransportDecorator::pre_flush_write(double now) {
       return true;
     });
 
-    if (!batch.has_value()) {
-      return false;
-    }
+    // After drain_ready with a non-empty ring whose earliest deadline <= now,
+    // the callback always runs at least once, so batch is always populated.
+    CHECK(batch.has_value());
 
     size_t written_bytes = 0;
     if (batch->can_coalesce()) {

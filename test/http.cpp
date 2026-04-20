@@ -150,6 +150,7 @@ TEST(Http, reader) {
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Wself-move"
 #endif
+    // V570: intentional self-move tests for move-assign operator
     a = std::move(a);
     b = std::move(b);
 #if TD_GCC

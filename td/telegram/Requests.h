@@ -37,7 +37,7 @@ class Requests {
   class RequestPromiseBase {
     enum class State : int32 { Empty, Ready, Complete };
     ActorId<Td> td_actor_;
-    uint64 request_id_;
+    uint64 request_id_{0};
     MovableValue<State> state_{State::Empty};
 
    public:

@@ -383,7 +383,7 @@ class SecretChatActor final : public NetQueryCallback {
     void store(StorerT &storer) const {
       uint32 flags = 8;
       bool has_date = date != 0;
-      bool has_key_hash = true;
+      bool has_key_hash = true;  // V547: always true in store; kept for deserialization symmetry
       bool has_initial_folder_id = initial_folder_id != FolderId();
       if (has_date) {
         flags |= 1;
@@ -465,7 +465,7 @@ class SecretChatActor final : public NetQueryCallback {
 
   enum class QueryType : uint8 { DhConfig, EncryptedChat, Message, Ignore, DiscardEncryption, ReadHistory };
 
-  bool can_be_empty_;
+  bool can_be_empty_{false};
   AuthState auth_state_;
   ConfigState config_state_;
 

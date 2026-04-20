@@ -136,7 +136,7 @@ class RequestActor : public Actor {
 
   friend class RequestOnceActor;
 
-  uint64 request_id_;
+  uint64 request_id_{0};
   int tries_left_ = 2;
   FutureActor<T> future_;
 };

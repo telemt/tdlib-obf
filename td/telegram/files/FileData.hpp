@@ -40,7 +40,7 @@ void FileData::store(StorerT &storer) const {
   STORE_FLAG(has_version);
   END_STORE_FLAGS();
 
-  if (has_version) {
+  if (has_version) {  // V547: always true in store path; guard kept for deserialization symmetry
     store(static_cast<int32>(Version::Next) - 1, storer);
   }
   if (has_owner_dialog_id) {

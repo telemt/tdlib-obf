@@ -35,7 +35,7 @@ class RecentDialogList final : public Actor {
  private:
   Td *td_;
   const char *name_;
-  size_t max_size_;
+  size_t max_size_{0};
   vector<DialogId> dialog_ids_;
   vector<DialogId> removed_dialog_ids_;
 

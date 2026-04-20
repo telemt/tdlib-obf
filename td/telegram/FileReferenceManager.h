@@ -50,8 +50,8 @@ class FileReferenceManager final : public Actor {
   static bool is_file_reference_error(const Status &error);
 
   struct FileReferenceErrorSource {
-    size_t pos_;
-    bool is_cover_;
+    size_t pos_{0};
+    bool is_cover_{false};
   };
   static FileReferenceErrorSource get_file_reference_error_source(const Status &error);
 

@@ -505,7 +505,7 @@ class WebPagesManager::WebPage {
   friend bool operator==(const WebPage &lhs, const WebPage &rhs) {
     return lhs.url_ == rhs.url_ && lhs.display_url_ == rhs.display_url_ && lhs.type_ == rhs.type_ &&
            lhs.site_name_ == rhs.site_name_ && lhs.title_ == rhs.title_ && lhs.description_ == rhs.description_ &&
-           lhs.photo_ == rhs.photo_ && lhs.type_ == rhs.type_ && lhs.embed_url_ == rhs.embed_url_ &&
+           lhs.photo_ == rhs.photo_ && lhs.embed_url_ == rhs.embed_url_ &&
            lhs.embed_type_ == rhs.embed_type_ && lhs.embed_dimensions_ == rhs.embed_dimensions_ &&
            lhs.duration_ == rhs.duration_ && lhs.author_ == rhs.author_ &&
            lhs.has_large_media_ == rhs.has_large_media_ && lhs.video_cover_photo_ == rhs.video_cover_photo_ &&

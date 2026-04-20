@@ -918,8 +918,7 @@ std::pair<MessageId, BufferSlice> SessionConnection::encrypted_bind(int64 perm_k
 
   const AuthKey &main_auth_key = auth_data_->get_main_auth_key();
   PacketInfo packet_info;
-  packet_info.version = 1;
-  packet_info.no_crypto_flag = false;
+  // version and no_crypto_flag already default to 1 and false
   packet_info.salt = Random::secure_int64();
   packet_info.session_id = Random::secure_int64();
   auto packet = Transport::write(query_storer, main_auth_key, &packet_info);
@@ -1021,7 +1020,7 @@ void SessionConnection::flush_packet() {
     return;
   }
 
-  if (destroy_auth_key && !sent_destroy_auth_key_) {
+  if (destroy_auth_key) {
     sent_destroy_auth_key_ = true;
     destroy_auth_key_send_time_ = Time::now();
   }

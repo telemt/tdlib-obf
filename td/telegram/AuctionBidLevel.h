@@ -15,9 +15,9 @@
 namespace td {
 
 class AuctionBidLevel {
-  int32 position_;
-  int64 star_count_;
-  int32 date_;
+  int32 position_{0};
+  int64 star_count_{0};
+  int32 date_{0};
 
   bool is_before(const AuctionBidLevel &other) const;
 

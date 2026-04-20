@@ -4870,6 +4870,7 @@ void GroupCallManager::start_group_call_screen_sharing(GroupCallId group_call_id
   request->query_ref =
       td_->create_handler<JoinGroupCallPresentationQuery>()->send(input_group_call_id, payload, generation);
 
+  // V560: need_update is currently always false; update hook reserved for future use
   bool need_update = false;
   if (group_call->is_inited && need_update) {
     send_update_group_call(group_call, "start_group_call_screen_sharing");

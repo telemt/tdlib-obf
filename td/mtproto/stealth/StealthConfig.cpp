@@ -219,7 +219,7 @@ Status validate_chaff_policy(const ChaffPolicy &policy) noexcept {
 GreetingCamouflagePolicy make_default_greeting_camouflage_policy() {
   auto sanitize_record_bins = [](const auto &source_bins) {
     DrsPhaseModel model;
-    model.max_repeat_run = 4;
+    // max_repeat_run already defaults to 4
     model.local_jitter = 0;
     for (const auto &bin : source_bins) {
       auto lo = std::max(bin.lo, kMinGreetingRecordSize);

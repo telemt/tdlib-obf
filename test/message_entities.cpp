@@ -863,14 +863,14 @@ TEST(MessageEntities, fix_formatted_text) {
   str = "aba \r\n caba ";
   td::UserId user_id(static_cast<td::int64>(1));
   for (td::int32 length = 1; length <= 3; length++) {
-    for (td::int32 offset = 0; static_cast<size_t>(offset + length) <= str.size(); offset++) {
+    for (td::int32 offset = 0; static_cast<size_t>(offset) + static_cast<size_t>(length) <= str.size(); offset++) {
       for (auto type : {td::MessageEntity::Type::Bold, td::MessageEntity::Type::Url, td::MessageEntity::Type::TextUrl,
                         td::MessageEntity::Type::MentionName}) {
         for (auto skip_trim : {false, true}) {
           fixed_str = skip_trim ? "aba \n caba " : "aba \n caba";
           auto fixed_length = offset <= 4 && offset + length >= 5 ? length - 1 : length;
           auto fixed_offset = offset >= 5 ? offset - 1 : offset;
-          while (static_cast<size_t>(fixed_offset + fixed_length) > fixed_str.size()) {
+          while (static_cast<size_t>(fixed_offset) + static_cast<size_t>(fixed_length) > fixed_str.size()) {
             fixed_length--;
           }
 
@@ -901,7 +901,7 @@ TEST(MessageEntities, fix_formatted_text) {
     for (td::int32 offset = -10; offset <= 10; offset++) {
       td::vector<td::MessageEntity> entities;
       entities.emplace_back(td::MessageEntity::Type::Bold, offset, length);
-      if (length < 0 || offset < 0 || (length > 0 && static_cast<size_t>(length + offset) > str.size())) {
+      if (length < 0 || offset < 0 || (length > 0 && static_cast<size_t>(length) + static_cast<size_t>(offset) > str.size())) {
         check_fix_formatted_text(str, entities, true, false, false, false);
         check_fix_formatted_text(str, entities, false, false, false, true);
         continue;

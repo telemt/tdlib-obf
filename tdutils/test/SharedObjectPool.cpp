@@ -62,6 +62,7 @@ TEST(SharedPtr, simple) {
 #pragma clang diagnostic ignored "-Wunknown-warning-option"
 #pragma clang diagnostic ignored "-Wself-assign-overloaded"
 #endif
+  // V570: intentional self-assignment test for copy-assign operator
   ptr2 = ptr2;
 #if TD_CLANG
 #pragma clang diagnostic pop

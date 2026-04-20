@@ -18,9 +18,9 @@ class PeerColorCollectible {
   int64 unique_gift_id_ = 0;
   CustomEmojiId gift_custom_emoji_id_;
   CustomEmojiId background_custom_emoji_id_;
-  int32 light_accent_color_;
+  int32 light_accent_color_{0};
   vector<int32> light_colors_;
-  int32 dark_accent_color_;
+  int32 dark_accent_color_{0};
   vector<int32> dark_colors_;
 
   friend bool operator==(const PeerColorCollectible &lhs, const PeerColorCollectible &rhs);

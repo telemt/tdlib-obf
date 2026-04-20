@@ -58,7 +58,7 @@ int resolve_ech_payload_length(const ProfileSpec &spec, bool enable_ech, IRng &r
 
 mtproto::ExecutorConfig make_config(const ProfileSpec &spec, bool enable_ech, IRng &rng) {
   mtproto::ExecutorConfig config;
-  config.grease_value_count = 7;
+  // grease_value_count already defaults to 7
   config.has_ech = enable_ech;
   config.ech_outer_type = spec.ech_outer_type;
   config.ech_kdf_id = spec.ech_kdf_id;
@@ -105,10 +105,9 @@ string build_default_hello_impl(string domain, Slice secret, int32 unix_time, co
   auto enable_ech = should_enable_ech(route_hints);
   auto &profile = mtproto::get_profile_spec(BrowserProfile::Chrome133);
   mtproto::ExecutorConfig config;
-  config.grease_value_count = 7;
+  // grease_value_count and ech_enc_key_length already default to 7 and 32
   config.has_ech = enable_ech;
   config.ech_payload_length = 144 + static_cast<int>(rng.bounded(4u) * 32u);
-  config.ech_enc_key_length = 32;
   config.alps_type = 0x44CD;
   config.padding_target_entropy = static_cast<int>(rng.bounded(256u));
 
@@ -131,7 +130,7 @@ string build_default_tls_client_hello_with_options(string domain, Slice secret, 
   auto enable_ech = should_enable_ech(route_hints);
   auto &profile = mtproto::get_profile_spec(BrowserProfile::Chrome133);
   mtproto::ExecutorConfig config;
-  config.grease_value_count = 7;
+  // grease_value_count already defaults to 7
   config.has_ech = enable_ech;
   config.ech_outer_type = options.ech_outer_type;
   config.ech_kdf_id = options.ech_kdf_id;

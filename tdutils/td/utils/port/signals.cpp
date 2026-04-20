@@ -237,9 +237,7 @@ static void signal_safe_write_data(Slice data) {
       break;
     }
 
-    if (res > 0) {
-      data.remove_prefix(res);
-    }
+    data.remove_prefix(res);
   }
 #elif TD_PORT_WINDOWS
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)

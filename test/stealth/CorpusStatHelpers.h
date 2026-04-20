@@ -313,7 +313,7 @@ inline string compute_ja4_segment_c(const ParsedClientHello &hello) {
     if (sig_algorithms->value.size() >= 2) {
       auto sig_len = static_cast<uint16>((static_cast<uint8>(sig_algorithms->value[0]) << 8) |
                                          static_cast<uint8>(sig_algorithms->value[1]));
-      for (size_t i = 2; i + 1 < sig_algorithms->value.size() && i < static_cast<size_t>(sig_len + 2); i += 2) {
+      for (size_t i = 2; i + 1 < sig_algorithms->value.size() && i < static_cast<size_t>(sig_len) + 2; i += 2) {
         if (i != 2) {
           joined += ",";
         }

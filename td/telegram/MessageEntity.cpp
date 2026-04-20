@@ -3585,21 +3585,30 @@ Result<vector<MessageEntity>> parse_html(string &str) {
             }
           }
         } else if (tag_name == "pre") {
-          auto *last_entity = entities.empty() ? nullptr : &entities.back();
-          if (last_entity != nullptr && last_entity->type == MessageEntity::Type::Code &&
-              last_entity->offset == entity_offset && last_entity->length == entity_length &&
-              !last_entity->argument.empty()) {
-            last_entity->type = MessageEntity::Type::PreCode;
+          if (!entities.empty()) {  // V557: guard .back() against empty container
+            auto &last_entity = entities.back();
+            if (last_entity.type == MessageEntity::Type::Code &&
+                last_entity.offset == entity_offset && last_entity.length == entity_length &&
+                !last_entity.argument.empty()) {
+              last_entity.type = MessageEntity::Type::PreCode;
+            } else {
+              entities.emplace_back(MessageEntity::Type::Pre, entity_offset, entity_length);
+            }
           } else {
             entities.emplace_back(MessageEntity::Type::Pre, entity_offset, entity_length);
           }
         } else if (tag_name == "code") {
-          auto *last_entity = entities.empty() ? nullptr : &entities.back();
-          if (last_entity != nullptr && last_entity->type == MessageEntity::Type::Pre &&
-              last_entity->offset == entity_offset && last_entity->length == entity_length &&
-              !nested_entities.back().argument.empty()) {
-            last_entity->type = MessageEntity::Type::PreCode;
-            last_entity->argument = std::move(nested_entities.back().argument);
+          if (!entities.empty()) {  // V557: guard .back() against empty container
+            auto &last_entity = entities.back();
+            if (last_entity.type == MessageEntity::Type::Pre &&
+                last_entity.offset == entity_offset && last_entity.length == entity_length &&
+                !nested_entities.back().argument.empty()) {
+              last_entity.type = MessageEntity::Type::PreCode;
+              last_entity.argument = std::move(nested_entities.back().argument);
+            } else {
+              entities.emplace_back(MessageEntity::Type::Code, entity_offset, entity_length,
+                                    nested_entities.back().argument);
+            }
           } else {
             entities.emplace_back(MessageEntity::Type::Code, entity_offset, entity_length,
                                   nested_entities.back().argument);
@@ -3622,9 +3631,11 @@ Result<vector<MessageEntity>> parse_html(string &str) {
         400, PSLICE() << "Can't find end tag corresponding to start tag \"" << nested_entities.back().tag_name << '"');
   }
 
-  for (auto &entity : entities) {
-    if (entity.type == MessageEntity::Type::Code && !entity.argument.empty()) {
-      entity.argument.clear();
+  if (!entities.empty()) {  // V1078: skip iteration when container is empty
+    for (auto &entity : entities) {
+      if (entity.type == MessageEntity::Type::Code && !entity.argument.empty()) {
+        entity.argument.clear();
+      }
     }
   }
 

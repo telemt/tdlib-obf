@@ -348,7 +348,7 @@ TEST(TLS_MultiDumpWindowsChromeStats, WindowsChromeWireLengthsMatchReviewedWindo
 
   FamilyLaneMatcher matcher(*baseline);
   for (int seed = 0; seed < kSeedCount; seed++) {
-    MockRng rng(static_cast<td::uint64>(seed * 31337));
+    MockRng rng(static_cast<td::uint64>(seed) * 31337);
     auto wire = build_tls_client_hello_for_profile("www.google.com", "0123456789secret", kUnixTime,
                                                    BrowserProfile::Chrome147_Windows, EchMode::Rfc9180Outer, rng);
     ASSERT_TRUE(matcher.within_wire_length_envelope(wire.size(), kWireLengthTolerancePercent));

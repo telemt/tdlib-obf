@@ -222,11 +222,8 @@ const AlpsTypeVerifier &AlpsTypeVerifier::get_for_family(Slice family_id) {
     static const AlpsTypeVerifier v(Slice("chromium"), {0x4469u, 0x44CDu});
     return v;
   }
-  if (is_firefox_family(family_id) || is_apple_family(family_id)) {
-    static const AlpsTypeVerifier v(family_id, {});
-    return v;
-  }
-  static const AlpsTypeVerifier v(family_id, {});
+  // V523: both branches returned equivalent objects — collapse into single fallback.
+  static const AlpsTypeVerifier v(Slice("other"), {});
   return v;
 }
 

@@ -264,7 +264,7 @@ void init_promise_future(PromiseActor<S> *promise, FutureActor<S> *future) {
   future->init();
   promise->future_id_ = register_actor("FutureActor", future);
 
-  CHECK(future->get_info() != nullptr);
+  CHECK(future->get_info() != nullptr);  // V547: defense-in-depth after register_actor
 }
 
 template <class T>

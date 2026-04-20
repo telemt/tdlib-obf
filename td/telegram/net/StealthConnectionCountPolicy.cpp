@@ -60,9 +60,7 @@ StealthConnectionCountPlan make_connection_count_plan(const Proxy &proxy, int32 
   StealthConnectionCountPlan plan;
   if (is_stealth_tls_mtproto_proxy(proxy)) {
     plan.capped_for_stealth_tls_proxy = true;
-    plan.main_session_count = 1;
-    plan.upload_session_count = 1;
-    plan.download_session_count = 1;
+    // main/upload/download session counts already default to 1
     plan.download_small_session_count = 0;
     return plan;
   }

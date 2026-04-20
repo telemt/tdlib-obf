@@ -203,7 +203,7 @@ class SavedMessagesManager final : public Actor {
   };
 
   class TopicDate {
-    int64 order_;
+    int64 order_{0};
     SavedMessagesTopicId topic_id_;
 
    public:

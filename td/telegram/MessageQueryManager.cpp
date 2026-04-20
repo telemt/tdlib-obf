@@ -384,13 +384,13 @@ class ToggleSuggestedPostApprovalQuery final : public Td::ResultHandler {
 class SearchMessagesGlobalQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::foundMessages>> promise_;
   string query_;
-  int32 offset_date_;
+  int32 offset_date_{0};
   DialogId offset_dialog_id_;
   MessageId offset_message_id_;
-  int32 limit_;
+  int32 limit_{0};
   MessageSearchFilter filter_;
-  int32 min_date_;
-  int32 max_date_;
+  int32 min_date_{0};
+  int32 max_date_{0};
 
  public:
   explicit SearchMessagesGlobalQuery(Promise<td_api::object_ptr<td_api::foundMessages>> &&promise)
@@ -549,8 +549,8 @@ class SearchPublicPostsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::foundPublicPosts>> promise_;
   string query_;
   MessageSearchOffset offset_;
-  int32 limit_;
-  int64 star_count_;
+  int32 limit_{0};
+  int64 star_count_{0};
 
  public:
   explicit SearchPublicPostsQuery(Promise<td_api::object_ptr<td_api::foundPublicPosts>> &&promise)
@@ -638,7 +638,7 @@ class SearchPostsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::foundMessages>> promise_;
   string hashtag_;
   MessageSearchOffset offset_;
-  int32 limit_;
+  int32 limit_{0};
 
  public:
   explicit SearchPostsQuery(Promise<td_api::object_ptr<td_api::foundMessages>> &&promise)
@@ -693,7 +693,7 @@ class SearchPostsQuery final : public Td::ResultHandler {
 class GetRecentLocationsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::messages>> promise_;
   DialogId dialog_id_;
-  int32 limit_;
+  int32 limit_{0};
 
  public:
   explicit GetRecentLocationsQuery(Promise<td_api::object_ptr<td_api::messages>> &&promise)
@@ -1408,7 +1408,7 @@ class DeleteChannelHistoryQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
   MessageId max_message_id_;
-  bool allow_error_;
+  bool allow_error_{false};
 
  public:
   explicit DeleteChannelHistoryQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -2907,9 +2907,9 @@ void MessageQueryManager::on_get_emoji_game_info(
 class MessageQueryManager::BlockMessageSenderFromRepliesOnServerLogEvent {
  public:
   MessageId message_id_;
-  bool delete_message_;
-  bool delete_all_messages_;
-  bool report_spam_;
+  bool delete_message_{false};
+  bool delete_all_messages_{false};
+  bool report_spam_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3010,7 +3010,7 @@ void MessageQueryManager::delete_all_call_messages(bool revoke, Promise<Unit> &&
 
 class MessageQueryManager::DeleteAllCallMessagesOnServerLogEvent {
  public:
-  bool revoke_;
+  bool revoke_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3099,8 +3099,8 @@ class MessageQueryManager::DeleteDialogHistoryOnServerLogEvent {
  public:
   DialogId dialog_id_;
   MessageId max_message_id_;
-  bool remove_from_dialog_list_;
-  bool revoke_;
+  bool remove_from_dialog_list_{false};
+  bool revoke_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3174,9 +3174,9 @@ void MessageQueryManager::delete_dialog_history_on_server(DialogId dialog_id, Me
 class MessageQueryManager::DeleteDialogMessagesByDateOnServerLogEvent {
  public:
   DialogId dialog_id_;
-  int32 min_date_;
-  int32 max_date_;
-  bool revoke_;
+  int32 min_date_{0};
+  int32 max_date_{0};
+  bool revoke_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3254,7 +3254,7 @@ class MessageQueryManager::DeleteMessagesOnServerLogEvent {
  public:
   DialogId dialog_id_;
   vector<MessageId> message_ids_;
-  bool revoke_;
+  bool revoke_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {

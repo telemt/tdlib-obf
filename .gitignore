@@ -24,3 +24,4 @@ build_compile.ps1
 build_configure.ps1
 pvs-report.json
 test_sqlite_kv
+Analysis_Report.json

@@ -363,7 +363,7 @@ Status TdDb::init_sqlite(const Parameters &parameters, const DbKey &key, const D
   bool use_sqlite = parameters.use_file_database_;
   bool use_file_database = parameters.use_file_database_;
   bool use_dialog_db = parameters.use_message_database_;
-  bool use_message_thread_db = parameters.use_message_database_ && false;
+  bool use_message_thread_db = parameters.use_message_database_ && false;  // V547: intentionally disabled feature flag
   bool use_message_database = parameters.use_message_database_;
   bool use_story_database = parameters.use_message_database_;
 

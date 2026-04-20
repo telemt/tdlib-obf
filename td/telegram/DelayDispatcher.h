@@ -35,7 +35,7 @@ class DelayDispatcher final : public Actor {
   };
   std::queue<Query> queue_;
   Timestamp wakeup_at_;
-  double default_delay_;
+  double default_delay_{0.0};
   ActorShared<> parent_;
 
   void loop() final;

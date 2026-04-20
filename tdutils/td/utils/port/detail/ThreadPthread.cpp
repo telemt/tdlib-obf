@@ -113,7 +113,8 @@ Status ThreadPthread::set_affinity_mask(id thread_id, uint64 mask) {
   cpu_set_t cpuset;
 #endif
   CPU_ZERO(&cpuset);
-  for (int j = 0; j < 64 && j < CPU_SETSIZE; j++) {
+  // V590: j < 64 is the binding constraint since CPU_SETSIZE >= 1024
+  for (int j = 0; j < 64; j++) {
     if ((mask >> j) & 1) {
       CPU_SET(j, &cpuset);
     }
@@ -167,7 +168,8 @@ uint64 ThreadPthread::get_affinity_mask(id thread_id) {
   }
 
   uint64 mask = 0;
-  for (int j = 0; j < 64 && j < CPU_SETSIZE; j++) {
+  // V590: j < 64 is the binding constraint since CPU_SETSIZE >= 1024
+  for (int j = 0; j < 64; j++) {
     if (CPU_ISSET(j, &cpuset)) {
       mask |= static_cast<uint64>(1) << j;
     }

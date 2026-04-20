@@ -61,9 +61,9 @@ class dummyUpdate final : public telegram_api::Update {
 
 class updateSentMessage final : public telegram_api::Update {
  public:
-  int64 random_id_;
+  int64 random_id_{0};
   MessageId message_id_;
-  int32 date_;
+  int32 date_{0};
   int32 ttl_period_;
 
   updateSentMessage(int64 random_id, MessageId message_id, int32 date, int32 ttl_period)

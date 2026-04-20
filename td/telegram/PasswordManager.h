@@ -95,7 +95,7 @@ class PasswordManager final : public NetQueryCallback {
  private:
   ActorShared<> parent_;
 
-  int32 api_id_;
+  int32 api_id_{0};
   string api_hash_;
 
   struct PasswordState {

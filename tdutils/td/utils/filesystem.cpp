@@ -183,7 +183,7 @@ Status atomic_write_file(CSlice path, Slice data, CSlice path_tmp) {
 
   WriteFileOptions options;
   options.need_sync = true;
-  options.need_lock = true;
+  // need_lock already defaults to true
   TRY_STATUS(write_file(path_tmp, data, options));
   return rename(path_tmp, path);
 }

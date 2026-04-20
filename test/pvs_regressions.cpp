@@ -146,7 +146,7 @@ TEST(PvsRegressions, parse_html_mixed_binary_noise_is_memory_safe) {
   for (int i = 0; i < kIterations; i++) {
     td::string payload;
     const int payload_len = td::Random::fast(0, 96);
-    payload.reserve(static_cast<size_t>(payload_len * 4));
+    payload.reserve(static_cast<size_t>(payload_len) * 4);
     for (int j = 0; j < payload_len; j++) {
       payload += utf8_samples[td::Random::fast(0, kUtf8SampleCount - 1)];
     }

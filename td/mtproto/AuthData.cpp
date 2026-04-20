@@ -186,7 +186,8 @@ Status AuthData::check_packet(uint64 session_id, MessageId message_id, double no
   TRY_STATUS(duplicate_checker_.check(message_id));
 
   LOG(DEBUG) << "Receive packet in " << message_id << " from session " << session_id << " at " << now;
-  time_difference_was_updated = update_server_time_difference(static_cast<uint32>(message_id.get() >> 32) - now);
+  time_difference_was_updated =  // intentional assignment, not ==  //-V1051
+      update_server_time_difference(static_cast<uint32>(message_id.get() >> 32) - now);
 
   // In addition, msg_id values that belong over 30 seconds in the future or over 300 seconds in the past are to be
   // ignored (recall that msg_id approximately equals unixtime * 2^32). This is especially important for the server.

@@ -142,7 +142,7 @@ TEST(FlatHashMap, basic) {
 
   td::FlatHashMap<td::int32, std::array<td::unique_ptr<td::string>, 10>> x;
   auto y = std::move(x);
-  x[12];
+  (void)x[12];  // V607: operator[] insert side-effect is intentional
   x.erase(x.find(12));
 
   {
@@ -214,7 +214,7 @@ TEST(FlatHashMap, basic) {
   }
   {
     KV kv;
-    kv["d"];
+    (void)kv["d"];  // V607: operator[] insert side-effect is intentional
     ASSERT_EQ((Data{{"d", ""}}), extract_kv(kv));
     kv.erase(kv.find("d"));
     ASSERT_EQ(Data{}, extract_kv(kv));

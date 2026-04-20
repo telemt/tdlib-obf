@@ -37,8 +37,8 @@ class QueryMerger final : public Actor {
   };
 
   size_t query_count_ = 0;
-  size_t max_concurrent_query_count_;
-  size_t max_merged_query_count_;
+  size_t max_concurrent_query_count_{0};
+  size_t max_merged_query_count_{0};
 
   MergeFunction merge_function_;
   std::queue<int64> pending_queries_;

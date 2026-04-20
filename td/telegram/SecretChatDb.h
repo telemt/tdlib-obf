@@ -43,7 +43,7 @@ class SecretChatDb {
 
  private:
   std::shared_ptr<KeyValueSyncInterface> pmc_;
-  int32 chat_id_;
+  int32 chat_id_{0};
 };
 
 }  // namespace td

@@ -1970,8 +1970,8 @@ class MessagesManager final : public Actor {
   Status can_get_message_embedding_code(DialogId dialog_id, const Message *m) const;
 
   struct CanDeleteDialog {
-    bool for_self_;
-    bool for_all_users_;
+    bool for_self_{false};
+    bool for_all_users_{false};
 
     CanDeleteDialog(bool for_self, bool for_all_users) : for_self_(for_self), for_all_users_(for_all_users) {
     }
@@ -3189,7 +3189,7 @@ class MessagesManager final : public Actor {
     }
 
     MessageFullId message_full_id_;
-    bool by_ttl_period_;
+    bool by_ttl_period_{false};
 
     HeapNode *as_heap_node() const {
       return const_cast<HeapNode *>(static_cast<const HeapNode *>(this));

@@ -207,7 +207,6 @@ std::unique_lock<std::mutex> TsListNode<DataT>::lock() {
   if (parent == nullptr) {
     return {};
   }
-  CHECK(parent != nullptr);
   return parent->lock();
 }
 

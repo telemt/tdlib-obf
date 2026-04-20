@@ -18,9 +18,9 @@ namespace td {
 namespace mtproto {
 
 struct ServerSalt {
-  int64 salt;
-  double valid_since;
-  double valid_until;
+  int64 salt{0};
+  double valid_since{0.0};
+  double valid_until{0.0};
 };
 
 template <class StorerT>

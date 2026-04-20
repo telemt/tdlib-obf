@@ -617,9 +617,8 @@ td::Result<Block> Blockchain::build_block(std::vector<Change> changes, const Pri
   }
 
   ValidateOptions validate_options;
-  validate_options.validate_state_hash = true;
+  // validate_state_hash and permissions already default to true and AllPermissions
   validate_options.validate_signature = false;
-  validate_options.permissions = GroupParticipantFlags::AllPermissions;
   for (const auto &change : changes) {
     TRY_STATUS(state.apply_change(change, public_key, validate_options));
   }
@@ -779,7 +778,7 @@ td::Result<std::vector<Change>> ClientBlockchain::try_apply_block(td::Slice bloc
   TRY_RESULT(block, Block::from_tl_serialized(block_slice));
 
   ValidateOptions validate_options;
-  validate_options.validate_signature = true;
+  // validate_signature already defaults to true
   validate_options.validate_state_hash = false;
   TRY_STATUS(blockchain_.try_apply_block(block, validate_options));
   for (auto &change : block.changes_) {

@@ -27,6 +27,7 @@ void clear_thread_locals() {
   auto to_delete = detail::thread_local_destructors;
   detail::thread_local_destructors = nullptr;
   delete to_delete;
+  // V547: defense-in-depth — verifies destructors didn't re-register themselves
   CHECK(detail::thread_local_destructors == nullptr);
 }
 

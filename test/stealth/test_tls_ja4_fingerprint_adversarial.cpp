@@ -184,7 +184,7 @@ td::string compute_ja4_segment_c(const td::mtproto::test::ParsedClientHello &hel
     auto sig_len = static_cast<td::uint16>((static_cast<td::uint8>(sig_alg_ext->value[0]) << 8) |
                                            static_cast<td::uint8>(sig_alg_ext->value[1]));
     joined += "_";
-    for (size_t i = 2; i + 1 < sig_alg_ext->value.size() && i < static_cast<size_t>(sig_len + 2); i += 2) {
+    for (size_t i = 2; i + 1 < sig_alg_ext->value.size() && i < static_cast<size_t>(sig_len) + 2; i += 2) {
       if (i > 2) {
         joined += ",";
       }

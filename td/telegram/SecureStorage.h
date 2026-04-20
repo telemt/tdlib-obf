@@ -132,7 +132,7 @@ class Secret {
  private:
   Secret(UInt256 secret, int64 hash);
   UInt256 secret_;
-  int64 hash_;
+  int64 hash_{0};
 };
 
 class EncryptedSecret {

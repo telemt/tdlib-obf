@@ -83,7 +83,7 @@ td::string compute_ja3_string(const td::mtproto::test::ParsedClientHello &hello)
     auto groups_len = static_cast<td::uint16>((static_cast<td::uint8>(sg_ext->value[0]) << 8) |
                                               static_cast<td::uint8>(sg_ext->value[1]));
     bool first_group = true;
-    for (size_t i = 2; i + 1 < sg_ext->value.size() && i < static_cast<size_t>(groups_len + 2); i += 2) {
+    for (size_t i = 2; i + 1 < sg_ext->value.size() && i < static_cast<size_t>(groups_len) + 2; i += 2) {
       auto g = static_cast<td::uint16>((static_cast<td::uint8>(sg_ext->value[i]) << 8) |
                                        static_cast<td::uint8>(sg_ext->value[i + 1]));
       if (!is_grease_value(g)) {

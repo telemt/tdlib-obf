@@ -30,7 +30,7 @@ class HandshakeActor final : public Actor {
  private:
   unique_ptr<AuthKeyHandshake> handshake_;
   unique_ptr<HandshakeConnection> connection_;
-  double timeout_;
+  double timeout_{0.0};
 
   Promise<unique_ptr<RawConnection>> raw_connection_promise_;
   Promise<unique_ptr<AuthKeyHandshake>> handshake_promise_;

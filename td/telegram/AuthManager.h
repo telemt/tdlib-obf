@@ -184,7 +184,7 @@ class AuthManager final : public NetActor {
 
   // STATE
   // from constructor
-  int32 api_id_;
+  int32 api_id_{0};
   string api_hash_;
 
   // State::WaitPremiumPurchase

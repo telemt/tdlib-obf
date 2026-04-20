@@ -11131,9 +11131,7 @@ MessagesManager::MessageInfo MessagesManager::parse_telegram_api_message(
       if (!is_bot) {
         if (is_scheduled) {
           is_content_read = false;
-        } else if (td->messages_manager_->is_message_auto_read(message_info.dialog_id, message_info.is_outgoing)) {
-          is_content_read = true;
-        } else {
+        } else if (!td->messages_manager_->is_message_auto_read(message_info.dialog_id, message_info.is_outgoing)) {
           is_content_read = !message_info.has_unread_content;
         }
       }

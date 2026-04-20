@@ -33,7 +33,7 @@ BrowserExtension make_raw_extension(TlsExtensionType type, Slice raw_data) {
 
 BrowserExtension make_custom_extension(uint16 custom_type, Slice raw_data) {
   BrowserExtension extension;
-  extension.type = TlsExtensionType::Custom;
+  // type already defaults to TlsExtensionType::Custom
   extension.custom_type = custom_type;
   extension.raw_data = raw_data.str();
   return extension;
@@ -278,7 +278,7 @@ vector<Op> make_firefox_ech_layout() {
 BrowserProfileSpec make_chrome133_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome133";
-  profile.tls_version = TlsVersion::Tls12;
+
   // Real Chrome 144/146 captures (test/analysis/fixtures/clienthello/
   // linux_desktop/chrome14*_linux_desktop.clienthello.json) advertise
   // exactly 15 non-GREASE cipher suites with NO TLS_RSA_WITH_3DES_EDE_CBC_SHA
@@ -316,7 +316,7 @@ BrowserProfileSpec make_chrome133_impl() {
 BrowserProfileSpec make_chrome131_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome131";
-  profile.tls_version = TlsVersion::Tls12;
+
   // Real Chrome 144/146 captures (test/analysis/fixtures/clienthello/
   // linux_desktop/chrome14*_linux_desktop.clienthello.json) advertise
   // exactly 15 non-GREASE cipher suites with NO TLS_RSA_WITH_3DES_EDE_CBC_SHA
@@ -354,7 +354,7 @@ BrowserProfileSpec make_chrome131_impl() {
 BrowserProfileSpec make_chrome120_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome120";
-  profile.tls_version = TlsVersion::Tls12;
+
   // Real Chrome 144/146 captures (test/analysis/fixtures/clienthello/
   // linux_desktop/chrome14*_linux_desktop.clienthello.json) advertise
   // exactly 15 non-GREASE cipher suites with NO TLS_RSA_WITH_3DES_EDE_CBC_SHA
@@ -398,7 +398,7 @@ BrowserProfileSpec make_chrome147_windows_impl() {
 BrowserProfileSpec make_chrome147_ios_chromium_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome147_ios_chromium";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865, 4866, 4867, 49195, 49199, 49196, 49200, 52393, 52392, 49171, 49172, 156, 157, 47, 53};
   profile.supported_groups = {4588, 29, 23, 24};
   profile.ec_point_formats = {0};
@@ -430,7 +430,7 @@ BrowserProfileSpec make_chrome147_ios_chromium_impl() {
 BrowserProfileSpec make_chrome_darwin_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome_darwin";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865,  4866,  4867,  49196, 49195, 52393, 49200, 49199, 52392, 49162,
                            49161, 49172, 49171, 157,   156,   53,    47,    49160, 49170, 10};
   profile.supported_groups = {29, 23, 24, 25};
@@ -459,7 +459,7 @@ BrowserProfileSpec make_chrome_darwin_impl() {
 BrowserProfileSpec make_firefox148_impl() {
   BrowserProfileSpec profile;
   profile.name = "firefox148";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865,  4867,  4866,  49195, 49199, 52393, 52392, 49196, 49200,
                            49162, 49161, 49171, 49172, 156,   157,   47,    53};
   profile.supported_groups = {4588, 29, 23, 24, 25, 256, 257};
@@ -497,7 +497,7 @@ BrowserProfileSpec make_firefox149_windows_impl() {
   // per-platform fixture routing in TlsHelloProfileRegistry.
   BrowserProfileSpec profile;
   profile.name = "firefox149_windows";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865,  4867,  4866,  49195, 49199, 52393, 52392, 49196, 49200,
                            49162, 49161, 49171, 49172, 156,   157,   47,    53};
   profile.supported_groups = {4588, 29, 23, 24, 25, 256, 257};
@@ -531,7 +531,7 @@ BrowserProfileSpec make_firefox149_windows_impl() {
 BrowserProfileSpec make_firefox149_macos_impl() {
   BrowserProfileSpec profile;
   profile.name = "firefox149_macos26_3";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865,  4867,  4866,  49195, 49199, 52393, 52392, 49196, 49200,
                            49162, 49161, 49171, 49172, 156,   157,   47,    53};
   profile.supported_groups = {4588, 29, 23, 24, 25, 256, 257};
@@ -584,7 +584,7 @@ BrowserProfileSpec make_firefox149_macos_impl() {
 BrowserProfileSpec make_safari_impl() {
   BrowserProfileSpec profile;
   profile.name = "safari26_3";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4866,  4867,  4865,  49196, 49195, 52393, 49200, 49199, 52392, 49162,
                            49161, 49172, 49171, 157,   156,   53,    47,    49160, 49170, 10};
   // Apple TLS family on iOS 26.x adopted X25519MLKEM768. Real captures
@@ -620,7 +620,7 @@ BrowserProfileSpec make_safari_impl() {
 BrowserProfileSpec make_ios14_impl() {
   BrowserProfileSpec profile;
   profile.name = "ios14";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4866,  4867,  4865,  49196, 49195, 52393, 49200, 49199, 52392, 49162,
                            49161, 49172, 49171, 157,   156,   53,    47,    49160, 49170, 10};
   // See `make_safari_impl` for the rationale: Apple TLS family on iOS
@@ -651,7 +651,7 @@ BrowserProfileSpec make_ios14_impl() {
 BrowserProfileSpec make_android_okhttp_impl() {
   BrowserProfileSpec profile;
   profile.name = "android11_okhttp_advisory";
-  profile.tls_version = TlsVersion::Tls12;
+
   profile.cipher_suites = {4865, 4866, 4867, 49195, 49199, 49196, 49200, 52393, 52392, 49171, 49172, 156, 157, 47, 53};
   profile.supported_groups = {29, 23, 24};
   profile.ec_point_formats = {0};

@@ -541,7 +541,7 @@ class EditStoryCoverQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
   StoryId story_id_;
-  double main_frame_timestamp_;
+  double main_frame_timestamp_{0.0};
   FileId file_id_;
   string file_reference_;
 
@@ -6233,9 +6233,9 @@ class StoryManager::EditStoryLogEvent {
  public:
   const PendingStory *pending_story_in_;
   unique_ptr<PendingStory> pending_story_out_;
-  bool edit_media_areas_;
+  bool edit_media_areas_{false};
   vector<MediaArea> areas_;
-  bool edit_caption_;
+  bool edit_caption_{false};
   FormattedText caption_;
 
   EditStoryLogEvent() : pending_story_in_(nullptr), edit_caption_(false) {

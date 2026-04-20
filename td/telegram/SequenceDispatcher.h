@@ -40,9 +40,9 @@ class SequenceDispatcher final : public NetQueryCallback {
     NetQueryRef net_query_ref_;
     NetQueryPtr query_;
     ActorShared<NetQueryCallback> callback_;
-    uint64 generation_;
-    int32 total_timeout_;
-    int32 last_timeout_;
+    uint64 generation_{0};
+    int32 total_timeout_{0};
+    int32 last_timeout_{0};
   };
 
   ActorShared<Parent> parent_;
@@ -83,7 +83,7 @@ class MultiSequenceDispatcherOld final : public SequenceDispatcher::Parent {
 
  private:
   struct Data {
-    int32 cnt_;
+    int32 cnt_{0};
     ActorOwn<SequenceDispatcher> dispatcher_;
   };
   FlatHashMap<uint64, Data> dispatchers_;

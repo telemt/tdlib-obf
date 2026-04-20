@@ -47,7 +47,7 @@ class StorageManager final : public Actor {
 
   ActorShared<> parent_;
 
-  int32 scheduler_id_;
+  int32 scheduler_id_{0};
 
   // get stats
   ActorOwn<FileStatsWorker> stats_worker_;

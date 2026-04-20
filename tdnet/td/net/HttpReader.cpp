@@ -139,6 +139,7 @@ Result<size_t> HttpReader::do_read_next(bool can_be_slow) {
             end_p--;
           }
 
+          // V547: defense-in-depth — p confirmed non-null from find() result
           CHECK(p != nullptr);
           Slice boundary(p, static_cast<size_t>(end_p - p));
           if (boundary.empty() || boundary.size() > MAX_BOUNDARY_LENGTH) {

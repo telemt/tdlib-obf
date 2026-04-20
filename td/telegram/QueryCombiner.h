@@ -34,8 +34,8 @@ class QueryCombiner final : public Actor {
 
   int32 query_count_ = 0;
 
-  double next_query_time_;
-  double min_delay_;
+  double next_query_time_{0.0};
+  double min_delay_{0.0};
 
   std::queue<int64> delayed_queries_;
 

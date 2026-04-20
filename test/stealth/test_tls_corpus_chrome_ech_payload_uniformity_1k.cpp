@@ -129,7 +129,7 @@ TEST(ChromeEchPayloadUniformity1k, EchPayloadLengthMatchesWireExtensionBody) {
     auto *ech = find_extension(hello, fixtures::kEchExtensionType);
     ASSERT_TRUE(ech != nullptr);
     auto expected_wire_size =
-        static_cast<size_t>(1 + 2 + 2 + 1 + 2 + hello.ech_actual_enc_length + 2 + hello.ech_payload_length);
+        size_t{1} + 2 + 2 + 1 + 2 + static_cast<size_t>(hello.ech_actual_enc_length) + 2 + static_cast<size_t>(hello.ech_payload_length);
     ASSERT_EQ(expected_wire_size, ech->value.size());
   }
 }

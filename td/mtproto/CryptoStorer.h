@@ -63,11 +63,11 @@ class ObjectImpl {
   }
 
  private:
-  bool not_empty_;
+  bool not_empty_{false};
   Object object_;
   ObjectStorer object_storer_;
   MessageId message_id_;
-  int32 seq_no_;
+  int32 seq_no_{0};
 };
 
 using AckImpl = ObjectImpl<mtproto_api::msgs_ack, TLObjectStorer<mtproto_api::msgs_ack>>;

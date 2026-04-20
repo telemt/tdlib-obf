@@ -1817,7 +1817,7 @@ void UserManager::User::store(StorerT &storer) const {
   STORE_FLAG(has_usernames);
   STORE_FLAG(can_be_edited_bot);
   END_STORE_FLAGS();
-  if (has_flags2) {
+  if (has_flags2) {  // V547: always true in store path; guard kept for deserialization symmetry
     BEGIN_STORE_FLAGS();
     STORE_FLAG(is_close_friend);
     STORE_FLAG(stories_hidden);
@@ -2190,7 +2190,7 @@ void UserManager::UserFull::store(StorerT &storer) const {
   STORE_FLAG(sponsored_enabled);
   STORE_FLAG(has_flags2);
   END_STORE_FLAGS();
-  if (has_flags2) {
+  if (has_flags2) {  // V547: always true in store path; guard kept for deserialization symmetry
     BEGIN_STORE_FLAGS();
     STORE_FLAG(has_preview_medias);
     STORE_FLAG(has_privacy_policy_url);

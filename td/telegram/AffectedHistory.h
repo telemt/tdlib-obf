@@ -13,9 +13,9 @@
 namespace td {
 
 struct AffectedHistory {
-  int32 pts_;
-  int32 pts_count_;
-  bool is_final_;
+  int32 pts_{0};
+  int32 pts_count_{0};
+  bool is_final_{false};
 
   explicit AffectedHistory(tl_object_ptr<telegram_api::messages_affectedHistory> &&affected_history)
       : pts_(affected_history->pts_)

@@ -222,7 +222,7 @@ class BackgroundManager final : public Actor {
   struct UploadedFileInfo {
     BackgroundType type_;
     DialogId dialog_id_;
-    bool for_dark_theme_;
+    bool for_dark_theme_{false};
     Promise<td_api::object_ptr<td_api::background>> promise_;
 
     UploadedFileInfo(BackgroundType type, DialogId dialog_id, bool for_dark_theme,

@@ -728,8 +728,8 @@ class ReportEncryptedSpamQuery final : public Td::ResultHandler {
 
 class GetBlockedDialogsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::messageSenders>> promise_;
-  int32 offset_;
-  int32 limit_;
+  int32 offset_{0};
+  int32 limit_{0};
 
  public:
   explicit GetBlockedDialogsQuery(Promise<td_api::object_ptr<td_api::messageSenders>> &&promise)
@@ -1096,7 +1096,7 @@ class ToggleDialogUnreadMarkQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
   SavedMessagesTopicId saved_messages_topic_id_;
-  bool is_marked_as_unread_;
+  bool is_marked_as_unread_{false};
 
  public:
   explicit ToggleDialogUnreadMarkQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1162,7 +1162,7 @@ class ToggleDialogUnreadMarkQuery final : public Td::ResultHandler {
 class ToggleDialogPinQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  bool is_pinned_;
+  bool is_pinned_{false};
 
  public:
   explicit ToggleDialogPinQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1208,7 +1208,7 @@ class ToggleDialogPinQuery final : public Td::ResultHandler {
 class ToggleDialogTranslationsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  bool is_translatable_;
+  bool is_translatable_{false};
 
  public:
   explicit ToggleDialogTranslationsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1255,7 +1255,7 @@ class ToggleDialogTranslationsQuery final : public Td::ResultHandler {
 class ToggleViewForumAsMessagesQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  bool view_as_messages_;
+  bool view_as_messages_{false};
 
  public:
   explicit ToggleViewForumAsMessagesQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -3417,7 +3417,7 @@ void DialogManager::reorder_pinned_dialogs_on_server(FolderId folder_id, const v
 class DialogManager::ToggleDialogReportSpamStateOnServerLogEvent {
  public:
   DialogId dialog_id_;
-  bool is_spam_dialog_;
+  bool is_spam_dialog_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3537,8 +3537,8 @@ void DialogManager::set_dialog_theme_on_server(DialogId dialog_id, const string 
 class DialogManager::ToggleDialogIsBlockedOnServerLogEvent {
  public:
   DialogId dialog_id_;
-  bool is_blocked_;
-  bool is_blocked_for_stories_;
+  bool is_blocked_{false};
+  bool is_blocked_for_stories_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3582,7 +3582,7 @@ class DialogManager::ToggleDialogTopicPropertyOnServerLogEvent {
  public:
   DialogId dialog_id_;
   SavedMessagesTopicId saved_messages_topic_id_;
-  bool value_;
+  bool value_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {
@@ -3640,7 +3640,7 @@ void DialogManager::toggle_dialog_is_marked_as_unread_on_server(DialogId dialog_
 class DialogManager::ToggleDialogPropertyOnServerLogEvent {
  public:
   DialogId dialog_id_;
-  bool value_;
+  bool value_{false};
 
   template <class StorerT>
   void store(StorerT &storer) const {

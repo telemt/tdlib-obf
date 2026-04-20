@@ -48,7 +48,7 @@ class AdministratorRights {
       CAN_MANAGE_DIALOG | CAN_POST_STORIES | CAN_EDIT_STORIES | CAN_DELETE_STORIES | CAN_MANAGE_DIRECT_MESSAGES |
       CAN_MANAGE_RANKS;
 
-  uint64 flags_;
+  uint64 flags_{0};
 
   friend class DialogParticipantStatus;
 
@@ -199,7 +199,7 @@ class RestrictedRights {
       CAN_ADD_WEB_PAGE_PREVIEWS | CAN_SEND_POLLS | ALL_ADMIN_PERMISSION_RIGHTS | CAN_SEND_AUDIOS | CAN_SEND_DOCUMENTS |
       CAN_SEND_PHOTOS | CAN_SEND_VIDEOS | CAN_SEND_VIDEO_NOTES | CAN_SEND_VOICE_NOTES | CAN_EDIT_RANK;
 
-  uint64 flags_;
+  uint64 flags_{0};
 
   friend class DialogParticipantStatus;
 

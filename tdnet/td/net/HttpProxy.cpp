@@ -47,7 +47,7 @@ Status HttpProxy::wait_connect_response() {
   it.advance(12, begin);
   if ((begin.substr(0, 10) != "HTTP/1.1 2" && begin.substr(0, 10) != "HTTP/1.0 2") || !is_digit(begin[10]) ||
       !is_digit(begin[11])) {
-    char buf[1024];
+    char buf[1024]{};  // V614: zero-initialize to satisfy static analysis
     size_t len = min(sizeof(buf), it.size());
     // Pass `MutableSlice{buf, len}` (the number of bytes that will actually be
     // filled) instead of `MutableSlice{buf, sizeof(buf)}`. PVS-Studio V614

@@ -52,7 +52,7 @@ class IntermediateTransport {
   }
 
  private:
-  bool with_padding_;
+  bool with_padding_{false};
   size_t stealth_target_frame_size_{0};
 };
 

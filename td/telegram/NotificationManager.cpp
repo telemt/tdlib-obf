@@ -3552,15 +3552,15 @@ class NotificationManager::AddMessagePushNotificationLogEvent {
  public:
   DialogId dialog_id_;
   MessageId message_id_;
-  int64 random_id_;
+  int64 random_id_{0};
   UserId sender_user_id_;
   DialogId sender_dialog_id_;
   string sender_name_;
-  int32 date_;
-  bool is_from_scheduled_;
-  bool contains_mention_;
-  bool disable_notification_;
-  int64 ringtone_id_;
+  int32 date_{0};
+  bool is_from_scheduled_{false};
+  bool contains_mention_{false};
+  bool disable_notification_{false};
+  int64 ringtone_id_{0};
   string loc_key_;
   string arg_;
   Photo photo_;
@@ -3801,7 +3801,7 @@ class NotificationManager::EditMessagePushNotificationLogEvent {
  public:
   DialogId dialog_id_;
   MessageId message_id_;
-  int32 edit_date_;
+  int32 edit_date_{0};
   string loc_key_;
   string arg_;
   Photo photo_;
