@@ -11,19 +11,13 @@
 #include "td/utils/as.h"
 #include "td/utils/crypto.h"
 #include "td/utils/tl_storers.h"
-#include <fstream>
-#include <iterator>
+
+#include "test/stealth/SourceContractFileReader.h"
 
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 
 namespace {
-
-td::string read_text_file(td::Slice path) {
-  std::ifstream input(path.str(), std::ios::binary);
-  CHECK(input.is_open());
-  return td::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-}
 
 td::string extract_pem_literal(const td::string &content, td::Slice function_signature) {
   auto signature_pos = content.find(function_signature.str());
@@ -126,7 +120,7 @@ td::int64 compute_legacy_rsa_public_key_fingerprint(td::Slice pem) {
 }
 
 TEST(SourceLayoutContract, BundledPrimaryAndSecondaryBlocksMatchSlots) {
-  auto source = read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
 
   auto main_fingerprint =
       compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice retained_primary_block()"));
@@ -138,7 +132,7 @@ TEST(SourceLayoutContract, BundledPrimaryAndSecondaryBlocksMatchSlots) {
 }
 
 TEST(SourceLayoutContract, BundledAuxiliaryBlockMatchesSlot) {
-  auto source = read_text_file("td/telegram/ConfigManager.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
   auto recovery_fingerprint =
       compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice retained_auxiliary_block()"));
 

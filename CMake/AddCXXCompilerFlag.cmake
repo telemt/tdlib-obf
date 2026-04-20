@@ -30,7 +30,13 @@ endfunction(mangle_compiler_flag)
 function(add_cxx_compiler_flag FLAG)
   string(REPLACE "-Wno-" "-W" MAIN_FLAG ${FLAG})
   mangle_compiler_flag("${MAIN_FLAG}" MANGLED_FLAG_NAME)
+  # Save CMAKE_REQUIRED_FLAGS to prevent mutation from affecting later probes
+  set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  # Do not use strict error flags like -Werror during feature probes
+  string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
   check_cxx_compiler_flag("${MAIN_FLAG}" ${MANGLED_FLAG_NAME})
+  # Restore CMAKE_REQUIRED_FLAGS
+  set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
   if (${MANGLED_FLAG_NAME})
     set(VARIANT ${ARGV1})
     if (ARGV1)
@@ -43,7 +49,13 @@ endfunction()
 function(add_required_cxx_compiler_flag FLAG)
   string(REPLACE "-Wno-" "-W" MAIN_FLAG ${FLAG})
   mangle_compiler_flag("${MAIN_FLAG}" MANGLED_FLAG_NAME)
+  # Save CMAKE_REQUIRED_FLAGS to prevent mutation from affecting later probes
+  set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  # Do not use strict error flags like -Werror during feature probes
+  string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
   check_cxx_compiler_flag("${MAIN_FLAG}" ${MANGLED_FLAG_NAME})
+  # Restore CMAKE_REQUIRED_FLAGS
+  set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
   if (${MANGLED_FLAG_NAME})
     set(VARIANT ${ARGV1})
     if (ARGV1)

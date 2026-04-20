@@ -43,31 +43,29 @@ static typename ContainerT::value_type &rand_elem(ContainerT &cont) {
   return cont[td::Random::fast(0, static_cast<int>(cont.size()) - 1)];
 }
 
+static td::string make_unique_test_path(td::Slice base_name) {
+  return PSTRING() << base_name << "_" << td::Random::secure_uint64();
+}
+
 TEST(DB, binlog_encryption_bug) {
-  td::CSlice binlog_name = "test_binlog";
+  auto binlog_name = make_unique_test_path("test_binlog");
   td::Binlog::destroy(binlog_name).ignore();
 
   auto cucumber = td::DbKey::password("cucu'\"mb er");
   auto empty = td::DbKey::empty();
   {
     td::Binlog binlog;
-    binlog
-        .init(
-            binlog_name.str(), [&](const td::BinlogEvent &x) {}, cucumber)
-        .ensure();
+    binlog.init(binlog_name, [&](const td::BinlogEvent &x) {}, cucumber).ensure();
   }
   {
     td::Binlog binlog;
-    binlog
-        .init(
-            binlog_name.str(), [&](const td::BinlogEvent &x) {}, cucumber)
-        .ensure();
+    binlog.init(binlog_name, [&](const td::BinlogEvent &x) {}, cucumber).ensure();
   }
   td::Binlog::destroy(binlog_name).ignore();
 }
 
 TEST(DB, binlog_encryption) {
-  td::CSlice binlog_name = "test_binlog";
+  auto binlog_name = make_unique_test_path("test_binlog");
   td::Binlog::destroy(binlog_name).ignore();
 
   auto hello = td::DbKey::raw_key(td::string(32, 'A'));
@@ -76,7 +74,7 @@ TEST(DB, binlog_encryption) {
   auto long_data = td::string(10000, 'Z');
   {
     td::Binlog binlog;
-    binlog.init(binlog_name.str(), [](const td::BinlogEvent &x) {}).ensure();
+    binlog.init(binlog_name, [](const td::BinlogEvent &x) {}).ensure();
     binlog.add_raw_event(td::BinlogEvent::create_raw(binlog.next_event_id(), 1, 0, td::create_storer("AAAA")),
                          td::BinlogDebugInfo{__FILE__, __LINE__});
     binlog.add_raw_event(td::BinlogEvent::create_raw(binlog.next_event_id(), 1, 0, td::create_storer("BBBB")),
@@ -106,10 +104,7 @@ TEST(DB, binlog_encryption) {
     td::vector<td::string> v;
     LOG(INFO) << "RESTART";
     td::Binlog binlog;
-    binlog
-        .init(
-            binlog_name.str(), [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, hello)
-        .ensure();
+    binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, hello).ensure();
     CHECK(v == td::vector<td::string>({"AAAA", "BBBB", long_data, "CCCC"}));
   }
 
@@ -119,8 +114,8 @@ TEST(DB, binlog_encryption) {
     td::vector<td::string> v;
     LOG(INFO) << "RESTART";
     td::Binlog binlog;
-    auto status = binlog.init(
-        binlog_name.str(), [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber);
+    auto status =
+      binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber);
     CHECK(status.is_error());
   }
 
@@ -130,8 +125,8 @@ TEST(DB, binlog_encryption) {
     td::vector<td::string> v;
     LOG(INFO) << "RESTART";
     td::Binlog binlog;
-    auto status = binlog.init(
-        binlog_name.str(), [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber, hello);
+    auto status =
+      binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber, hello);
     CHECK(v == td::vector<td::string>({"AAAA", "BBBB", long_data, "CCCC"}));
   }
 
@@ -139,7 +134,7 @@ TEST(DB, binlog_encryption) {
 }
 
 TEST(DB, sqlite_lfs) {
-  td::string path = "test_sqlite_db";
+  auto path = make_unique_test_path("test_sqlite_db");
   td::SqliteDb::destroy(path).ignore();
   auto db = td::SqliteDb::open_with_key(path, true, td::DbKey::empty()).move_as_ok();
   db.exec("PRAGMA journal_mode=WAL").ensure();
@@ -148,7 +143,7 @@ TEST(DB, sqlite_lfs) {
 }
 
 TEST(DB, sqlite_encryption) {
-  td::string path = "test_sqlite_db";
+  auto path = make_unique_test_path("test_sqlite_db");
   td::SqliteDb::destroy(path).ignore();
 
   auto empty = td::DbKey::empty();
@@ -203,7 +198,7 @@ TEST(DB, sqlite_encryption) {
 }
 
 TEST(DB, sqlite_encryption_migrate_v3) {
-  td::string path = "test_sqlite_db";
+  auto path = make_unique_test_path("test_sqlite_db");
   td::SqliteDb::destroy(path).ignore();
   auto cucumber = td::DbKey::password("cucumber");
   auto empty = td::DbKey::empty();
@@ -231,7 +226,7 @@ TEST(DB, sqlite_encryption_migrate_v3) {
 }
 
 TEST(DB, sqlite_encryption_migrate_v4) {
-  td::string path = "test_sqlite_db";
+  auto path = make_unique_test_path("test_sqlite_db");
   td::SqliteDb::destroy(path).ignore();
   auto cucumber = td::DbKey::password("cucu'\"mb er");
   auto empty = td::DbKey::empty();

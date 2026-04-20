@@ -4,19 +4,12 @@
 #include "td/utils/common.h"
 #include "td/utils/tests.h"
 
-#include <fstream>
-#include <iterator>
+#include "test/stealth/SourceContractFileReader.h"
 
 namespace {
 
-td::string read_text_file(td::Slice path) {
-  std::ifstream input(path.str(), std::ios::binary);
-  CHECK(input.is_open());
-  return td::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-}
-
 TEST(EntryWindowSourceContract, CatalogEntryCheckStaysAheadOfKeyInsertion) {
-  auto source = read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
 
   auto validation_pos = source.find("check_catalog_entry(");
   auto insertion_pos = source.find("keys.push_back(");
@@ -27,7 +20,7 @@ TEST(EntryWindowSourceContract, CatalogEntryCheckStaysAheadOfKeyInsertion) {
 }
 
 TEST(EntryWindowSourceContract, HandshakeEntryCheckStaysAheadOfRsaEncrypt) {
-  auto source = read_text_file("td/mtproto/Handshake.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/mtproto/Handshake.cpp");
 
   auto validation_pos = source.find("check_window_entry(");
   auto encrypt_pos = source.find("rsa_key.rsa.encrypt(");
@@ -38,7 +31,7 @@ TEST(EntryWindowSourceContract, HandshakeEntryCheckStaysAheadOfRsaEncrypt) {
 }
 
 TEST(EntryWindowSourceContract, SharedEntryCheckStaysAheadOfSharedAuthCreation) {
-  auto source = read_text_file("td/telegram/net/NetQueryDispatcher.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/NetQueryDispatcher.cpp");
 
   auto validation_pos = source.find("check_shared_entry(");
   auto create_pos = source.find("AuthDataShared::create(");
@@ -49,7 +42,7 @@ TEST(EntryWindowSourceContract, SharedEntryCheckStaysAheadOfSharedAuthCreation) 
 }
 
 TEST(EntryWindowSourceContract, ConfigEntryCheckStaysAheadOfSignatureVerification) {
-  auto source = read_text_file("td/telegram/ConfigManager.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
 
   auto validation_pos = source.find("check_config_entry(");
   auto decrypt_pos = source.find("rsa.decrypt_signature(");

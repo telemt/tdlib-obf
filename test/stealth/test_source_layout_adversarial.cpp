@@ -3,20 +3,13 @@
 
 #include "td/utils/tests.h"
 
-#include <fstream>
-#include <iterator>
+#include "test/stealth/SourceContractFileReader.h"
 
 namespace {
 
-td::string read_text_file(td::Slice path) {
-  std::ifstream input(path.str(), std::ios::binary);
-  CHECK(input.is_open());
-  return td::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-}
-
 TEST(SourceLayoutAdversarial, RetainedBlocksRemainPresentInTransportSources) {
-  auto key_source = read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
-  auto config_source = read_text_file("td/telegram/ConfigManager.cpp");
+  auto key_source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto config_source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
 
   ASSERT_TRUE(key_source.find("retained_primary_block") != td::string::npos);
   ASSERT_TRUE(key_source.find("retained_secondary_block") != td::string::npos);
@@ -24,8 +17,8 @@ TEST(SourceLayoutAdversarial, RetainedBlocksRemainPresentInTransportSources) {
 }
 
 TEST(SourceLayoutAdversarial, RetainedBlocksBypassDirectOpenSslPath) {
-  auto key_source = read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
-  auto config_source = read_text_file("td/telegram/ConfigManager.cpp");
+  auto key_source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto config_source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
 
   ASSERT_TRUE(key_source.find("RSA::from_pem_public_key(retained_primary_block())") == td::string::npos);
   ASSERT_TRUE(key_source.find("RSA::from_pem_public_key(retained_secondary_block())") == td::string::npos);
@@ -33,8 +26,8 @@ TEST(SourceLayoutAdversarial, RetainedBlocksBypassDirectOpenSslPath) {
 }
 
 TEST(SourceLayoutAdversarial, StorePathRemainsTheOnlyLiveLoader) {
-  auto key_source = read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
-  auto config_source = read_text_file("td/telegram/ConfigManager.cpp");
+  auto key_source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto config_source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
 
   ASSERT_TRUE(key_source.find("BlobStore::load(role)") != td::string::npos);
   ASSERT_TRUE(key_source.find("add_store_key(keys, mtproto::BlobRole::Primary)") != td::string::npos);
