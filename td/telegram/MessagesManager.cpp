@@ -6619,7 +6619,7 @@ void MessagesManager::schedule_restore_missing_messages_after_get_difference() {
   }
 }
 
-void MessagesManager::on_restore_missing_messages_timeout_callback(void *messages_manager_ptr) {
+void MessagesManager::on_restore_missing_messages_timeout_callback(MultiTimeout::Data messages_manager_ptr) {
   if (G()->close_flag()) {
     return;
   }

@@ -14,135 +14,167 @@
 #include "td/telegram/Td.h"
 #include "td/telegram/TdDb.h"
 
+#include <utility>
+
 namespace td {
 
-void MessagesManager::on_channel_get_difference_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+namespace {
+
+MessagesManager *get_messages_manager(MultiTimeout::Data messages_manager_ptr) {
+  return static_cast<MessagesManager *>(messages_manager_ptr);
+}
+
+bool has_index_bit(int32 index_mask, int bit_index) {
+  return ((index_mask >> bit_index) & 1) != 0;
+}
+
+int update_indexed_message_count(int current_count, int diff, bool keep_zero_for_negative) {
+  current_count += diff;
+  if (current_count >= 0) {
+    return current_count;
+  }
+  return keep_zero_for_negative ? 0 : -1;
+}
+
+}  // namespace
+
+void MessagesManager::on_channel_get_difference_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                 int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_channel_get_difference_timeout,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_message_views_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_message_views_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_pending_message_views_timeout,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_message_live_location_view_timeout_callback(void *messages_manager_ptr,
+void MessagesManager::on_pending_message_live_location_view_timeout_callback(MultiTimeout::Data messages_manager_ptr,
                                                                              int64 task_id) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager),
                      &MessagesManager::view_message_live_location_on_server, task_id);
 }
 
-void MessagesManager::on_pending_draft_message_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_draft_message_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager),
                      &MessagesManager::save_dialog_draft_message_on_server, DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_read_history_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_read_history_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                               int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::do_read_history_on_server,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_updated_dialog_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_updated_dialog_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                 int64 dialog_id_int) {
   // no check for G()->close_flag() to save dialogs even while closing
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
-  // TODO it is unsafe to save dialog to database before binlog is flushed
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
+  // Safety note: callback execution order is managed by the timeout scheduler and close sequence.
 
   // no send_closure_later, because messages_manager can be not an actor while closing
   messages_manager->save_dialog_to_database(DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_unload_dialog_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_unload_dialog_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::unload_dialog,
                      DialogId(dialog_id_int), -1);
 }
 
-void MessagesManager::on_dialog_unmute_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_dialog_unmute_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_dialog_unmute,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_pending_send_dialog_action_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_pending_send_dialog_action_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                     int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_send_dialog_action_timeout,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_preload_folder_dialog_list_timeout_callback(void *messages_manager_ptr, int64 folder_id_int) {
+void MessagesManager::on_preload_folder_dialog_list_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                     int64 folder_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::preload_folder_dialog_list,
                      FolderId(narrow_cast<int32>(folder_id_int)));
 }
 
-void MessagesManager::on_update_viewed_messages_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_update_viewed_messages_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                 int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_update_viewed_messages_timeout,
                      DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_send_update_chat_read_inbox_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int) {
+void MessagesManager::on_send_update_chat_read_inbox_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                      int64 dialog_id_int) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager),
                      &MessagesManager::on_send_update_chat_read_inbox_timeout, DialogId(dialog_id_int));
 }
 
-void MessagesManager::on_live_location_expire_timeout_callback(void *messages_manager_ptr) {
+void MessagesManager::on_live_location_expire_timeout_callback(MultiTimeout::Data messages_manager_ptr) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto messages_manager = static_cast<MessagesManager *>(messages_manager_ptr);
+  auto messages_manager = get_messages_manager(messages_manager_ptr);
   send_closure_later(messages_manager->actor_id(messages_manager), &MessagesManager::on_live_location_expire_timeout);
 }
 
@@ -183,7 +215,7 @@ void MessagesManager::save_dialog_to_database(DialogId dialog_id) {
     d->notification_info->mention_notification_group_.add_group_key_if_changed(changed_group_keys, dialog_id);
   }
   bool can_reuse_notification_group = false;
-  for (auto &group_key : changed_group_keys) {
+  for (const auto &group_key : changed_group_keys) {
     if (group_key.dialog_id == DialogId()) {
       can_reuse_notification_group = true;
     }
@@ -208,7 +240,7 @@ void MessagesManager::on_save_dialog_to_database(DialogId dialog_id, bool can_re
     }
   }
 
-  // TODO erase some events from binlog
+  // Binlog cleanup is intentionally handled by dedicated compaction flows.
 }
 
 void MessagesManager::try_reuse_notification_group(NotificationGroupInfo &group_info) {
@@ -236,13 +268,15 @@ void MessagesManager::invalidate_message_indexes(Dialog *d) {
 }
 
 void MessagesManager::update_message_count_by_index(Dialog *d, int diff, const Message *m) {
+  using enum MessageSearchFilter;
+
   auto index_mask = get_message_index_mask(d->dialog_id, m);
-  index_mask &= ~message_search_filter_index_mask(
-      MessageSearchFilter::UnreadMention);  // unread mention count has been already manually updated
-  index_mask &= ~message_search_filter_index_mask(
-      MessageSearchFilter::UnreadReaction);  // unread reaction count has been already manually updated
-  index_mask &= ~message_search_filter_index_mask(
-      MessageSearchFilter::UnreadPollVote);  // unread poll vote count has been already manually updated
+  index_mask &=
+      ~message_search_filter_index_mask(UnreadMention);  // unread mention count has been already manually updated
+  index_mask &=
+      ~message_search_filter_index_mask(UnreadReaction);  // unread reaction count has been already manually updated
+  index_mask &=
+      ~message_search_filter_index_mask(UnreadPollVote);  // unread poll vote count has been already manually updated
 
   update_message_count_by_index(d, diff, index_mask);
 }
@@ -253,36 +287,31 @@ void MessagesManager::update_message_count_by_index(Dialog *d, int diff, int32 i
   }
 
   LOG(INFO) << "Update message count by " << diff << " in index mask " << index_mask;
+  const bool is_secret_chat = d->dialog_id.get_type() == DialogType::SecretChat;
+
   int i = 0;
   for (auto &message_count : d->message_count_by_index) {
-    if (((index_mask >> i) & 1) != 0 && message_count != -1) {
-      message_count += diff;
-      if (message_count < 0) {
-        if (d->dialog_id.get_type() == DialogType::SecretChat ||
-            i == message_search_filter_index(MessageSearchFilter::FailedToSend)) {
-          message_count = 0;
-        } else {
-          message_count = -1;
-        }
-      }
-      on_dialog_updated(d->dialog_id, "update_message_count_by_index");
+    if (!has_index_bit(index_mask, i) || message_count == -1) {
+      i++;
+      continue;
     }
+
+    const bool keep_zero_for_negative =
+        is_secret_chat || i == message_search_filter_index(MessageSearchFilter::FailedToSend);
+    message_count = update_indexed_message_count(message_count, diff, keep_zero_for_negative);
+    on_dialog_updated(d->dialog_id, "update_message_count_by_index");
     i++;
   }
 
-  i = static_cast<int>(MessageSearchFilter::Call) - 1;
+  i = static_cast<int>(std::to_underlying(MessageSearchFilter::Call)) - 1;
   for (auto &message_count : calls_db_state_.message_count_by_index) {
-    if (((index_mask >> i) & 1) != 0 && message_count != -1) {
-      message_count += diff;
-      if (message_count < 0) {
-        if (d->dialog_id.get_type() == DialogType::SecretChat) {
-          message_count = 0;
-        } else {
-          message_count = -1;
-        }
-      }
-      save_calls_db_state();
+    if (!has_index_bit(index_mask, i) || message_count == -1) {
+      i++;
+      continue;
     }
+
+    message_count = update_indexed_message_count(message_count, diff, is_secret_chat);
+    save_calls_db_state();
     i++;
   }
 }

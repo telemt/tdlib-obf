@@ -3025,33 +3025,37 @@ class MessagesManager final : public Actor {
 
   void after_get_channel_difference(DialogId dialog_id, bool success);
 
-  static void on_channel_get_difference_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_channel_get_difference_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_message_views_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_message_views_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_message_live_location_view_timeout_callback(void *messages_manager_ptr, int64 task_id);
+  static void on_pending_message_live_location_view_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                                     int64 task_id);
 
-  static void on_pending_draft_message_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_draft_message_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_read_history_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_read_history_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_updated_dialog_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_updated_dialog_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_unload_dialog_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_unload_dialog_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_dialog_unmute_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_dialog_unmute_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_pending_send_dialog_action_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_pending_send_dialog_action_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                             int64 dialog_id_int);
 
-  static void on_preload_folder_dialog_list_timeout_callback(void *messages_manager_ptr, int64 folder_id_int);
+  static void on_preload_folder_dialog_list_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                             int64 folder_id_int);
 
-  static void on_update_viewed_messages_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_update_viewed_messages_timeout_callback(MultiTimeout::Data messages_manager_ptr, int64 dialog_id_int);
 
-  static void on_send_update_chat_read_inbox_timeout_callback(void *messages_manager_ptr, int64 dialog_id_int);
+  static void on_send_update_chat_read_inbox_timeout_callback(MultiTimeout::Data messages_manager_ptr,
+                                                              int64 dialog_id_int);
 
-  static void on_live_location_expire_timeout_callback(void *messages_manager_ptr);
+  static void on_live_location_expire_timeout_callback(MultiTimeout::Data messages_manager_ptr);
 
-  static void on_restore_missing_messages_timeout_callback(void *messages_manager_ptr);
+  static void on_restore_missing_messages_timeout_callback(MultiTimeout::Data messages_manager_ptr);
 
   void on_live_location_expire_timeout();
 

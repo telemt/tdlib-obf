@@ -30,7 +30,7 @@ class TlStorerUnsafe {
 
   template <class T>
   void store_binary(const T &x) {
-    static_assert(std::is_trivially_copyable<T>::value, "store_binary requires trivially copyable types");
+    static_assert(std::is_trivially_copyable_v<T>, "store_binary requires trivially copyable types");
     const auto bytes = std::bit_cast<std::array<unsigned char, sizeof(T)>>(x);
     std::memcpy(buf_, bytes.data(), bytes.size());
     buf_ += sizeof(T);

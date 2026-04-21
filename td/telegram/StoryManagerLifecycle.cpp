@@ -19,12 +19,20 @@
 
 namespace td {
 
-void StoryManager::on_story_reload_timeout_callback(void *story_manager_ptr, int64 story_global_id) {
+namespace {
+
+StoryManager *get_story_manager(MultiTimeout::Data story_manager_ptr) {
+  return static_cast<StoryManager *>(story_manager_ptr);
+}
+
+}  // namespace
+
+void StoryManager::on_story_reload_timeout_callback(MultiTimeout::Data story_manager_ptr, int64 story_global_id) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto story_manager = static_cast<StoryManager *>(story_manager_ptr);
+  auto story_manager = get_story_manager(story_manager_ptr);
   send_closure_later(story_manager->actor_id(story_manager), &StoryManager::on_story_reload_timeout, story_global_id);
 }
 
@@ -34,8 +42,7 @@ void StoryManager::on_story_reload_timeout(int64 story_global_id) {
   }
 
   auto story_full_id = stories_by_global_id_.get(story_global_id);
-  auto story = get_story(story_full_id);
-  if (story == nullptr || opened_stories_.count(story_full_id) == 0) {
+  if (auto story = get_story(story_full_id); story == nullptr || opened_stories_.count(story_full_id) == 0) {
     LOG(INFO) << "There is no need to reload " << story_full_id;
     return;
   }
@@ -44,12 +51,12 @@ void StoryManager::on_story_reload_timeout(int64 story_global_id) {
   story_reload_timeout_.set_timeout_in(story_global_id, OPENED_STORY_POLL_PERIOD);
 }
 
-void StoryManager::on_story_expire_timeout_callback(void *story_manager_ptr, int64 story_global_id) {
+void StoryManager::on_story_expire_timeout_callback(MultiTimeout::Data story_manager_ptr, int64 story_global_id) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto story_manager = static_cast<StoryManager *>(story_manager_ptr);
+  auto story_manager = get_story_manager(story_manager_ptr);
   send_closure_later(story_manager->actor_id(story_manager), &StoryManager::on_story_expire_timeout, story_global_id);
 }
 
@@ -85,12 +92,13 @@ void StoryManager::on_story_expire_timeout(int64 story_global_id) {
   }
 }
 
-void StoryManager::on_story_can_get_viewers_timeout_callback(void *story_manager_ptr, int64 story_global_id) {
+void StoryManager::on_story_can_get_viewers_timeout_callback(MultiTimeout::Data story_manager_ptr,
+                                                             int64 story_global_id) {
   if (G()->close_flag()) {
     return;
   }
 
-  auto story_manager = static_cast<StoryManager *>(story_manager_ptr);
+  auto story_manager = get_story_manager(story_manager_ptr);
   send_closure_later(story_manager->actor_id(story_manager), &StoryManager::on_story_can_get_viewers_timeout,
                      story_global_id);
 }
@@ -159,7 +167,7 @@ void StoryManager::on_load_expired_database_stories(vector<StoryDbStory> stories
   LOG(INFO) << "Receive " << stories.size() << " expired stories with next request in " << next_request_delay
             << " seconds";
   for (auto &database_story : stories) {
-    auto story = parse_story(database_story.story_full_id_, std::move(database_story.data_));
+    auto story = parse_story(database_story.story_full_id_, database_story.data_);
     if (story != nullptr) {
       LOG(ERROR) << "Receive non-expired " << database_story.story_full_id_;
     }

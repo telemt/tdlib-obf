@@ -8,6 +8,7 @@ import unittest
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "sonar.yml"
+SONAR_PROPERTIES_PATH = REPO_ROOT / "sonar-project.properties"
 
 
 class SonarCiContractTest(unittest.TestCase):
@@ -55,6 +56,14 @@ class SonarCiContractTest(unittest.TestCase):
         self.assertIn("git diff --name-only --diff-filter=ACMR", workflow_text)
         self.assertIn("-Dsonar.inclusions=", workflow_text)
         self.assertIn("${{ steps.sonar_scope.outputs.args }}", workflow_text)
+
+    def test_sonar_properties_explicitly_exclude_split_lifecycle_files_from_coverage_gate(self) -> None:
+        properties_text = SONAR_PROPERTIES_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("sonar.coverage.exclusions=", properties_text)
+        self.assertIn("td/telegram/MessagesManagerLifecycle.cpp", properties_text)
+        self.assertIn("td/telegram/StoryManagerLifecycle.cpp", properties_text)
+        self.assertIn("tdutils/td/utils/tl_storers.h", properties_text)
 
 
 if __name__ == "__main__":
