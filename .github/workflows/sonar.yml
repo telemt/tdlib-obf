@@ -75,6 +75,7 @@ jobs:
                     -DBUILD_SHARED_LIBS=ON \
                     -DCMAKE_BUILD_TYPE=Release \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                  -DTD_ENABLE_TARGET_PCH=OFF \
                     -DTD_ENABLE_LLD=ON
 
       - name: Generate analysis inputs

@@ -39,6 +39,15 @@ class SonarCiContractTest(unittest.TestCase):
         )
         self.assertNotIn("cmake --build build --target install", workflow_text)
 
+    def test_workflow_disables_target_pch_for_compile_commands_stability(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "-DTD_ENABLE_TARGET_PCH=OFF",
+            workflow_text,
+            msg="Sonar compile_commands flow must disable target PCH to avoid references to missing cmake_pch.hxx.pch artifacts",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
