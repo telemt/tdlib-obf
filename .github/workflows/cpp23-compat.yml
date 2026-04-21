@@ -113,6 +113,9 @@ jobs:
       - name: Run C++23 static guard
         run: python3 tools/ci/check_cpp23_compat.py
 
+      - name: Run CMake probe guardrails
+        run: python3 -m unittest discover -s test/analysis -p 'test_cmake_probe_guardrails.py'
+
       - name: Configure build
         env:
           CC: ${{ matrix.cc }}
@@ -368,6 +371,9 @@ jobs:
 
       - name: Verify manifest and generated files
         run: python3 tools/sqlite/audit_vendor.py --check-integrity
+
+      - name: Run CMake probe guardrails
+        run: python3 -m unittest discover -s test/analysis -p 'test_cmake_probe_guardrails.py'
 
       - name: Run SQLite vendor analysis tests
         run: python3 -m unittest discover -s test/analysis -p 'test_sqlite*.py'
