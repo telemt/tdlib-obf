@@ -3,7 +3,25 @@ name: SonarCloud TDLib
 on:
   push:
     branches: [master]
+    paths:
+      - '**/*.cpp'
+      - '**/*.h'
+      - '**/CMakeLists.txt'
+      - 'CMake/**'
+      - 'td/generate/**'
+      - 'tdutils/generate/**'
+      - 'sonar-project.properties'
+      - '.github/workflows/sonar.yml'
   pull_request:
+    paths:
+      - '**/*.cpp'
+      - '**/*.h'
+      - '**/CMakeLists.txt'
+      - 'CMake/**'
+      - 'td/generate/**'
+      - 'tdutils/generate/**'
+      - 'sonar-project.properties'
+      - '.github/workflows/sonar.yml'
 
 permissions:
   contents: read
@@ -46,10 +64,7 @@ jobs:
             make git zlib1g-dev libssl-dev gperf php-cli cmake \
             clang-22 libc++-22-dev libc++abi-22-dev ninja-build lld-22
 
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
-
-      - name: Configure and build TDLib
+      - name: Configure TDLib for Sonar compilation database
         run: |
           set -euxo pipefail
           env CXXFLAGS="-stdlib=libc++" \
@@ -59,11 +74,13 @@ jobs:
                     -G Ninja \
                     -DBUILD_SHARED_LIBS=ON \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DCMAKE_INSTALL_PREFIX:PATH=./tdlib \
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DTD_ENABLE_LLD=ON
 
-          build-wrapper-linux-x86-64 --out-dir build/bw-output \
-            cmake --build build --target install --parallel $(nproc)
+      - name: Generate analysis inputs
+        run: |
+          set -euxo pipefail
+          cmake --build build --target tl_generate_tlo tl_generate_mtproto tl_generate_common tl_generate_json tdmime_auto --parallel $(nproc)
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6
@@ -71,4 +88,4 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.cfamily.compile-commands=build/bw-output/compile_commands.json
+            -Dsonar.cfamily.compile-commands=build/compile_commands.json

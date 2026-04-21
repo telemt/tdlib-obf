@@ -59,6 +59,15 @@ class Cpp23CiContractTest(unittest.TestCase):
 
         self.assertGreaterEqual(workflow_text.count("-DTD_STRICT_COMPILER_VERSIONS=ON"), 3)
 
+    def test_workflow_does_not_duplicate_sqlite_vendor_smoke_lane(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "sqlite-vendor-smoke:",
+            workflow_text,
+            msg="SQLite smoke lane should live in dedicated sqlite-vendor-integrity workflow to avoid duplicate native rebuilds",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
