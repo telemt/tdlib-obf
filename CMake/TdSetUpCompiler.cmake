@@ -42,6 +42,7 @@ function(td_set_up_compiler)
   endif()
 
   include(CheckCXXCompilerFlag)
+  include(CheckCXXSourceCompiles)
 
   if (GCC OR CLANG OR INTEL)
     if (WIN32 AND INTEL)
@@ -131,7 +132,14 @@ function(td_set_up_compiler)
     endif()
 
     if (TD_ENABLE_LLD AND NOT WIN32 AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
-      check_cxx_compiler_flag("-fuse-ld=lld" TD_HAVE_FUSE_LD_LLD)
+      # `-fuse-ld=lld` can appear compiler-supported while still failing at
+      # link time when the runtime linker binary is unavailable. Require a
+      # real compile+link probe before enabling the flag globally.
+      set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+      string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fuse-ld=lld")
+      check_cxx_source_compiles("int main() { return 0; }" TD_HAVE_FUSE_LD_LLD)
+      set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
       if (TD_HAVE_FUSE_LD_LLD)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")

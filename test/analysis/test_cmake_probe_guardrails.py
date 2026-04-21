@@ -14,9 +14,21 @@ REPO_ROOT = THIS_DIR.parent.parent
 CMAKE_MODULE_DIR = REPO_ROOT / "CMake"
 ADD_FLAG_MODULE = CMAKE_MODULE_DIR / "AddCXXCompilerFlag.cmake"
 FIND_ATOMICS_MODULE = CMAKE_MODULE_DIR / "FindAtomics.cmake"
+TD_SETUP_COMPILER_MODULE = CMAKE_MODULE_DIR / "TdSetUpCompiler.cmake"
 
 
 class CMakeProbeGuardrailsTest(unittest.TestCase):
+    def test_lld_enablement_uses_link_capability_probe(self) -> None:
+        module_text = TD_SETUP_COMPILER_MODULE.read_text(encoding="utf-8")
+
+        self.assertIn("include(CheckCXXSourceCompiles)", module_text)
+        self.assertIn("check_cxx_source_compiles(\"int main() { return 0; }\" TD_HAVE_FUSE_LD_LLD)", module_text)
+
+    def test_lld_enablement_does_not_use_compile_only_probe(self) -> None:
+        module_text = TD_SETUP_COMPILER_MODULE.read_text(encoding="utf-8")
+
+        self.assertNotIn("check_cxx_compiler_flag(\"-fuse-ld=lld\" TD_HAVE_FUSE_LD_LLD)", module_text)
+
     def test_add_cxx_compiler_flag_probe_isolated_from_linker_flags(self) -> None:
         module_text = ADD_FLAG_MODULE.read_text(encoding="utf-8")
 
