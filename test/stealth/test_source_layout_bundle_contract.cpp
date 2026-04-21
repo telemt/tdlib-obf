@@ -12,19 +12,12 @@
 #include "td/utils/crypto.h"
 #include "td/utils/tl_storers.h"
 
-#include <fstream>
-#include <iterator>
+#include "test/stealth/SourceContractFileReader.h"
 
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 
 namespace {
-
-td::string bundle_read_text_file(td::Slice path) {
-  std::ifstream input(path.str(), std::ios::binary);
-  CHECK(input.is_open());
-  return td::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-}
 
 td::string bundle_extract_pem_literal(const td::string &content, td::Slice function_signature) {
   auto signature_pos = content.find(function_signature.str());
@@ -127,21 +120,21 @@ td::int64 bundle_rsa_public_key_sha1_fingerprint(td::Slice pem) {
 }
 
 TEST(BundleSourceContract, PrimaryBlockFingerprintMatchesReferenceSlot) {
-  auto source = bundle_read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
   auto fingerprint =
       bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_primary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Primary), fingerprint);
 }
 
 TEST(BundleSourceContract, SecondaryBlockFingerprintMatchesReferenceSlot) {
-  auto source = bundle_read_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
   auto fingerprint =
       bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_secondary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Secondary), fingerprint);
 }
 
 TEST(BundleSourceContract, AuxiliaryBlockFingerprintMatchesReferenceSlot) {
-  auto source = bundle_read_text_file("td/telegram/ConfigManager.cpp");
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
   auto fingerprint =
       bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_auxiliary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Auxiliary), fingerprint);

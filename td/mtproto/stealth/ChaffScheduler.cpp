@@ -7,6 +7,8 @@
 #include "td/mtproto/stealth/ChaffScheduler.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace td {
 namespace mtproto {
@@ -16,6 +18,10 @@ namespace {
 
 double max_double(double left, double right) {
   return left > right ? left : right;
+}
+
+bool is_finite_time(double value) {
+  return std::isfinite(value);
 }
 
 }  // namespace
@@ -31,6 +37,10 @@ void ChaffScheduler::note_activity(double now) {
   if (!config_.chaff_policy.enabled) {
     return;
   }
+  if (!is_finite_time(now)) {
+    disarm_due_to_invalid_time();
+    return;
+  }
   prune_budget_window(now);
   schedule_after_activity(now);
 }
@@ -39,13 +49,18 @@ void ChaffScheduler::note_chaff_emitted(double now, size_t bytes) {
   if (!config_.chaff_policy.enabled) {
     return;
   }
+  if (!is_finite_time(now)) {
+    disarm_due_to_invalid_time();
+    return;
+  }
   prune_budget_window(now);
   budget_window_.push_back({now, bytes});
   schedule_after_chaff(now);
 }
 
 bool ChaffScheduler::should_emit(double now, bool has_pending_data, bool can_write) const {
-  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || pending_target_bytes_ <= 0) {
+  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || pending_target_bytes_ <= 0 ||
+      !is_finite_time(now) || !is_finite_time(next_send_at_)) {
     return false;
   }
   if (next_send_at_ == 0.0 || now + 1e-9 < next_send_at_) {
@@ -56,7 +71,7 @@ bool ChaffScheduler::should_emit(double now, bool has_pending_data, bool can_wri
 
 double ChaffScheduler::get_wakeup(double now, bool has_pending_data, bool can_write) const {
   if (!config_.chaff_policy.enabled || has_pending_data || !can_write || pending_target_bytes_ <= 0 ||
-      next_send_at_ == 0.0) {
+      next_send_at_ == 0.0 || !is_finite_time(now) || !is_finite_time(next_send_at_)) {
     return 0.0;
   }
   auto wakeup = next_send_at_;
@@ -73,13 +88,35 @@ int32 ChaffScheduler::current_target_bytes() const {
 
 void ChaffScheduler::schedule_after_activity(double now) {
   pending_target_bytes_ = sample_target_bytes();
-  next_send_at_ =
-      now + static_cast<double>(config_.chaff_policy.idle_threshold_ms) / 1000.0 + sample_interval_seconds();
+  auto sampled_interval = sample_interval_seconds();
+  if (!is_finite_time(sampled_interval) || sampled_interval < 0.0) {
+    disarm_due_to_invalid_time();
+    return;
+  }
+  auto idle_threshold_seconds = static_cast<double>(config_.chaff_policy.idle_threshold_ms) / 1000.0;
+  next_send_at_ = now + idle_threshold_seconds + sampled_interval;
+  if (!is_finite_time(next_send_at_)) {
+    disarm_due_to_invalid_time();
+  }
 }
 
 void ChaffScheduler::schedule_after_chaff(double now) {
   pending_target_bytes_ = sample_target_bytes();
-  next_send_at_ = now + sample_interval_seconds();
+  auto sampled_interval = sample_interval_seconds();
+  if (!is_finite_time(sampled_interval) || sampled_interval < 0.0) {
+    disarm_due_to_invalid_time();
+    return;
+  }
+  next_send_at_ = now + sampled_interval;
+  if (!is_finite_time(next_send_at_)) {
+    disarm_due_to_invalid_time();
+  }
+}
+
+void ChaffScheduler::disarm_due_to_invalid_time() {
+  budget_window_.clear();
+  next_send_at_ = 0.0;
+  pending_target_bytes_ = 0;
 }
 
 void ChaffScheduler::prune_budget_window(double now) {
@@ -91,16 +128,29 @@ void ChaffScheduler::prune_budget_window(double now) {
 double ChaffScheduler::budget_resume_at(double now) const {
   uint64 bytes = 0;
   double earliest_resume = 0.0;
+  const auto max_uint64 = std::numeric_limits<uint64>::max();
+  const auto byte_limit = static_cast<uint64>(config_.chaff_policy.max_bytes_per_minute);
   for (const auto &sample : budget_window_) {
     if (sample.at + kBudgetWindowSeconds <= now) {
       continue;
     }
-    bytes += sample.bytes;
+    if (sample.bytes >= max_uint64 - bytes) {
+      bytes = max_uint64;
+    } else {
+      bytes += static_cast<uint64>(sample.bytes);
+    }
     if (earliest_resume == 0.0) {
       earliest_resume = sample.at + kBudgetWindowSeconds;
     }
   }
-  if (bytes + static_cast<uint64>(pending_target_bytes_) <= config_.chaff_policy.max_bytes_per_minute) {
+  if (pending_target_bytes_ <= 0) {
+    return 0.0;
+  }
+  const auto pending_bytes = static_cast<uint64>(pending_target_bytes_);
+  if (pending_bytes > byte_limit) {
+    return earliest_resume;
+  }
+  if (bytes <= byte_limit && pending_bytes <= byte_limit - bytes) {
     return 0.0;
   }
   return earliest_resume;

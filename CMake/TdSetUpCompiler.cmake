@@ -2,6 +2,25 @@
 
 option(TD_STRICT_CI_WARNINGS "Treat selected warning classes as errors in CI-oriented builds." OFF)
 
+# When ON, upgrades below-recommended compiler version warnings to fatal errors.
+# Set this in CI to enforce the latest tested toolchain baseline; leave OFF for
+# local developer builds where older-but-still-supported compilers are common.
+option(TD_STRICT_COMPILER_VERSIONS "Fail the configure step when compiler is below the latest recommended version." OFF)
+
+# Prefer lld where supported because it links large C++ targets much faster
+# than GNU ld on most Linux hosts.
+option(TD_ENABLE_LLD "Use -fuse-ld=lld when the compiler supports it." ON)
+
+# Split DWARF keeps debug info in per-TU .dwo sidecars rather than embedding
+# it into the object file, reducing the amount of data the linker must process.
+# Gives ~15-30% faster link on large RelWithDebInfo builds. Disabled for
+# sanitizer builds (ASan/UBSan/TSan) where in-process symbolisation requires
+# consolidated DWARF. Also disabled on cross-compile targets.
+option(TD_ENABLE_SPLIT_DWARF "Use -gsplit-dwarf to speed up linking on debug builds." ON)
+
+# Optional local optimization for developer builds; keep OFF in portable CI.
+option(TD_ENABLE_NATIVE_ARCH "Enable -march=native/-mtune=native for local builds." OFF)
+
 function(td_set_up_compiler)
   set(CMAKE_EXPORT_COMPILE_COMMANDS 1 PARENT_SCOPE)
 
@@ -23,6 +42,7 @@ function(td_set_up_compiler)
   endif()
 
   include(CheckCXXCompilerFlag)
+  include(CheckCXXSourceCompiles)
 
   if (GCC OR CLANG OR INTEL)
     if (WIN32 AND INTEL)
@@ -36,9 +56,32 @@ function(td_set_up_compiler)
     if (CLANG AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.0))
       message(FATAL_ERROR "No C++23 support in the compiler. Please upgrade the compiler to at least clang 16.0.")
     endif()
+    if (GCC AND (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13.0) AND
+      (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.2))
+      if (TD_STRICT_COMPILER_VERSIONS)
+        message(FATAL_ERROR "TD_STRICT_COMPILER_VERSIONS is ON: GCC 15.2+ is required. Found ${CMAKE_CXX_COMPILER_VERSION}.")
+      else()
+        message(WARNING "GCC 15.2+ is recommended for the best C++23 support and diagnostics.")
+      endif()
+    endif()
+    if (CLANG AND (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.0) AND
+        (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 22.1.3))
+      if (TD_STRICT_COMPILER_VERSIONS)
+        message(FATAL_ERROR "TD_STRICT_COMPILER_VERSIONS is ON: Clang 22.1.3+ is required. Found ${CMAKE_CXX_COMPILER_VERSION}.")
+      else()
+        message(WARNING "Clang 22.1.3+ is recommended for the best C++23 support and diagnostics.")
+      endif()
+    endif()
     check_cxx_compiler_flag(${STD23_FLAG} HAVE_STD23)
   elseif (MSVC)
     set(HAVE_STD23 MSVC_VERSION>=1936) # MSVC 2022 version 17.6
+    if (MSVC_VERSION GREATER_EQUAL 1936 AND MSVC_VERSION LESS 1940)
+      if (TD_STRICT_COMPILER_VERSIONS)
+        message(FATAL_ERROR "TD_STRICT_COMPILER_VERSIONS is ON: MSVC 19.40+ (VS 2022 17.10+) is required.")
+      else()
+        message(WARNING "MSVC 19.40+ (VS 2022 17.10+) is recommended for the best C++23 support and diagnostics.")
+      endif()
+    endif()
   endif()
 
   if (NOT HAVE_STD23)
@@ -53,6 +96,18 @@ function(td_set_up_compiler)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest /utf-8 /GR- /W4 /wd4100 /wd4127 /wd4324 /wd4505 /wd4814 /wd4702 /bigobj")
   elseif (CLANG OR GCC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STD23_FLAG} -fno-omit-frame-pointer -fno-exceptions -fno-rtti")
+    if (TD_ENABLE_NATIVE_ARCH AND NOT CMAKE_CROSSCOMPILING)
+      check_cxx_compiler_flag("-march=native" TD_HAVE_MARCH_NATIVE)
+      if (TD_HAVE_MARCH_NATIVE)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+      endif()
+      check_cxx_compiler_flag("-mtune=native" TD_HAVE_MTUNE_NATIVE)
+      if (TD_HAVE_MTUNE_NATIVE)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mtune=native")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mtune=native")
+      endif()
+    endif()
     if (APPLE)
       set(TD_LINKER_FLAGS "-Wl,-dead_strip")
       if (NOT CMAKE_BUILD_TYPE MATCHES "Deb")
@@ -75,6 +130,41 @@ function(td_set_up_compiler)
         set(TD_LINKER_FLAGS "-Wl,--gc-sections -Wl,--exclude-libs,ALL")
       endif()
     endif()
+
+    if (TD_ENABLE_LLD AND NOT WIN32 AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+      # `-fuse-ld=lld` can appear compiler-supported while still failing at
+      # link time when the runtime linker binary is unavailable. Require a
+      # real compile+link probe before enabling the flag globally.
+      set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+      string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fuse-ld=lld")
+      check_cxx_source_compiles("int main() { return 0; }" TD_HAVE_FUSE_LD_LLD)
+      set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
+      if (TD_HAVE_FUSE_LD_LLD)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")
+        # Identical Code Folding: deduplicates identical function bodies at link
+        # time. Safe variant never merges functions with different addresses.
+        # Only enabled with lld because GNU ld's ICF is less mature.
+        set(TD_LINKER_FLAGS "${TD_LINKER_FLAGS} -Wl,--icf=safe")
+      endif()
+    endif()
+
+    # Split DWARF: keep debug info in .dwo sidecar files so the linker does not
+    # have to ingest full DWARF sections. Only useful for debug-info builds on
+    # non-cross-compile native Linux. Disable when sanitizers are active because
+    # ASan/UBSan/TSan symbolisation requires consolidated DWARF.
+    if (TD_ENABLE_SPLIT_DWARF
+        AND NOT WIN32 AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
+        AND NOT CMAKE_CROSSCOMPILING
+        AND NOT (CMAKE_CXX_FLAGS MATCHES "sanitize"))
+      check_cxx_compiler_flag("-gsplit-dwarf" TD_HAVE_SPLIT_DWARF)
+      if (TD_HAVE_SPLIT_DWARF)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gsplit-dwarf")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gsplit-dwarf")
+      endif()
+    endif()
+
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${TD_LINKER_FLAGS}")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${TD_LINKER_FLAGS}")
 

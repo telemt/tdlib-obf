@@ -467,15 +467,15 @@ class StoryManager final : public Actor {
 
   void tear_down() final;
 
-  static void on_story_reload_timeout_callback(void *story_manager_ptr, int64 story_global_id);
+  static void on_story_reload_timeout_callback(MultiTimeout::Data story_manager_ptr, int64 story_global_id);
 
   void on_story_reload_timeout(int64 story_global_id);
 
-  static void on_story_expire_timeout_callback(void *story_manager_ptr, int64 story_global_id);
+  static void on_story_expire_timeout_callback(MultiTimeout::Data story_manager_ptr, int64 story_global_id);
 
   void on_story_expire_timeout(int64 story_global_id);
 
-  static void on_story_can_get_viewers_timeout_callback(void *story_manager_ptr, int64 story_global_id);
+  static void on_story_can_get_viewers_timeout_callback(MultiTimeout::Data story_manager_ptr, int64 story_global_id);
 
   void on_story_can_get_viewers_timeout(int64 story_global_id);
 

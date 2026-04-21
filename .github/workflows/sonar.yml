@@ -3,44 +3,114 @@ name: SonarCloud TDLib
 on:
   push:
     branches: [master]
+    paths:
+      - '**/*.cpp'
+      - '**/*.h'
+      - '**/CMakeLists.txt'
+      - 'CMake/**'
+      - 'td/generate/**'
+      - 'tdutils/generate/**'
+      - 'sonar-project.properties'
+      - '.github/workflows/sonar.yml'
   pull_request:
+    paths:
+      - '**/*.cpp'
+      - '**/*.h'
+      - '**/CMakeLists.txt'
+      - 'CMake/**'
+      - 'td/generate/**'
+      - 'tdutils/generate/**'
+      - 'sonar-project.properties'
+      - '.github/workflows/sonar.yml'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: sonar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   sonar:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # SonarCloud requires full history for blame/new-code analysis
+          persist-credentials: false
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-sonar-${{ runner.os }}-${{ hashFiles('.github/workflows/sonar.yml') }}-v1
+
+      - name: Set up toolchain APT repositories
+        run: |
+          set -euxo pipefail
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          sudo apt-get update -qq
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
+          set -euxo pipefail
           sudo apt-get install -y \
             make git zlib1g-dev libssl-dev gperf php-cli cmake \
-            clang-18 libc++-18-dev libc++abi-18-dev
+            clang-22 libc++-22-dev libc++abi-22-dev ninja-build lld-22
 
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
-
-      - name: Configure and build TDLib
+      - name: Configure TDLib for Sonar compilation database
         run: |
+          set -euxo pipefail
           env CXXFLAGS="-stdlib=libc++" \
-              CC=/usr/bin/clang-18 \
-              CXX=/usr/bin/clang++-18 \
+              CC=/usr/bin/clang-22 \
+              CXX=/usr/bin/clang++-22 \
               cmake -S . -B build \
+                    -G Ninja \
+                    -DBUILD_SHARED_LIBS=ON \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DCMAKE_INSTALL_PREFIX:PATH=./tdlib
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                  -DTD_ENABLE_TARGET_PCH=OFF \
+                    -DTD_ENABLE_LLD=ON
 
-          build-wrapper-linux-x86-64 --out-dir build/bw-output \
-            cmake --build build --target install --parallel 4
+      - name: Generate analysis inputs
+        run: |
+          set -euxo pipefail
+          cmake --build build --target tl_generate_tlo tl_generate_mtproto tl_generate_common tl_generate_json tdmime_auto --parallel $(nproc)
+
+      - name: Build Sonar scan args
+        id: sonar_scope
+        run: |
+          set -euxo pipefail
+
+          args="-Dsonar.cfamily.compile-commands=build/compile_commands.json"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+
+            changed_files=$(git diff --name-only --diff-filter=ACMR "${base_sha}" "${head_sha}" \
+              | grep -E '(^|/)CMakeLists\.txt$|\.cmake$|\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|py|php|sh|js|jsx|ts|tsx|json|xml|ya?ml)$' \
+              | paste -sd, - || true)
+
+            if [[ -n "${changed_files}" ]]; then
+              args="${args} -Dsonar.inclusions=${changed_files}"
+            fi
+          fi
+
+          echo "args=${args}" >> "${GITHUB_OUTPUT}"
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          args: >
-            -Dsonar.cfamily.compile-commands=build/bw-output/compile_commands.json
+          args: ${{ steps.sonar_scope.outputs.args }}

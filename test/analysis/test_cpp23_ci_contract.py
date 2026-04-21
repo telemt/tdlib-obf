@@ -15,8 +15,12 @@ class Cpp23CiContractTest(unittest.TestCase):
     def test_workflow_builds_gcc_and_clang_core_targets(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("compiler: gcc", workflow_text)
-        self.assertIn("compiler: clang", workflow_text)
+        self.assertIn("compiler: gcc15", workflow_text)
+        self.assertIn("cc: gcc-15", workflow_text)
+        self.assertIn("cxx: g++-15", workflow_text)
+        self.assertIn("compiler: clang22", workflow_text)
+        self.assertIn("cc: clang-22", workflow_text)
+        self.assertIn("cxx: clang++-22", workflow_text)
         self.assertIn("cmake --build build --target tdjson tg_cli run_all_tests", workflow_text)
 
     def test_workflow_runs_cpp23_guard_and_sanitizer_lane(self) -> None:
@@ -25,12 +29,44 @@ class Cpp23CiContractTest(unittest.TestCase):
         self.assertIn("python3 tools/ci/check_cpp23_compat.py", workflow_text)
         self.assertIn("-fsanitize=address,undefined", workflow_text)
 
+    def test_asan_lane_build_scope_excludes_tg_cli(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+        asan_block = workflow_text.split("asan-ubsan:", 1)[1].split("\n  tsan:", 1)[0]
+
+        self.assertIn(
+            "cmake --build build --target tdjson run_all_tests --parallel $(nproc)",
+            asan_block,
+            msg="ASan lane should prioritize sanitizer signal over CLI coverage and avoid tg_cli to reduce flaky long builds",
+        )
+        self.assertNotIn(
+            "cmake --build build --target tdjson tg_cli run_all_tests --parallel $(nproc)",
+            asan_block,
+            msg="ASan lane should not build tg_cli",
+        )
+
     def test_compiler_setup_exposes_strict_ci_warning_option(self) -> None:
         compiler_setup_text = COMPILER_SETUP_PATH.read_text(encoding="utf-8")
 
         self.assertIn("option(TD_STRICT_CI_WARNINGS", compiler_setup_text)
+        self.assertIn("option(TD_STRICT_COMPILER_VERSIONS", compiler_setup_text)
+        self.assertIn("GCC 15.2+ is recommended", compiler_setup_text)
+        self.assertIn("Clang 22.1.3+ is recommended", compiler_setup_text)
         self.assertIn("-Werror=return-type", compiler_setup_text)
         self.assertIn("-Werror=deprecated", compiler_setup_text)
+
+    def test_workflow_enables_strict_compiler_versions_in_all_cpp23_jobs(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(workflow_text.count("-DTD_STRICT_COMPILER_VERSIONS=ON"), 3)
+
+    def test_workflow_does_not_duplicate_sqlite_vendor_smoke_lane(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "sqlite-vendor-smoke:",
+            workflow_text,
+            msg="SQLite smoke lane should live in dedicated sqlite-vendor-integrity workflow to avoid duplicate native rebuilds",
+        )
 
 
 if __name__ == "__main__":

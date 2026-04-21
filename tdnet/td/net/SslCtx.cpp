@@ -340,7 +340,13 @@ Result<SslCtxPtr> do_create_ssl_ctx(CSlice cert_file, SslCtx::VerifyPeer verify_
       SSL_CTX_set_cert_store(ssl_ctx, store);
     }
   } else {
-    if (SSL_CTX_load_verify_locations(ssl_ctx, cert_file.c_str(), nullptr) == 0) {
+    // Fail closed on embedded NUL to prevent path truncation ambiguities,
+    // where "trusted.pem\0suffix" could be interpreted as "trusted.pem".
+    if (std::memchr(cert_file.begin(), '\0', cert_file.size()) != nullptr) {
+      return Status::Error("Explicit certificate path contains an embedded NUL byte");
+    }
+    string cert_file_str = cert_file.str();
+    if (SSL_CTX_load_verify_locations(ssl_ctx, cert_file_str.c_str(), nullptr) == 0) {
       return create_openssl_error(-8, "Failed to set custom certificate file");
     }
   }

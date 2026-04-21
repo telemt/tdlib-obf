@@ -29,12 +29,26 @@ on:
       - "test/analysis/test_sqlite_phase4_vendor_target_repo.py"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: sqlite-vendor-integrity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sqlite-vendor-integrity:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,19 +64,40 @@ jobs:
       - name: Run current target baseline contract
         run: python3 -m unittest discover -s test/analysis -p 'test_sqlite_phase4_vendor_target_repo.py'
 
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-sqlite-integrity-${{ runner.os }}-${{ hashFiles('.github/workflows/sqlite-vendor-integrity.yml') }}-v1
+
       - name: Install native build prerequisite
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gperf
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y gperf cmake libssl-dev ninja-build lld ccache zlib1g-dev
+
+      - name: Cache ccache objects
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-sqlite-integrity-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-sqlite-integrity-${{ runner.os }}-
 
       - name: Configure native DB smoke build
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF
+        env:
+          CCACHE_DIR: ~/.cache/ccache
+          CCACHE_COMPRESS: "1"
+          CCACHE_MAXSIZE: 200M
+        run: cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF -DTD_ENABLE_LLD=ON
 
       - name: Build native DB smoke target
-        run: cmake --build build --target run_all_tests --parallel 2
+        env:
+          CCACHE_DIR: ~/.cache/ccache
+        run: cmake --build build --target run_all_tests --parallel $(nproc)
 
       - name: Refresh exact CTest discovery
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF
+        run: cmake -S . -B build -G Ninja -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF -DTD_ENABLE_LLD=ON
 
       - name: Run native SQLite DB smoke
         run: ctest --test-dir build/test --output-on-failure -R '^Test_DB_sqlite_vendor_wrapper_surface_contract$'

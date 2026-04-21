@@ -54,12 +54,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - compiler: gcc14
-            cc: gcc-14
-            cxx: g++-14
-          - compiler: clang
-            cc: clang-18
-            cxx: clang++-18
+          - compiler: gcc15
+            cc: gcc-15
+            cxx: g++-15
+          - compiler: clang22
+            cc: clang-22
+            cxx: clang++-22
 
     steps:
       - name: Checkout repository
@@ -68,53 +68,80 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up toolchain APT repositories
+        run: |
+          set -euxo pipefail
+          # LLVM APT for clang-22 / lld-22
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          # ubuntu-toolchain-r PPA for gcc-15 on ubuntu-24.04
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -qq
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
-          key: apt-gcc-clang-${{ runner.os }}-v1
+          key: apt-gcc-clang-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
 
       - name: Install dependencies
         run: |
           set -euxo pipefail
-          sudo apt-get update
           sudo apt-get install -y \
             cmake \
-            g++-14 \
-            gcc-14 \
-            clang-18 \
+            g++-15 \
+            gcc-15 \
+            clang-22 \
+            lld-22 \
+            ccache \
             gperf \
             libssl-dev \
             make \
             ninja-build \
             zlib1g-dev
 
-      - name: Cache CMake build artifacts
+      - name: Cache ccache objects
         uses: actions/cache@v4
         with:
-          path: build
-          key: cmake-core-${{ matrix.compiler }}-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'CMake/**') }}-v1
+          path: ~/.cache/ccache
+          key: ccache-core-${{ matrix.compiler }}-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            cmake-core-${{ matrix.compiler }}-${{ runner.os }}-
+            ccache-core-${{ matrix.compiler }}-${{ runner.os }}-
 
       - name: Run C++23 static guard
         run: python3 tools/ci/check_cpp23_compat.py
+
+      - name: Run CMake probe guardrails
+        run: python3 -m unittest discover -s test/analysis -p 'test_cmake_probe_guardrails.py'
 
       - name: Configure build
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
+          CCACHE_DIR: ~/.cache/ccache
+          CCACHE_COMPRESS: "1"
+          CCACHE_MAXSIZE: 500M
         run: |
           set -euxo pipefail
           cmake -S . -B build \
+            -G Ninja \
+            -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DTD_ENABLE_BENCHMARKS=OFF \
-            -DTD_STRICT_CI_WARNINGS=ON
+            -DTD_ENABLE_LLD=ON \
+            -DTD_STRICT_CI_WARNINGS=ON \
+            -DTD_STRICT_COMPILER_VERSIONS=ON
 
       - name: Build core targets
+        env:
+          CCACHE_DIR: ~/.cache/ccache
         run: |
           set -euxo pipefail
           cmake --build build --target tdjson tg_cli run_all_tests --parallel $(nproc)
@@ -131,18 +158,28 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up toolchain APT repositories
+        run: |
+          set -euxo pipefail
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          sudo apt-get update -qq
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
-          key: apt-asan-${{ runner.os }}-v1
+          key: apt-asan-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
 
       - name: Install dependencies
         run: |
           set -euxo pipefail
-          sudo apt-get update
           sudo apt-get install -y \
-            clang-18 \
+            clang-22 \
+            lld-22 \
+            ccache \
             cmake \
             gperf \
             libssl-dev \
@@ -150,25 +187,36 @@ jobs:
             ninja-build \
             zlib1g-dev
 
-      - name: Cache CMake build artifacts
+      - name: Cache ccache objects
         uses: actions/cache@v4
         with:
-          path: build
-          key: cmake-asan-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'CMake/**') }}-v1
+          path: ~/.cache/ccache
+          key: ccache-asan-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            cmake-asan-${{ runner.os }}-
+            ccache-asan-${{ runner.os }}-
 
       - name: Run C++23 static guard
         run: python3 tools/ci/check_cpp23_compat.py
 
       - name: Configure sanitizer build
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
+          CCACHE_DIR: ~/.cache/ccache
+          CCACHE_COMPRESS: "1"
+          CCACHE_MAXSIZE: 500M
+          # ccache and sanitizers: disable direct mode so sanitizer wrappers
+          # are handled correctly. basedir normalises paths for cache portability.
+          CCACHE_CPP2: "true"
+          CCACHE_BASEDIR: ${{ github.workspace }}
         run: |
           set -euxo pipefail
           cmake -S . -B build \
+            -G Ninja \
+            -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-sanitize-recover=all' \
@@ -176,13 +224,18 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined -fno-sanitize-recover=all' \
             -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined -fno-sanitize-recover=all' \
             -DTD_ENABLE_BENCHMARKS=OFF \
-            -DTD_STRICT_CI_WARNINGS=ON
+            -DTD_ENABLE_LLD=ON \
+            -DTD_ENABLE_SPLIT_DWARF=OFF \
+            -DTD_STRICT_CI_WARNINGS=ON \
+            -DTD_STRICT_COMPILER_VERSIONS=ON
 
       - name: Build sanitizer targets
+        env:
+          CCACHE_DIR: ~/.cache/ccache
         run: |
           set -euxo pipefail
           cmake --build build --target tl_generate_tlo tl_generate_mtproto tl_generate_common tl_generate_json --parallel $(nproc)
-          cmake --build build --target tdjson tg_cli run_all_tests --parallel $(nproc)
+          cmake --build build --target tdjson run_all_tests --parallel $(nproc)
 
       - name: Run focused sanitizer regression slice
         env:
@@ -204,47 +257,72 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up toolchain APT repositories
+        run: |
+          set -euxo pipefail
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          sudo apt-get update -qq
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
-          key: apt-tsan-${{ runner.os }}-v1
+          key: apt-tsan-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
 
       - name: Install dependencies
         run: |
           set -euxo pipefail
-          sudo apt-get update
           sudo apt-get install -y \
-            clang-18 \
+            clang-22 \
+            lld-22 \
+            ccache \
             cmake \
             gperf \
             libssl-dev \
             make \
+            ninja-build \
             zlib1g-dev
 
-      - name: Cache CMake build artifacts
+      - name: Cache ccache objects
         uses: actions/cache@v4
         with:
-          path: build
-          key: cmake-tsan-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'CMake/**') }}-v1
+          path: ~/.cache/ccache
+          key: ccache-tsan-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            cmake-tsan-${{ runner.os }}-
+            ccache-tsan-${{ runner.os }}-
 
       - name: Configure TSan build
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
+          CCACHE_DIR: ~/.cache/ccache
+          CCACHE_COMPRESS: "1"
+          CCACHE_MAXSIZE: 500M
+          CCACHE_CPP2: "true"
+          CCACHE_BASEDIR: ${{ github.workspace }}
         run: |
           set -euxo pipefail
           cmake -S . -B build \
+            -G Ninja \
+            -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_FLAGS='-fsanitize=thread -fno-sanitize-recover=all' \
             -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=thread -fno-sanitize-recover=all' \
-            -DTD_ENABLE_BENCHMARKS=OFF
+            -DTD_ENABLE_BENCHMARKS=OFF \
+            -DTD_ENABLE_LLD=ON \
+            -DTD_ENABLE_SPLIT_DWARF=OFF \
+            -DTD_STRICT_COMPILER_VERSIONS=ON
 
       - name: Build concurrency-heavy test targets
+        env:
+          CCACHE_DIR: ~/.cache/ccache
         run: |
           set -euxo pipefail
           cmake --build build --target tl_generate_tlo tl_generate_mtproto tl_generate_common tl_generate_json --parallel $(nproc)
@@ -256,58 +334,3 @@ jobs:
         run: |
           set -euxo pipefail
           ./build/test/run_all_tests --filter "stress|Stress|Soak|concurrent"
-
-  sqlite-vendor-smoke:
-    name: SQLite vendor smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-sqlite-smoke-${{ runner.os }}-v1
-
-      - name: Install dependencies
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            gperf \
-            libssl-dev \
-            make \
-            zlib1g-dev
-
-      - name: Verify manifest and generated files
-        run: python3 tools/sqlite/audit_vendor.py --check-integrity
-
-      - name: Run SQLite vendor analysis tests
-        run: python3 -m unittest discover -s test/analysis -p 'test_sqlite*.py'
-
-      - name: Run current target baseline contract
-        run: python3 -m unittest discover -s test/analysis -p 'test_sqlite_phase4_vendor_target_repo.py'
-
-      - name: Configure native DB smoke build
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF
-
-      - name: Build native DB smoke target
-        run: cmake --build build --target run_all_tests --parallel $(nproc)
-
-      - name: Refresh exact CTest discovery
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTD_ENABLE_BENCHMARKS=OFF
-
-      - name: Run native SQLite DB smoke
-        run: ctest --test-dir build/test --output-on-failure -R '^Test_DB_sqlite_vendor_wrapper_surface_contract$'

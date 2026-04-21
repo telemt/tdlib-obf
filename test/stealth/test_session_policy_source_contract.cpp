@@ -7,21 +7,14 @@
 #include "td/utils/common.h"
 #include "td/utils/tests.h"
 
-#include <fstream>
-#include <iterator>
+#include "test/stealth/SourceContractFileReader.h"
 
 namespace {
-
-td::string read_text_file(td::Slice path) {
-  std::ifstream input(path.str(), std::ios::binary);
-  CHECK(input.is_open());
-  return td::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-}
 
 TEST(SessionPolicySourceContract, SessionConstructorUsesPolicySetterPath) {
   // Verify the Session constructor routes through the policy-level session mode setter,
   // not the runtime-enforced setter that records coerce attempts.
-  auto session_cpp = read_text_file("td/telegram/net/Session.cpp");
+  auto session_cpp = td::mtproto::test::read_repo_text_file("td/telegram/net/Session.cpp");
 
   ASSERT_TRUE(session_cpp.find("auth_data_.set_session_mode_from_policy(session_keyed);") != td::string::npos);
   ASSERT_TRUE(session_cpp.find("auth_data_.set_session_mode(session_keyed);") == td::string::npos);
