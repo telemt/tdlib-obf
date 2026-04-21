@@ -48,6 +48,14 @@ class SonarCiContractTest(unittest.TestCase):
             msg="Sonar compile_commands flow must disable target PCH to avoid references to missing cmake_pch.hxx.pch artifacts",
         )
 
+    def test_workflow_scopes_pull_request_analysis_to_changed_files(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("id: sonar_scope", workflow_text)
+        self.assertIn("git diff --name-only --diff-filter=ACMR", workflow_text)
+        self.assertIn("-Dsonar.inclusions=", workflow_text)
+        self.assertIn("${{ steps.sonar_scope.outputs.args }}", workflow_text)
+
 
 if __name__ == "__main__":
     unittest.main()
