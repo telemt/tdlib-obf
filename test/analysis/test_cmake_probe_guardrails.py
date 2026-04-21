@@ -12,9 +12,31 @@ import unittest
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parent.parent
 CMAKE_MODULE_DIR = REPO_ROOT / "CMake"
+ADD_FLAG_MODULE = CMAKE_MODULE_DIR / "AddCXXCompilerFlag.cmake"
+FIND_ATOMICS_MODULE = CMAKE_MODULE_DIR / "FindAtomics.cmake"
 
 
 class CMakeProbeGuardrailsTest(unittest.TestCase):
+    def test_add_cxx_compiler_flag_probe_isolated_from_linker_flags(self) -> None:
+        module_text = ADD_FLAG_MODULE.read_text(encoding="utf-8")
+
+        self.assertIn("set(_SAVED_CMAKE_EXE_LINKER_FLAGS", module_text)
+        self.assertIn("set(_SAVED_CMAKE_SHARED_LINKER_FLAGS", module_text)
+        self.assertIn("set(_SAVED_CMAKE_MODULE_LINKER_FLAGS", module_text)
+        self.assertIn("set(CMAKE_EXE_LINKER_FLAGS \"\")", module_text)
+        self.assertIn("set(CMAKE_SHARED_LINKER_FLAGS \"\")", module_text)
+        self.assertIn("set(CMAKE_MODULE_LINKER_FLAGS \"\")", module_text)
+
+    def test_find_atomics_probe_isolated_from_linker_flags(self) -> None:
+        module_text = FIND_ATOMICS_MODULE.read_text(encoding="utf-8")
+
+        self.assertIn("set(_SAVED_CMAKE_EXE_LINKER_FLAGS", module_text)
+        self.assertIn("set(_SAVED_CMAKE_SHARED_LINKER_FLAGS", module_text)
+        self.assertIn("set(_SAVED_CMAKE_MODULE_LINKER_FLAGS", module_text)
+        self.assertIn("set(CMAKE_EXE_LINKER_FLAGS \"\")", module_text)
+        self.assertIn("set(CMAKE_SHARED_LINKER_FLAGS \"\")", module_text)
+        self.assertIn("set(CMAKE_MODULE_LINKER_FLAGS \"\")", module_text)
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="cmake-probe-guardrails-")
         self.tmp_path = pathlib.Path(self._tmp.name)

@@ -32,11 +32,22 @@ function(add_cxx_compiler_flag FLAG)
   mangle_compiler_flag("${MAIN_FLAG}" MANGLED_FLAG_NAME)
   # Save CMAKE_REQUIRED_FLAGS to prevent mutation from affecting later probes
   set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  # Compiler flag probes should not inherit project linker flags, which may
+  # fail for reasons unrelated to compiler support of the tested flag.
+  set(_SAVED_CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
   # Do not use strict error flags like -Werror during feature probes
   string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "")
+  set(CMAKE_SHARED_LINKER_FLAGS "")
+  set(CMAKE_MODULE_LINKER_FLAGS "")
   check_cxx_compiler_flag("${MAIN_FLAG}" ${MANGLED_FLAG_NAME})
   # Restore CMAKE_REQUIRED_FLAGS
   set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${_SAVED_CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${_SAVED_CMAKE_SHARED_LINKER_FLAGS}")
+  set(CMAKE_MODULE_LINKER_FLAGS "${_SAVED_CMAKE_MODULE_LINKER_FLAGS}")
   if (${MANGLED_FLAG_NAME})
     set(VARIANT ${ARGV1})
     if (ARGV1)
@@ -51,11 +62,22 @@ function(add_required_cxx_compiler_flag FLAG)
   mangle_compiler_flag("${MAIN_FLAG}" MANGLED_FLAG_NAME)
   # Save CMAKE_REQUIRED_FLAGS to prevent mutation from affecting later probes
   set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  # Compiler flag probes should not inherit project linker flags, which may
+  # fail for reasons unrelated to compiler support of the tested flag.
+  set(_SAVED_CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
   # Do not use strict error flags like -Werror during feature probes
   string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "")
+  set(CMAKE_SHARED_LINKER_FLAGS "")
+  set(CMAKE_MODULE_LINKER_FLAGS "")
   check_cxx_compiler_flag("${MAIN_FLAG}" ${MANGLED_FLAG_NAME})
   # Restore CMAKE_REQUIRED_FLAGS
   set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${_SAVED_CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${_SAVED_CMAKE_SHARED_LINKER_FLAGS}")
+  set(CMAKE_MODULE_LINKER_FLAGS "${_SAVED_CMAKE_MODULE_LINKER_FLAGS}")
   if (${MANGLED_FLAG_NAME})
     set(VARIANT ${ARGV1})
     if (ARGV1)

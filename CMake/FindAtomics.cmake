@@ -42,13 +42,24 @@ foreach (ATOMICS_LIBRARY ${ATOMICS_LIBS})
   unset(ATOMICS_FOUND CACHE)
   # Save CMAKE_REQUIRED_FLAGS to prevent strict CI error flags from breaking the probe
   set(_SAVED_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  # Atomics probe should not inherit project-level linker flags; test only
+  # atomics availability with/without -latomic.
+  set(_SAVED_CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  set(_SAVED_CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
   # Do not use strict error flags during feature probes - probes must be warning-clean
   string(REGEX REPLACE "-Werror[^ ]*" "" CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "")
+  set(CMAKE_SHARED_LINKER_FLAGS "")
+  set(CMAKE_MODULE_LINKER_FLAGS "")
   set(CMAKE_REQUIRED_LIBRARIES "${ATOMICS_LIBRARY}")
   check_cxx_source_compiles("${ATOMIC_CODE}" ATOMICS_FOUND)
   unset(CMAKE_REQUIRED_LIBRARIES)
   # Restore CMAKE_REQUIRED_FLAGS
   set(CMAKE_REQUIRED_FLAGS "${_SAVED_CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${_SAVED_CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${_SAVED_CMAKE_SHARED_LINKER_FLAGS}")
+  set(CMAKE_MODULE_LINKER_FLAGS "${_SAVED_CMAKE_MODULE_LINKER_FLAGS}")
   if (ATOMICS_FOUND)
     if (NOT ATOMICS_LIBRARY STREQUAL " ")
       include(FindPackageHandleStandardArgs)
