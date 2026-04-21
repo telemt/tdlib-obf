@@ -29,6 +29,21 @@ class Cpp23CiContractTest(unittest.TestCase):
         self.assertIn("python3 tools/ci/check_cpp23_compat.py", workflow_text)
         self.assertIn("-fsanitize=address,undefined", workflow_text)
 
+    def test_asan_lane_build_scope_excludes_tg_cli(self) -> None:
+        workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+        asan_block = workflow_text.split("asan-ubsan:", 1)[1].split("\n  tsan:", 1)[0]
+
+        self.assertIn(
+            "cmake --build build --target tdjson run_all_tests --parallel $(nproc)",
+            asan_block,
+            msg="ASan lane should prioritize sanitizer signal over CLI coverage and avoid tg_cli to reduce flaky long builds",
+        )
+        self.assertNotIn(
+            "cmake --build build --target tdjson tg_cli run_all_tests --parallel $(nproc)",
+            asan_block,
+            msg="ASan lane should not build tg_cli",
+        )
+
     def test_compiler_setup_exposes_strict_ci_warning_option(self) -> None:
         compiler_setup_text = COMPILER_SETUP_PATH.read_text(encoding="utf-8")
 
