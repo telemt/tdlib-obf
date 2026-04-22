@@ -6,10 +6,6 @@
 
 #include "td/mtproto/BrowserProfile.h"
 
-#include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
-
-#include "td/utils/Slice.h"
-
 namespace td {
 namespace mtproto {
 

@@ -12,7 +12,7 @@
             "label": "cmake build tests preset",
             "type": "cmake",
             "command": "build",
-            "preset": "run-all-tests",
+            "preset": "default-all",
             "group": "build"
         },
         {
@@ -52,7 +52,7 @@
             ],
             "group": "build",
             "dependsOn": [
-                "cmake build tests preset"
+                "cmake build tests fast"
             ],
             "problemMatcher": [
                 "$gcc"
@@ -112,7 +112,10 @@
                 "--parallel",
                 "14"
             ],
-            "group": "build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "dependsOn": [
                 "cmake configure"
             ],
@@ -237,7 +240,7 @@
                 "-j",
                 "14",
                 "-E",
-                "^(Test_Log_Bench|Test_ConcurrentHashMap_Benchmark|Test_DB_sqlite_phase3_statement_blob_roundtrip_light_fuzz|Test_CryptoPQ_generated_slow|Test_Http_gzip_bomb|Test_SslCtxLightFuzzExtended_.*)$"
+                "'^(Test_Log_Bench|Test_ConcurrentHashMap_Benchmark|Test_DB_sqlite_phase3_statement_blob_roundtrip_light_fuzz|Test_CryptoPQ_generated_slow|Test_Http_gzip_bomb|Test_SslCtxLightFuzzExtended_.*)$'"
             ],
             "group": "test",
             "dependsOn": [
@@ -256,7 +259,7 @@
                 "-j",
                 "14",
                 "-R",
-                "^(Test_Log_Bench|Test_ConcurrentHashMap_Benchmark|Test_DB_sqlite_phase3_statement_blob_roundtrip_light_fuzz|Test_CryptoPQ_generated_slow|Test_Http_gzip_bomb|Test_SslCtxLightFuzzExtended_.*)$"
+                "'^(Test_Log_Bench|Test_ConcurrentHashMap_Benchmark|Test_DB_sqlite_phase3_statement_blob_roundtrip_light_fuzz|Test_CryptoPQ_generated_slow|Test_Http_gzip_bomb|Test_SslCtxLightFuzzExtended_.*)$'"
             ],
             "group": "test",
             "dependsOn": [

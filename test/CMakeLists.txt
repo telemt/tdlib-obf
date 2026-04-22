@@ -169,6 +169,9 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_active_policy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_sticky_rotation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_safety.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_case_alias_fixture_blackbox.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_proxy_alpn_semantics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_plan.cpp
@@ -322,6 +325,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_alpn_connection_coherence.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_packet_buffer_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_shaper_ring_buffer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_shaper_ring_buffer_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_shaper_ring_buffer_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_activation_fail_closed.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_seam.cpp
@@ -437,6 +441,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_chaff_scheduler_budget_bypass_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_size_max_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_counter_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_case_alias_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_box_muller_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_hints_country_boundary_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_fingerprint_classifier_blackhat.cpp

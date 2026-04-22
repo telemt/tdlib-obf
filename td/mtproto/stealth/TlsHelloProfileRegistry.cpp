@@ -220,7 +220,16 @@ size_t profile_index(BrowserProfile profile) {
 }
 
 string normalized_runtime_destination_key(Slice destination) {
-  return destination.substr(0, ProxySecret::MAX_DOMAIN_LENGTH).str();
+  auto key = destination.substr(0, ProxySecret::MAX_DOMAIN_LENGTH).str();
+  // Domain names are case-insensitive. Canonicalize to lowercase so
+  // profile stickiness and ECH failure-cache keys cannot be bypassed by
+  // case-only aliases of the same destination.
+  for (auto &ch : key) {
+    if ('A' <= ch && ch <= 'Z') {
+      ch = static_cast<char>(ch - 'A' + 'a');
+    }
+  }
+  return key;
 }
 
 string route_failure_cache_key(Slice destination, int32 unix_time) {

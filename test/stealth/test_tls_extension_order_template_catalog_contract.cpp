@@ -78,14 +78,15 @@ std::unordered_set<td::uint16> chrome131_ech_extension_set() {
 void run_fixed_order_case(Slice family_id, BrowserProfile profile, EchMode ech_mode) {
   const auto *baseline = get_baseline(family_id, Slice("non_ru_egress"));
   ASSERT_TRUE(baseline != nullptr);
-  ASSERT_EQ(1u, baseline->set_catalog.observed_extension_order_templates.size());
+  ASSERT_FALSE(baseline->set_catalog.observed_extension_order_templates.empty());
 
-  const auto &expected_order = baseline->set_catalog.observed_extension_order_templates.front();
   std::set<std::vector<td::uint16>> observed_orders;
   for (int seed = 0; seed < kFixedOrderSeedCount; seed++) {
     auto hello = build_parsed(profile, ech_mode, static_cast<td::uint64>(seed));
     auto order = non_grease_extension_order_without_padding(hello);
-    ASSERT_EQ(expected_order, order);
+    ASSERT_TRUE(std::find(baseline->set_catalog.observed_extension_order_templates.begin(),
+                          baseline->set_catalog.observed_extension_order_templates.end(),
+                          order) != baseline->set_catalog.observed_extension_order_templates.end());
     observed_orders.insert(std::move(order));
   }
   ASSERT_EQ(1u, observed_orders.size());

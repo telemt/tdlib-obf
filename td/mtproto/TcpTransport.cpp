@@ -162,6 +162,7 @@ Result<size_t> ObfuscatedTransport::read_next(BufferSlice *message, uint32 *quic
 
 void ObfuscatedTransport::write(BufferWriter &&message, bool quick_ack) {
   impl_.write_prepare_inplace(&message, quick_ack);
+  has_pending_stealth_target_ = false;
   output_state_.encrypt(message.as_slice(), message.as_mutable_slice());
   if (secret_.emulate_tls()) {
     do_write_tls(std::move(message));

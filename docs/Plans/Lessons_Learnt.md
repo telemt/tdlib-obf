@@ -193,3 +193,129 @@ automatic expiry without needing an explicit timer.
 | | `test/stealth/test_masking_traffic_classifier_contract_adversarial.cpp` |
 | | `test/stealth/test_masking_ipt_controller_adversarial.cpp` |
 | | `test/stealth/test_masking_profile_platform_isolation_adversarial.cpp` |
+
+---
+
+# TLS Extension Order Semantics — Lessons Learnt (2026-04-22)
+
+**Context:** Follow-up TDD session on stealth ClientHello extension-order coverage.  
+**Trigger:** A new regression test was initially written as exact reviewed-template matching for Chromium/Linux. That assumption was challenged against the checked-in fixture corpus under `test/analysis/fixtures/clienthello/`.  
+**Resolution:** Production kept truthful `ChromeShuffleAnchored` semantics; the new tests were rewritten to derive legality from fixture-backed policy and upstream rule documents instead of hardcoded reviewed order catalogs.
+
+---
+
+## 1. What the Corpus and Analysis Layer Actually Say
+
+The decisive evidence was not a single reviewed baseline header entry, but the combination of the fixture corpus, the analysis README, and the upstream-rule mirror.
+
+| Source | What it says | Practical implication |
+|---|---|---|
+| `test/analysis/README.md` | Imported Safari profiles stay `FixedFromFixture`; all other imported browser families use `ChromeShuffleAnchored` | Chromium-family order must be treated as browser-like shuffle, not a single frozen template |
+| `test/analysis/check_fingerprint.py` | `ChromeShuffleAnchored` passes when `Counter(observed_order) == Counter(expected_order)` | The analysis contract is multiset legality, not exact order equality |
+| `test/analysis/upstream_tls_rules.json` | Chromium extension order uses `shuffle_all_except_pre_shared_key` with GREASE/padding anchors | Runtime should preserve anchored shuffle semantics |
+| `docs/Samples/utls-code/u_parrots.go` | `ShuffleChromeTLSExtensions` shuffles every extension except GREASE, padding, and `pre_shared_key` | The bundled upstream reference matches the analysis contract |
+| `test/stealth/ReviewedFamilyLaneBaselines.h` | `chromium_linux_desktop` carries many reviewed extension-order templates | Exact reviewed-template pinning for Chromium is stale by construction |
+
+Two concrete takeaways from the reviewed baseline tables:
+
+1. `chromium_linux_desktop` is explicitly multi-template. Any production logic that tries to restrict Chromium to a curated list of reviewed exact templates stops imitating Chromium and starts imitating a stale subset of captures.
+2. Even nominally fixed-order families can have more than one reviewed template in the lane table. For example, `firefox_linux_desktop` has multiple reviewed templates because the corpus contains structurally different but still legitimate samples. “Fixed-order builder” does not mean “the reviewed corpus contains only one possible template”.
+
+---
+
+## 2. The Wrong Assumption
+
+The failed assumption was:
+
+> If the reviewed baseline table contains exact extension-order templates, production Chromium should only emit one of those reviewed exact templates.
+
+That is too strong and wrong for this codebase.
+
+Why it fails:
+
+- reviewed baselines are a conservative evidence snapshot, not a complete generative specification;
+- Chromium-family order is intentionally high-cardinality under `ChromeShuffleAnchored`;
+- the analysis layer already encodes the intended semantics as policy, and that policy is weaker than exact-template equality by design.
+
+The result of following the wrong assumption was predictable: it pushed the runtime toward hardcoded catalog behaviour that reduced truthfulness instead of improving it.
+
+---
+
+## 3. The Correct Contract Per Family
+
+| Family | Runtime contract | Test contract |
+|---|---|---|
+| Chromium-family (`Chrome133`, `Chrome131`, etc.) | Preserve truthful anchored shuffle: GREASE/padding/PSK anchors stay special; the remaining extension block is order-variable | Assert legal `ChromeShuffleAnchored` permutation, correct extension set, correct ALPS type per profile, and seed-driven order diversity |
+| Firefox fixed profiles | Keep the emitted order seed-stable for the profile spec | Assert the produced order is stable across seeds and matches at least one reviewed template for that lane |
+| Apple TLS / Safari / iOS fixed profiles | Keep emitted order seed-stable and fixture-faithful | Assert seed stability and membership in the reviewed fixed-template set |
+
+The crucial distinction is:
+
+- **Chromium tests** should prove *policy compliance plus variability*.
+- **Fixed-profile tests** should prove *stability plus reviewed-template compatibility*.
+
+They should not be collapsed into one “every family must match an exact reviewed template catalog” rule.
+
+---
+
+## 4. What Changed in This Session
+
+This session ended up being primarily a **test correction**, not a runtime redesign.
+
+### 4.1 Production-side outcome
+
+- The attempted exact-template catalog plumbing for Chromium was removed before completion.
+- The runtime remains on the truthful anchored-shuffle path already modeled by the builder/executor and by the upstream/uTLS references.
+
+### 4.2 Test-side outcome
+
+The new coverage in `test/stealth/test_tls_extension_order_template_catalog_contract.cpp` now does the following:
+
+- verifies that reviewed Chromium/Linux corpus data is genuinely order-variable;
+- verifies that generated `Chrome133` and `Chrome131` obey anchored-shuffle legality rather than exact-template equality;
+- verifies that Chromium extension content still matches fixture-derived extension sets and ALPS-type expectations;
+- verifies that fixed-order families (`Firefox148`, `Safari26_3`, `IOS14`) stay seed-stable and match one reviewed fixed template for their lane.
+
+This keeps the test suite aligned with the corpus without teaching the runtime to overfit reviewed snapshots.
+
+---
+
+## 5. Validation Pattern to Reuse
+
+When extension-order work touches stealth fingerprints again, the safe validation order is:
+
+1. Check `test/analysis/fixtures/clienthello/` first.
+2. Check `test/analysis/README.md` and `test/analysis/check_fingerprint.py` to see the policy the corpus tooling already enforces.
+3. Cross-check upstream semantics in `test/analysis/upstream_tls_rules.json` and `docs/Samples/utls-code/u_parrots.go`.
+4. Only then decide whether the change belongs in runtime generation or only in tests.
+
+If steps 1-3 already define a weaker policy than “exact reviewed template equality”, production should not be tightened beyond that policy without new evidence.
+
+---
+
+## 6. Focused Validation Results
+
+The final focused checks for this session were:
+
+```bash
+./build/test/run_all_tests --filter TlsExtensionOrder
+./build/test/run_all_tests --filter ChromeCorpusExtensionSet1k
+./build/test/run_all_tests --filter TlsExtensionOrderTemplateCatalogContract
+```
+
+All three passed after the test logic was corrected.
+
+---
+
+## 7. Code and Evidence References
+
+| Concern | File |
+|---|---|
+| Imported-corpus policy description | `test/analysis/README.md` |
+| Corpus policy implementation | `test/analysis/check_fingerprint.py` |
+| Upstream Chromium legality mirror | `test/analysis/upstream_tls_rules.json` |
+| Upstream uTLS shuffle reference | `docs/Samples/utls-code/u_parrots.go` |
+| Reviewed lane baseline tables | `test/stealth/ReviewedFamilyLaneBaselines.h` |
+| Existing Chromium shuffle regression tests | `test/stealth/test_tls_extension_order_policy.cpp` |
+| New contract tests from this session | `test/stealth/test_tls_extension_order_template_catalog_contract.cpp` |
+| Fixture-derived Chrome extension-set coverage | `test/stealth/test_tls_corpus_chrome_extension_set_1k.cpp` |

@@ -71,6 +71,45 @@ TEST(TlsRecordSizing, RuntimeSetterAppliesToTlsRecordSplitting) {
   }
 }
 
+TEST(TlsRecordSizing, ShrinkingMaxRecordSizeClampsPendingPaddingTargetReserve) {
+  ObfuscatedTransport transport(2, ProxySecret::from_raw(make_tls_secret()));
+
+  transport.set_max_tls_record_size(16384);
+  transport.set_stealth_record_padding_target(16384);
+  ASSERT_TRUE(transport.max_append_size() >= 16380u);
+
+  transport.set_max_tls_record_size(512);
+  ASSERT_EQ(508u, transport.max_append_size());
+}
+
+TEST(TlsRecordSizing, ShrinkingMaxRecordSizeAfterLargeTargetKeepsSingleRecordPerWrite) {
+  ObfuscatedTransport transport(2, ProxySecret::from_raw(make_tls_secret()));
+  transport.set_max_tls_record_size(16384);
+
+  td::ChainBufferWriter output_writer;
+  td::ChainBufferWriter input_writer;
+  auto input_reader = input_writer.extract_reader();
+  transport.init(&input_reader, &output_writer);
+
+  td::BufferWriter primer(td::Slice("warm"), transport.max_prepend_size(), transport.max_append_size());
+  transport.write(std::move(primer), false);
+
+  transport.set_stealth_record_padding_target(16384);
+  transport.set_max_tls_record_size(512);
+
+  td::BufferWriter writer(td::Slice("tiny"), transport.max_prepend_size(), transport.max_append_size());
+  transport.write(std::move(writer), false);
+
+  auto output_reader = output_writer.extract_reader();
+  output_reader.sync_with_writer();
+  auto wire = output_reader.move_as_buffer_slice().as_slice().str();
+  auto lengths = extract_tls_record_lengths(wire);
+
+  ASSERT_EQ(2u, lengths.size());
+  ASSERT_TRUE(lengths[1] <= 512u);
+  ASSERT_TRUE(lengths[1] >= 500u);
+}
+
 TEST(TlsRecordSizing, RecordSizeSetterClampsBelowTlsSafeMinimum) {
   ObfuscatedTransport transport(2, ProxySecret::from_raw(make_tls_secret()));
   transport.set_max_tls_record_size(64);

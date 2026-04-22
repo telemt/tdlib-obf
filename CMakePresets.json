@@ -27,15 +27,24 @@
   ],
   "buildPresets": [
     {
-      "name": "run-all-tests",
+      "name": "default-all",
+      "displayName": "Default Build (all targets)",
       "configurePreset": "default",
-      "jobs": 14,
-      "targets": [
-        "run_all_tests"
-      ]
+      "jobs": 14
     }
   ],
   "testPresets": [
+    {
+      "name": "default-ctest",
+      "displayName": "Default CTest (all tests)",
+      "configurePreset": "default",
+      "execution": {
+        "jobs": 14
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
     {
       "name": "sqlite-vendor-smoke",
       "configurePreset": "default",

@@ -25,3 +25,4 @@ build_configure.ps1
 pvs-report.json
 test_sqlite_kv
 Analysis_Report.json
+.PVS-Studio

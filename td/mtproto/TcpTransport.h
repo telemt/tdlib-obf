@@ -159,10 +159,17 @@ class ObfuscatedTransport final : public IStreamTransport {
 
   void set_max_tls_record_size(int32 size) final {
     max_tls_packet_length_ = std::max<int32>(256, std::min<int32>(size, 16384));
+    if (stealth_record_padding_target_ > max_tls_packet_length_) {
+      stealth_record_padding_target_ = max_tls_packet_length_;
+      if (has_pending_stealth_target_ && stealth_record_padding_target_ > 0) {
+        impl_.set_stealth_target_frame_size(static_cast<size_t>(stealth_record_padding_target_));
+      }
+    }
   }
 
   void set_stealth_record_padding_target(int32 target_bytes) final {
     stealth_record_padding_target_ = std::max<int32>(0, std::min<int32>(target_bytes, max_tls_packet_length_));
+    has_pending_stealth_target_ = stealth_record_padding_target_ > 0;
     impl_.set_stealth_target_frame_size(static_cast<size_t>(stealth_record_padding_target_));
   }
 
@@ -205,6 +212,7 @@ class ObfuscatedTransport final : public IStreamTransport {
   static constexpr int32 MAX_TLS_PACKET_LENGTH = 2878;
   int32 max_tls_packet_length_{MAX_TLS_PACKET_LENGTH};
   int32 stealth_record_padding_target_{0};
+  bool has_pending_stealth_target_{false};
 
   // TODO: use ByteFlow?
   // One problem is that BufferedFd owns output_buffer_
