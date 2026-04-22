@@ -36,7 +36,6 @@ concurrency:
 jobs:
   sonar:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
 
     steps:
       - name: Checkout

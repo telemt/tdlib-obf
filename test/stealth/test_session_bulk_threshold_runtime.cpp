@@ -7,6 +7,7 @@
 #include "test/stealth/TlsInitTestHelpers.h"
 
 #include "td/mtproto/AuthData.h"
+#include "td/mtproto/IStreamTransport.h"
 #include "td/mtproto/RawConnection.h"
 #include "td/mtproto/SessionConnection.h"
 #if TDLIB_STEALTH_SHAPING

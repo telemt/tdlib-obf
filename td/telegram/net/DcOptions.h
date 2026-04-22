@@ -11,11 +11,9 @@
 
 #include "td/mtproto/ProxySecret.h"
 
-#include "td/utils/common.h"
 #include "td/utils/format.h"
 #include "td/utils/logging.h"
 #include "td/utils/port/IPAddress.h"
-#include "td/utils/Slice.h"
 #include "td/utils/StringBuilder.h"
 #include "td/utils/tl_helpers.h"
 
@@ -166,7 +164,11 @@ class DcOption {
     auto port = parser.fetch_int();
     init_ip_address(ip, port);
     if ((flags_ & Flags::HasSecret) != 0) {
-      secret_ = mtproto::ProxySecret::from_raw(parser.template fetch_string<Slice>());
+      auto r_secret = mtproto::ProxySecret::from_binary(parser.template fetch_string<Slice>());
+      if (r_secret.is_error()) {
+        return parser.set_error("Invalid proxy secret");
+      }
+      secret_ = r_secret.move_as_ok();
     }
   }
 

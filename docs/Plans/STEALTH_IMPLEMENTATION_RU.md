@@ -66,6 +66,19 @@ telemt: https://t.me/telemtrs
 
 Отдельно важно, что этот слой сделан availability-first: если runtime-конфиг невалиден или decorator не может быть собран, код пишет warning и откатывается к обычному `tcp::ObfuscatedTransport`, а не валит соединение. С точки зрения эксплуатации это компромисс в пользу живучести клиента.
 
+Обновление 2026-04-22: добавлен отдельный fail-fast контракт для интеграций (включая Monogram).
+
+- если используется `ProxySecret::emulate_tls()`, но библиотека собрана с `TDLIB_STEALTH_SHAPING=OFF`, `create_transport()` теперь завершает процесс с явной диагностикой (через `LOG(FATAL)`), вместо тихого отката в legacy-путь;
+- тем самым misbuild становится сразу заметен в runtime-логах и CI, а не проявляется поздно как «плавающий fingerprint drift»;
+- контракт закреплён тестом `test/analysis/test_stealth_build_contract.py` (`test_tls_emulation_secret_fails_fast_when_stealth_is_compiled_off`).
+
+Отдельно тем же числом ужесточён и сам входной контракт `ee`-proxy secret.
+
+- `td/mtproto/ProxySecret.cpp` больше не трактует suffix после `0xee | 16-byte secret` как «любой opaque blob»: для TLS-emulation path теперь fail-closed валидируются embedded NUL/control/non-ASCII bytes, empty labels, leading/trailing dot и labels длиннее 63 байт;
+- это закрывает прямой путь, при котором malformed domain раньше доходил до `ClientHelloExecutor` и сериализовывался в SNI как сырые байты;
+- `td/telegram/net/DcOptions.h` при parse persisted `dc_options` больше не обходит эту проверку через `from_raw`, а повторно прогоняет secret через `ProxySecret::from_binary()` и роняет parse на неконсистентном blob;
+- контракт закреплён тестами `test/stealth/test_proxy_secret_tls_domain_validation_contract.cpp` и `test/stealth/test_dc_option_secret_validation_integration.cpp`.
+
 ### 1.2. Реестр TLS-профилей, а не один synthetic hello
 
 В `td/mtproto/stealth/TlsHelloProfileRegistry.h/.cpp` реализован реальный runtime registry с профилями:
@@ -391,15 +404,15 @@ Stealth-ветка выдвигает более строгое требован
 
 ### 2.1. Frozen corpus и checked-in empirical basis
 
-Под `test/analysis/fixtures/clienthello` и `test/analysis/fixtures/serverhello` уже лежит checked-in reviewed corpus по четырём платформенным веткам:
+Под `test/analysis/fixtures/clienthello` и `test/analysis/fixtures/serverhello` уже лежит checked-in reviewed corpus по пяти платформенным веткам:
 
-- `clienthello/android`, `clienthello/ios`, `clienthello/linux_desktop`, `clienthello/macos`;
-- `serverhello/android`, `serverhello/ios`, `serverhello/linux_desktop`, `serverhello/macos`.
+- `clienthello/android`, `clienthello/ios`, `clienthello/linux_desktop`, `clienthello/macos`, `clienthello/windows`;
+- `serverhello/android`, `serverhello/ios`, `serverhello/linux_desktop`, `serverhello/macos`, `serverhello/windows`.
 
 На момент проверки в репозитории находятся:
 
-- 28 JSON-артефактов `ClientHello`;
-- 28 JSON-артефактов `ServerHello`.
+- 106 JSON-артефактов `ClientHello`;
+- 106 JSON-артефактов `ServerHello`.
 
 Это не «сырой dump для ручного triage», а уже часть release-gating pipeline.
 
@@ -484,7 +497,7 @@ Stealth-ветка выдвигает более строгое требован
 - `ech_type`, `alps_type` и `pq_group` теперь могут быть не только exact value, но и policy-object вида «разрешено присутствие и отсутствие», если именно это наблюдается в multi-sample capture;
 - fingerprint checker для таких profiles умеет принимать любой matching fixture variant из `include_fixture_ids`, а не только первый попавшийся ordering.
 
-Практический результат этого сдвига уже проверен на реальном imported tree: candidate-corpus smoke проходит отдельно от reviewed registry и на текущем head покрывает `78` imported profiles, `430` ClientHello samples и `437` ServerHello samples.
+Практический результат этого сдвига уже проверен на реальном imported tree: candidate-corpus smoke проходит отдельно от reviewed registry, generated candidate registry сейчас содержит `99` профилей с `release_gating=false`, а checked-in imported trees содержат по `99` JSON-артефактов `ClientHello` и `ServerHello`. Внутри одного candidate-profile при этом по-прежнему могут агрегироваться несколько fixture-вариантов через `include_fixture_ids`.
 
 Это и есть главный operational смысл новой логики: новые capture больше не надо вручную «продвигать» в reviewed corpus, чтобы начать получать от них пользу. Reviewed tree остаётся консервативным и release-gating, а imported lane даёт использовать весь хвост свежих артефактов как candidate corpus без смешения trust levels.
 
@@ -705,7 +718,7 @@ Checked-in reviewed corpus уже содержит более свежие captu
 Имплементационные детали:
 - `profiles_validation.json` уже вводит `fail_on_unknown_fixture_id`, `fail_on_source_hash_mismatch`, platform coherence checks
 - Imported candidate pipeline отделена от reviewed, с автогенерируемым `profiles_imported.json`
-- На текущем head candidate corpus содержит 78 imported profiles, 430 ClientHello samples, 437 ServerHello samples
+- На текущем head generated candidate registry содержит 99 imported profiles с `release_gating=false`, а checked-in imported trees содержат по 99 JSON-артефактов `ClientHello` и `ServerHello`
 
 Остатки:
 - ❌ `test_fixture_metadata_collision.py` и `test_fixture_large_corpus_stress.py` не найдены явно (но функциональность может быть встроена в intake_fail_closed)
@@ -801,23 +814,27 @@ Checked-in reviewed corpus уже содержит более свежие captu
 - ❌ `test/analysis/test_build_fingerprint_stat_baselines_stress.py` — не найден явно
 
 #### Workstream G: Profile-Model Gaps
-**Статус: ВЫЯВЛЕНЫ, ТРЕБУЮТ РЕШЕНИЯ**
+**Статус: В ОСНОВНОМ ЗАКРЫТО, ОСТАЮТСЯ TRUST-TIER / PROMOTION ВОПРОСЫ**
 
 Gap 1: Windows desktop
-- ✅ 31 Windows ClientHello fixture уже в корпусе
-- ❌ Windows профили ещё не добавлены в runtime registry
-- ❌ Windows families не интегрированы в `profiles_validation.json` как release-gating
+- ✅ `BrowserProfile::Chrome147_Windows` и `BrowserProfile::Firefox149_Windows` уже добавлены в runtime registry
+- ✅ reviewed Windows fixtures подключены в `profiles_validation.json`
+- ✅ Windows baselines и multi-dump suites существуют (`chromium_windows`, `firefox_windows`)
+- ⚠️ Оставшийся вопрос — это не отсутствие интеграции, а дальнейшая promotion hygiene и поддержание corroboration evidence по lane-ам
 
 Gap 2: iOS Chromium family
-- ✅ iOS Chromium profile `BrowserProfile::IOSChromiumUltimate` добавлен в registry
-- ⚠️ Может считаться отчасти закрыт, но нужна проверка tier status
+- ✅ runtime profile уже называется `BrowserProfile::Chrome147_IOSChromium`, а не `IOSChromiumUltimate`
+- ✅ есть отдельные baseline/gap suites для iOS Chromium family
+- ⚠️ Остаётся сопровождать tier/trust tracking как отдельную family-lane, не схлопывая её в Apple TLS
 
 Gap 3: Android advisory mismatch
 - ❌ `Android11_OkHttp_Advisory` остаётся advisory-backed, не promoted to Tier 1
-- ❌ Нет real Android browser family, только advisory fallback
+- ⚠️ reviewed Android Chromium families уже есть в baselines/corpus, но runtime fallback намеренно остаётся консервативным
 
 Gap 4: Release family trust tiers
-- ⚠️ Tier metadata может быть в `ReviewedFamilyLaneBaselines.h`, но не явно документирован
+- ✅ `ReviewedFamilyLaneBaselines.h` уже несёт `TierLevel`, `sample_count`, `authoritative_sample_count`, `num_sources`, `num_sessions`
+- ✅ человекочитаемый tier snapshot уже вынесен в `docs/Plans/WAVE2_IMPLEMENTATION_STATUS_2026-04-17.md`
+- ⚠️ Оставшаяся задача здесь — синхронно обновлять статусы при новых corpus refresh, а не изобретать новую metadata-модель
 
 ### 7.2 Статус по Итерационному Tier Refactoring (§0.1)
 
@@ -848,9 +865,9 @@ Gap 4: Release family trust tiers
 - ✅ Nightly gate с `TD_NIGHTLY_CORPUS=1` работает
 
 Остатки:
-- ❌ CTest labels `STEALTH_CORPUS_QUICK` и `STEALTH_CORPUS_FULL` — нужна проверка в `test/CMakeLists.txt`
+- ✅ CTest labels `STEALTH_CORPUS_QUICK` и `STEALTH_CORPUS_FULL` подтверждены в `test/CMakeLists.txt` и закреплены delta-update 2026-04-18
 - ❌ CMakePresets.json PR/nightly split presets — нужна проверка
-- ❌ Formal tier status report per family-lane (§15) — документирован на словах, но не на практике
+- ✅ per-family tier metadata уже материализованы в `ReviewedFamilyLaneBaselines.h`, а человекочитаемый snapshot есть в `WAVE2_IMPLEMENTATION_STATUS_2026-04-17.md`
 - ❌ Explicit promotion checklist (§15) — не найден в коде
 
 ### 7.4 Статус по Completion Criteria (§16)
@@ -862,7 +879,7 @@ Gap 4: Release family trust tiers
 | Reviewed baseline per family-lane | ✅ Yes | `ReviewedFamilyLaneBaselines.h` содержит per-family baseline constants |
 | Separate test suites (pos/neg/edge/adv/int/fuzz/stress) | ✅ Yes | Многочисленные файлы per тип coverage |
 | Нет advisory-backed active families | ❌ No | `Android11_OkHttp_Advisory`, `Safari26_3`, `IOS14` ещё не promoted |
-| Windows out-of-scope или в release | ❌ Partial | Windows корпус собран, но profiles ещё не интегрированы |
+| Windows out-of-scope или в release | ✅ Yes | Windows runtime profiles, baselines и multi-dump suites интегрированы; остаются только trust-tier/promotion вопросы |
 | Distributional promotion Tier 3+ only | ✅ Yes | Stats checks tier-gated, diagnostic-only для low tiers |
 | Handshake acceptance + ServerHello corroboration | ✅ Yes | Workstream D полностью реализован |
 | Cross-family contamination tests | ✅ Yes | Явные invariant disjointness checks есть |
@@ -872,12 +889,12 @@ Gap 4: Release family trust tiers
 | Existing 1k iteration tiers refactored | ✅ Yes | 12 quick-tier, 5 spot/full-tier, 1 nightly, 4 mixed — per §0.1 |
 | Multi-dump суites compare vs all fixtures | ✅ Yes | Baseline и stats файлы используют полный ReviewedFamilyLaneBaselines |
 | Per-family multi-dump suites существуют | ✅ Yes | Явно для 8+ families, включая Windows |
-| Tier status документирован per family | ❌ No | Нет явного "какая семья на каком tier" документа |
+| Tier status документирован per family | ✅ Yes | Человекочитаемый tier snapshot есть в `WAVE2_IMPLEMENTATION_STATUS_2026-04-17.md`, машинные tier metadata — в `ReviewedFamilyLaneBaselines.h` |
 | Generator-envelope containment 100k seeds | ⚠️ Likely | Monte Carlo файлы существуют, но нужна проверка scale |
 
 ### 7.5 Резюме Статуса Реализации
 
-**Общий статус: РЕАЛИЗОВАНО ~85-90% от Wave 2 плана**
+**Общий статус: РЕАЛИЗОВАНО ~90%+ от Wave 2 плана**
 
 Что полностью готово:
 - ✅ Corpus intake hardening (Workstream A)
@@ -892,10 +909,8 @@ Gap 4: Release family trust tiers
 Что требует завершения:
 - ❌ LOOCV classifier gate (Workstream E, plan §12) — не найден
 - ❌ Large corpus stress для baselines (Workstream F) — не найден явно
-- ❌ Explicit per-family tier status документация (plan §16.16) — отсутствует
-- ❌ Windows integration в release registry (Workstream G)
-- ❌ Android/iOS advisory profile promotion (Workstream G)
-- ❌ Formal CTest label wiring (plan §15) — нужна проверка
+- ⚠️ Android/iOS advisory profile promotion и release semantics всё ещё требуют явного решения (Workstream G)
+- ⚠️ Этот файл нужно держать синхронным с generated tier metadata, imported corpus и release-gating snapshot-ами
 
 ### 7.6 Не Требующие Действий: За Пределами Wave 2
 
@@ -909,18 +924,17 @@ Gap 4: Release family trust tiers
 ### 7.7 Рекомендуемые Следующие Шаги
 
 1. **Immediate (critical path):**
-   - Гарантировать, что `ReviewedFamilyLaneBaselines.h` содержит explicit tier metadata per family-lane
-   - Интегрировать Windows profiles в `TlsHelloProfileRegistry.cpp` и `profiles_validation.json`
-   - Документировать текущий tier status каждой семьи (per plan §16.16)
-   - Вернуть `Android11_OkHttp_Advisory` к network-derived Tier 1 или явно пометить как non-release
+-   - Держать этот файл синхронным с `ReviewedFamilyLaneBaselines.h` и `docs/Plans/WAVE2_IMPLEMENTATION_STATUS_2026-04-17.md`
+-   - Явно зафиксировать release semantics для advisory runtime-profile-ов (`Android11_OkHttp_Advisory`, Safari/iOS structural-only lanes)
+-   - Решить, нужен ли отдельный human promotion checklist поверх уже существующей generated metadata
 
 2. **High-priority:**
-   - Убедиться, что CTest labels `STEALTH_CORPUS_QUICK`/`STEALTH_CORPUS_FULL` проводной (проверить CMakeLists.txt)
    - Реализовать классификатор gate для Workstream E if needed
-   - Запустить generator-envelope Monte Carlo на full 100k seeds и зафиксировать results
+-   - Добавить explicit baseline stress для больших corpus refresh
+-   - Проверить/при необходимости оформить отдельные PR/nightly presets в `CMakePresets.json`
 
 3. **Nice-to-have (polish):**
-   - Переписать этот файл после завершения immediate items
+-   - Добавить сюда компактный tier snapshot, если cadence corpus refresh-ей вырастет
 
 ### 7.8 Заключение
 
@@ -1073,3 +1087,68 @@ Gap 4: Release family trust tiers
 - P2 остаётся backlog-ом и требует отдельной remediation wave с чётким red/green/survive контуром.
 
 Вывод: тезис «часть исправлений уже влита, но не всё закрыто» подтверждается кодом. Для stealth-контекста это приемлемо только как промежуточное состояние; следующий обязательный шаг — системная вычистка остаточного `V1030` кластера и medium-logic дефектов с fail-closed regression gates.
+
+### 7.11 Delta Update (2026-04-22): proxy rejection backoff overflow hardening
+
+Ниже фиксируется небольшой, но принципиальный hardening в proxy rejection retry-path, найденный уже после предыдущих soak-проходов.
+
+#### 7.11.1 Найденный дефект
+
+`ConnectionFailureBackoff::add_event(int32 now)` раньше делал прямое `wakeup_at_ = now + next_delay_` в `int32`.
+
+На длинной серии обычных отказов это не проявлялось, но на boundary-входе `now == INT32_MAX` происходил signed overflow, и `wakeup_at_` мог превращаться в отрицательное значение. Для retry primitive это недопустимо: bounded backoff не должен внезапно деградировать в wrap-around и потенциальный tight-retry path.
+
+#### 7.11.2 Что исправлено
+
+- `td/telegram/net/ConnectionRetryPolicy.cpp` теперь считает `wakeup_at_` через saturating `int64`-сложение с clamp в `INT32_MAX`;
+- добавлен отдельный adversarial regression-файл `test/stealth/test_connection_retry_policy_backoff_overflow_adversarial.cpp`;
+- новый тест pin-ит два сценария: одиночный event на `INT32_MAX` и повторный event после уже зажатого `wakeup_at_`.
+
+#### 7.11.3 Фокусная валидация
+
+Проверено на текущем head:
+
+- `./build/test/run_all_tests --filter ConnectionRetryPolicyBackoffOverflowAdversarial`: `2/2 passed`;
+- `./build/test/run_all_tests --filter ConnectionRetryPolicy`: `24/24 passed`;
+- `./build/test/run_all_tests --filter ProxyRejectionRetrySoak`: `5/5 passed`.
+
+Практический смысл этого обновления простой: retry/backoff seam теперь fail-closed не только по policy, но и по арифметике на boundary-значениях времени.
+
+### 7.12 Delta Update (2026-04-22): TLS-emulation proxy secret domain validation hardening
+
+Ниже фиксируется ещё один boundary-fix той же даты, уже не про retry arithmetic, а про входной контракт самого `ee` proxy secret.
+
+#### 7.12.1 Найденный дефект
+
+`ProxySecret::from_binary()` раньше проверял только общую длину секрета и shape `0xee | 16-byte secret | domain`, но не валидировал сам `domain` как browser-like hostname.
+
+Практически это означало два неприятных следствия:
+
+- embedded NUL, control bytes, non-ASCII мусор, empty labels и labels `>63` байт проходили как валидный TLS-emulation secret;
+- `ClientHelloExecutor` затем просто truncate-ил suffix до `ProxySecret::MAX_DOMAIN_LENGTH` и копировал его в SNI как сырые байты;
+- persisted `DcOption::parse()` дополнительно обходил boundary через `ProxySecret::from_raw(...)`, то есть даже уже сохранённый неконсистентный blob не пере-проверялся.
+
+Для stealth-контура это плохой класс дефекта: браузероподобный wire path не должен зависеть от того, насколько странные байты пользователь или повреждённое хранилище смогли протащить в host name.
+
+#### 7.12.2 Что исправлено
+
+- `td/mtproto/ProxySecret.cpp` теперь fail-closed валидирует TLS-emulation domain на boundary `from_binary()`:
+   - запрещены embedded NUL/control/non-ASCII bytes;
+   - запрещены empty labels, leading/trailing dot;
+   - запрещены labels длиннее 63 байт;
+- `truncate_if_needed` больше не служит обходом этой проверки: invalid domain остаётся invalid даже при разрешённом truncate;
+- `td/telegram/net/DcOptions.h` в `DcOption::parse()` больше не делает blind `from_raw`, а revalidate-ит persisted secret через `from_binary()` и переводит parse в error при неконсистентном содержимом;
+- новые regression-тесты вынесены в отдельные файлы:
+   - `test/stealth/test_proxy_secret_tls_domain_validation_contract.cpp`;
+   - `test/stealth/test_dc_option_secret_validation_integration.cpp`.
+
+#### 7.12.3 Фокусная валидация
+
+Проверено на текущем head:
+
+- `./build/test/run_all_tests --filter ProxySecretTlsDomainValidationContract`: `10/10 passed`;
+- `./build/test/run_all_tests --filter DcOptionSecretValidationIntegration`: `2/2 passed`;
+- focused stealth regression slice через `ctest --test-dir build --output-on-failure -j 14 -R 'Test_(ChannelKeyActivationAdversarial|CodecChannelConcurrencyStress|EncoderFrameProtocolCoverage|FrameLengthEnvelopeAdversarial|RoutePolicyEchCoverage|SessionHashDivergenceAdversarial|WireImageMemorySafetyAdversarial|ConnectionRetryPolicyBackoffOverflowAdversarial|TlsAlpnPresenceAllProfiles|StreamTransportActivationFailClosed|StreamTransportSeam)_'`: `87/87 passed`;
+- analysis contract `python3 test/analysis/test_stealth_build_contract.py`: `3/3 OK`.
+
+Operational смысл этого обновления простой: `ee`-secret перестал быть просто transport toggle с произвольным suffix, а стал явным validated input boundary. Это снижает риск malformed-SNI drift и закрывает storage-bypass для уже сохранённых `dc_options`.

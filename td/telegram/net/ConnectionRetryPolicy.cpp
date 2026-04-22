@@ -9,11 +9,17 @@
 #include "td/net/ProxySetupError.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace td {
 
 void ConnectionFailureBackoff::add_event(int32 now) {
-  wakeup_at_ = now + next_delay_;
+  auto wakeup_at = static_cast<int64>(now) + static_cast<int64>(next_delay_);
+  if (wakeup_at > std::numeric_limits<int32>::max()) {
+    wakeup_at_ = std::numeric_limits<int32>::max();
+  } else {
+    wakeup_at_ = static_cast<int32>(wakeup_at);
+  }
   next_delay_ = std::min(max_backoff_seconds(), next_delay_ * 2);
 }
 

@@ -1346,13 +1346,16 @@ TEST(Link, parse_internal_link_part3) {
                       unsupported_proxy());
   parse_internal_link("t.me/proxy?server=google.com&port=8%30&secret=ee1234567890abcdef1234567890ABCDEF0",
                       unsupported_proxy());
+  // Domain portion decodes to a single null byte (0x00) — rejected by fail-closed hostname validation.
   parse_internal_link("t.me/proxy?server=google.com&port=8%30&secret=ee1234567890abcdef1234567890ABCDEF%30%30",
-                      proxy_mtproto("google.com", 80, "7hI0VniQq83vEjRWeJCrze8A"));
+                      unsupported_proxy());
   parse_internal_link(
+      // Domain portion decodes to 9 SOH (0x01) control bytes — rejected by fail-closed hostname validation.
       "t.me/proxy?server=google.com&port=8%30&secret=ee1234567890abcdef1234567890ABCDEF010101010101010101",
-      proxy_mtproto("google.com", 80, "7hI0VniQq83vEjRWeJCrze8BAQEBAQEBAQE"));
-  parse_internal_link("t.me/proxy?server=google.com&port=8%30&secret=7tAAAAAAAAAAAAAAAAAAAAAAAAcuZ29vZ2xlLmNvbQ",
-                      proxy_mtproto("google.com", 80, "7tAAAAAAAAAAAAAAAAAAAAAAAAcuZ29vZ2xlLmNvbQ"));
+      unsupported_proxy());
+  parse_internal_link(
+      // Domain decodes to null + control bytes before "google.com" — rejected by fail-closed hostname validation.
+      "t.me/proxy?server=google.com&port=8%30&secret=7tAAAAAAAAAAAAAAAAAAAAAAAAcuZ29vZ2xlLmNvbQ", unsupported_proxy());
   parse_internal_link(
       "t.me/proxy?server=google.com&port=8%30&secret=7ge9Ug57SJOnMe8J%2BSj5pyZnaXRodWIuY29t",
       proxy_mtproto("google.com", 80, "7ge9Ug57SJOnMe8J-Sj5pyZnaXRodWIuY29t"));  // invalid, but accepted

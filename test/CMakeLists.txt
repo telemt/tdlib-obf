@@ -70,6 +70,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_fragmentation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_record_order_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_leftover_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_multi_record_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_route_stress.cpp
@@ -144,6 +145,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_capture_safari26_3_differential.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_cross_family_one_bit_differentiators.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_route_ech_quic_block_matrix.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_extension_order_template_catalog_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_wire_pattern_distinguisher_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_wire_feature_mask_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_wire_real_fixture_features_contract.cpp
@@ -203,6 +205,11 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_ping_proxy_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_classification_security.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_backoff_overflow_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_truncation_boundary_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dc_option_secret_validation_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_setup_error_emitters_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp
@@ -326,6 +333,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_drs_soak_wire.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_drs_weight_overflow_fail_closed.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_drs_jitter_overflow_fail_closed.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_payload_cap_inversion_fail_closed.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_sizing.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_padding_target.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_padding_target_adversarial.cpp
@@ -343,6 +351,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_ack_mix_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_ack_flood_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_query_bytes_boundary_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_ack_mix_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_grease_independence_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_mlkem_coefficient_distribution.cpp
@@ -416,6 +425,36 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_wire_parser_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_wire_memory_bounds.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_authentication_constant_time.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_encoder_frame_protocol_coverage.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_frame_length_envelope_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_channel_key_activation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_policy_ech_coverage.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hash_divergence_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_codec_channel_concurrency_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_wire_image_memory_safety_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_engine_monotone_saturation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_padding_policy_wire_size_overshoot_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_chaff_scheduler_budget_bypass_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_traffic_classifier_size_max_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_counter_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_box_muller_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_hints_country_boundary_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_fingerprint_classifier_blackhat.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_profile_selection_weight_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_concurrency_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_serialization_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_anchor_overflow_adversarial.cpp
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_proxy_alpn_all_profiles_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ech_cb_temporal_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_traffic_classifier_contract_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ipt_controller_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_padding_entropy_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_profile_platform_isolation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_psk_ech_coupling_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ios_ech_disabled_fingerprint_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_proxy_alpn_length_compensation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_alert_injection_adversarial.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_loading_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_loading_positive.cpp

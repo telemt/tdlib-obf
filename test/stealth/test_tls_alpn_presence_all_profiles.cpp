@@ -158,6 +158,24 @@ TEST(TlsAlpnPresenceAllProfiles, ProxyAlpnMustOnlyContainHttp11) {
   }
 }
 
+TEST(TlsAlpnPresenceAllProfiles, ProxyDefaultBuilderMustOnlyContainHttp11) {
+  NetworkRouteHints non_ru_hints;
+  non_ru_hints.is_known = true;
+  non_ru_hints.is_ru = false;
+
+  MockRng rng(42);
+  auto wire = build_proxy_tls_client_hello("www.google.com", "0123456789secret", 1712345678, non_ru_hints, rng);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+
+  auto *alpn = find_extension(parsed.ok(), kAlpnExtType);
+  ASSERT_TRUE(alpn != nullptr);
+
+  auto protos = parse_alpn_protocols(alpn->value);
+  ASSERT_EQ(1u, protos.size());
+  ASSERT_EQ(td::string("http/1.1"), protos[0].name);
+}
+
 TEST(TlsAlpnPresenceAllProfiles, BrowserDefaultAlpnMustHaveH2First) {
   // Real Chrome/Firefox/Safari all place h2 before http/1.1 in ALPN.
   // Reversed order would be a DPI anomaly.

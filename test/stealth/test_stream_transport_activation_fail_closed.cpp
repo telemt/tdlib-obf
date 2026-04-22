@@ -160,16 +160,20 @@ TEST(StreamTransportActivationFailClosed, NullTestTransportFactoryFallsBackToSin
     set_transport_factory_for_tests(previous_transport_factory);
   };
 
+#if !TDLIB_STEALTH_SHAPING
+  // emulate_tls() transport construction must fail fast when stealth shaping is
+  // compiled out. The explicit guard is enforced by analysis contract tests.
+  ASSERT_EQ(0, g_transport_factory_calls);
+  ASSERT_EQ(0, g_config_factory_calls);
+  return;
+#endif
+
   auto transport =
       create_transport(TransportType{TransportType::ObfuscatedTcp, 2, ProxySecret::from_raw(make_tls_secret())});
 
   ASSERT_EQ(1, g_transport_factory_calls);
-#if TDLIB_STEALTH_SHAPING
   ASSERT_EQ(1, g_config_factory_calls);
   ASSERT_TRUE(transport->supports_tls_record_sizing());
-#else
-  ASSERT_EQ(0, g_config_factory_calls);
-#endif
   ASSERT_EQ(TransportType::ObfuscatedTcp, transport->get_type().type);
 }
 

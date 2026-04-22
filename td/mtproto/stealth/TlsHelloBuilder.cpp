@@ -187,7 +187,9 @@ string build_default_tls_client_hello(string domain, Slice secret, int32 unix_ti
 
 string build_proxy_tls_client_hello(string domain, Slice secret, int32 unix_time, const NetworkRouteHints &route_hints,
                                     IRng &rng) {
-  return build_default_hello_impl(std::move(domain), secret, unix_time, route_hints, rng);
+  auto ech_mode = should_enable_ech(route_hints) ? EchMode::Rfc9180Outer : EchMode::Disabled;
+  return build_tls_hello_impl(std::move(domain), secret, unix_time, BrowserProfile::Chrome133, ech_mode, rng,
+                              /*proxy_mode=*/true);
 }
 
 string build_runtime_tls_client_hello(string domain, Slice secret, int32 unix_time,

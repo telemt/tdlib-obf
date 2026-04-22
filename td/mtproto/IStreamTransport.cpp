@@ -50,6 +50,11 @@ unique_ptr<IStreamTransport> create_transport(TransportType type) {
         }
         return decorator.move_as_ok();
       }
+#else
+      if (secret_copy.emulate_tls()) {
+        LOG(FATAL) << "MTProto TLS-emulation proxy secret requires TDLIB_STEALTH_SHAPING=ON. "
+                      "Rebuild TDLib with stealth shaping enabled to avoid legacy fallback fingerprinting.";
+      }
 #endif
       return std::move(inner);
     }

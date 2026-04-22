@@ -50,6 +50,7 @@ Status tls_hello_hash_mismatch_error() {
 Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_complete) {
   *is_complete = false;
   bool seen_handshake = false;
+  bool seen_change_cipher_spec = false;
 
   while (true) {
     if (it->size() < 5) {
@@ -92,6 +93,9 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
     }
 
     if (record_type == 0x14) {
+      if (seen_change_cipher_spec) {
+        return tls_hello_malformed_response_error();
+      }
       if (record_length != 1) {
         return tls_hello_malformed_response_error();
       }
@@ -100,6 +104,7 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
       if (ccs_payload != 0x01) {
         return tls_hello_malformed_response_error();
       }
+      seen_change_cipher_spec = true;
       continue;
     }
 
