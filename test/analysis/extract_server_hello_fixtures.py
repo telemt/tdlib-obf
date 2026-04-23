@@ -13,7 +13,7 @@ import pathlib
 import subprocess
 from typing import Any
 
-from common_tls import normalize_route_mode, read_sha256
+from common_tls import SERVERHELLO_ARTIFACT_TYPE, normalize_route_mode, read_sha256
 
 
 PARSER_VERSION = "tls-serverhello-parser-v1"
@@ -52,19 +52,32 @@ def _parse_extension_types(raw: str) -> list[str]:
     return [f"0x{int(value):04X}" for value in values]
 
 
+def _parse_server_endpoint(ipv4_source: str, ipv6_source: str, source_port: str) -> dict[str, Any]:
+    ip = ipv4_source.strip() or ipv6_source.strip()
+    if not ip:
+        raise ValueError("missing server source IP")
+    if not source_port.strip():
+        raise ValueError("missing server source port")
+    return {
+        "ip": ip,
+        "port": int(source_port),
+    }
+
+
 def parse_tshark_server_hello_rows(output: str, scenario_id: str, family: str) -> list[dict[str, Any]]:
     samples: list[dict[str, Any]] = []
     for line in output.splitlines():
         if not line.strip():
             continue
         parts = line.split("|")
-        if len(parts) != 5:
+        if len(parts) != 8:
             raise ValueError(f"unexpected tshark row format: {line}")
         frame_number = int(parts[0])
         record_layout_signature = _parse_content_types(parts[1])
         selected_version = _parse_hex(parts[2])
         cipher_suite = _parse_hex(parts[3])
         extensions = _parse_extension_types(parts[4])
+        server_endpoint = _parse_server_endpoint(parts[5], parts[6], parts[7])
         samples.append(
             {
                 "fixture_id": f"{scenario_id}:frame{frame_number}",
@@ -73,11 +86,26 @@ def parse_tshark_server_hello_rows(output: str, scenario_id: str, family: str) -
                 "cipher_suite": cipher_suite,
                 "extensions": extensions,
                 "record_layout_signature": record_layout_signature,
+                "server_endpoint": server_endpoint,
             }
         )
     if not samples:
         raise ValueError("no ServerHello samples found")
     return samples
+
+
+def _collect_observed_server_endpoints(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    endpoints: dict[tuple[str, int], dict[str, Any]] = {}
+    for sample in samples:
+        endpoint = sample.get("server_endpoint")
+        if not isinstance(endpoint, dict):
+            continue
+        ip = str(endpoint.get("ip", "")).strip()
+        port = int(endpoint.get("port", 0))
+        if not ip or port <= 0:
+            continue
+        endpoints[(ip, port)] = {"ip": ip, "port": port}
+    return [endpoints[key] for key in sorted(endpoints)]
 
 
 def extract_server_hello_artifact(
@@ -87,6 +115,7 @@ def extract_server_hello_artifact(
     family: str,
     source_kind: str,
     display_filter: str,
+    client_profile_id: str = "",
 ) -> dict[str, Any]:
     tshark_output = run_command(
         [
@@ -109,9 +138,17 @@ def extract_server_hello_artifact(
             "tls.handshake.ciphersuite",
             "-e",
             "tls.handshake.extension.type",
+            "-e",
+            "ip.src",
+            "-e",
+            "ipv6.src",
+            "-e",
+            "tcp.srcport",
         ]
     )
+    samples = parse_tshark_server_hello_rows(tshark_output, scenario_id, family)
     return {
+        "artifact_type": SERVERHELLO_ARTIFACT_TYPE,
         "route_mode": normalize_route_mode(route_mode),
         "scenario_id": scenario_id,
         "source_path": str(pcap_path.resolve()),
@@ -125,7 +162,12 @@ def extract_server_hello_artifact(
             "tshark_version": tshark_version(),
             "display_filter": display_filter,
         },
-        "samples": parse_tshark_server_hello_rows(tshark_output, scenario_id, family),
+        "capture_provenance": {
+            "client_profile_id": client_profile_id.strip(),
+            "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming.",
+        },
+        "observed_server_endpoints": _collect_observed_server_endpoints(samples),
+        "samples": samples,
     }
 
 
@@ -136,6 +178,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario", required=True, help="Scenario identifier used in fixture ids")
     parser.add_argument("--family", required=True, help="ServerHello family id")
     parser.add_argument("--out", required=True, help="Output artifact JSON path")
+    parser.add_argument("--client-profile-id", default="", help="Client profile id used to capture the paired ClientHello")
     parser.add_argument("--source-kind", default="browser_capture", help="Artifact source kind")
     parser.add_argument("--display-filter", default=DEFAULT_DISPLAY_FILTER, help="tshark display filter")
     return parser.parse_args()
@@ -150,6 +193,7 @@ def main() -> int:
         args.family,
         args.source_kind,
         args.display_filter,
+        args.client_profile_id,
     )
     output_path = pathlib.Path(args.out)
     output_path.parent.mkdir(parents=True, exist_ok=True)

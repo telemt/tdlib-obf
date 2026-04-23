@@ -1,10 +1,25 @@
 {
-  "capture_date_utc": "2026-04-11T14:39:24Z",
+  "artifact_type": "tls_serverhello_fixtures",
+  "capture_date_utc": "2026-04-23T15:41:12Z",
+  "capture_provenance": {
+    "client_profile_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
+    "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming."
+  },
   "extractor": {
     "display_filter": "tcp && tls.handshake.type == 2",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
   "family": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
+  "observed_server_endpoints": [
+    {
+      "ip": "192.144.14.155",
+      "port": 443
+    },
+    {
+      "ip": "192.144.14.155",
+      "port": 8443
+    }
+  ],
   "parser_version": "tls-serverhello-parser-v1",
   "route_mode": "non_ru_egress",
   "samples": [
@@ -16,12 +31,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
-      "fixture_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame52",
+      "fixture_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame52",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -31,12 +50,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
-      "fixture_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame86",
+      "fixture_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame86",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -45,12 +68,16 @@
         "0x0033"
       ],
       "fixture_family_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
-      "fixture_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame125",
+      "fixture_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame125",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -60,12 +87,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
-      "fixture_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame141",
+      "fixture_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame141",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -75,15 +106,19 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63",
-      "fixture_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame193",
+      "fixture_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello:frame193",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     }
   ],
-  "scenario_id": "imported_yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello",
+  "scenario_id": "yandex26_3_3_869_64_bit_windows10_pro_22h2_19045_6456_7762ae63_serverhello",
   "source_kind": "browser_capture",
   "source_path": "/home/david_osipov/tdlib-obf/docs/Samples/Traffic dumps/Windows/Windows_10_Pro_22H2_19045_6456,_YaBrowser_26_3_3_869_64_bit,_aut.pcap",
   "source_sha256": "2dc4696dd2926d42ea49213022b7fbd1b7aacd818fbdee0d08e23e9310e9974b",

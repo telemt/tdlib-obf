@@ -76,6 +76,13 @@ class ServerHelloMeta:
     parser_version: str
     transport: str
     source_kind: str
+    client_profile_id: str = ""
+
+
+@dataclass(frozen=True)
+class ServerEndpoint:
+    ip: str
+    port: int
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,7 @@ class ServerHello:
     extensions: list[int]
     record_layout_signature: list[int]
     metadata: ServerHelloMeta
+    server_endpoint: ServerEndpoint | None = None
 
 
 def normalize_route_mode(route_mode: str) -> str:
@@ -294,6 +302,10 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
     parser_version = _require_string_field(artifact, "parser_version")
     transport = _require_string_field(artifact, "transport")
     source_kind = _require_string_field(artifact, "source_kind")
+    capture_provenance = artifact.get("capture_provenance")
+    client_profile_id = ""
+    if isinstance(capture_provenance, dict):
+        client_profile_id = str(capture_provenance.get("client_profile_id", "")).strip()
 
     raw_samples = artifact.get("samples")
     if not isinstance(raw_samples, list):
@@ -308,6 +320,14 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
             raise ValueError("sample entry must be an object")
         fixture_id = str(sample.get("fixture_id", "")).strip()
         fixture_family_id = str(sample.get("fixture_family_id", sample.get("family", artifact.get("family", ""))))
+        raw_endpoint = sample.get("server_endpoint")
+        server_endpoint: ServerEndpoint | None = None
+        if isinstance(raw_endpoint, dict):
+            endpoint_ip = str(raw_endpoint.get("ip", "")).strip()
+            endpoint_port_raw = raw_endpoint.get("port", 0)
+            endpoint_port = int(endpoint_port_raw)
+            if endpoint_ip and endpoint_port > 0:
+                server_endpoint = ServerEndpoint(ip=endpoint_ip, port=endpoint_port)
         if not fixture_id:
             raise ValueError("server hello sample must contain fixture_id")
         if fixture_id in seen_fixture_ids:
@@ -335,7 +355,9 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
                     parser_version=parser_version,
                     transport=transport,
                     source_kind=source_kind,
+                    client_profile_id=client_profile_id,
                 ),
+                server_endpoint=server_endpoint,
             )
         )
     return samples

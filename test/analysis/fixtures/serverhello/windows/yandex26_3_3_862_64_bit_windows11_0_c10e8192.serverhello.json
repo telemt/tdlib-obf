@@ -1,10 +1,25 @@
 {
-  "capture_date_utc": "2026-04-11T14:39:26Z",
+  "artifact_type": "tls_serverhello_fixtures",
+  "capture_date_utc": "2026-04-23T15:41:11Z",
+  "capture_provenance": {
+    "client_profile_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
+    "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming."
+  },
   "extractor": {
     "display_filter": "tcp && tls.handshake.type == 2",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
   "family": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
+  "observed_server_endpoints": [
+    {
+      "ip": "192.144.14.155",
+      "port": 443
+    },
+    {
+      "ip": "192.144.14.155",
+      "port": 8443
+    }
+  ],
   "parser_version": "tls-serverhello-parser-v1",
   "route_mode": "non_ru_egress",
   "samples": [
@@ -15,12 +30,16 @@
         "0x0033"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame51",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame51",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -30,12 +49,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame60",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame60",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -45,12 +68,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame79",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame79",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -60,12 +87,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame94",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame94",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -74,12 +105,16 @@
         "0x0033"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame125",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame125",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -89,12 +124,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame135",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame135",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -104,12 +143,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame146",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame146",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -118,12 +161,16 @@
         "0x0033"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame300",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame300",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -133,12 +180,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame309",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame309",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -148,12 +199,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame325",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame325",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -163,12 +218,16 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame338",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame338",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -177,12 +236,16 @@
         "0x0033"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame386",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame386",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -192,15 +255,19 @@
         "0x0029"
       ],
       "fixture_family_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
-      "fixture_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame396",
+      "fixture_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello:frame396",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     }
   ],
-  "scenario_id": "imported_yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello",
+  "scenario_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192_serverhello",
   "source_kind": "browser_capture",
   "source_path": "/home/david_osipov/tdlib-obf/docs/Samples/Traffic dumps/Windows/Windows_11_0,_YaBrowser_26_3_3_862_64_bit,_auto_Windows_10_0,_au.pcap",
   "source_sha256": "a8f738b7217c4cc2d5279d5b5c44a019f93f3b8410e53629c13feed87b448212",

@@ -1,10 +1,25 @@
 {
-  "capture_date_utc": "2026-04-11T14:39:00Z",
+  "artifact_type": "tls_serverhello_fixtures",
+  "capture_date_utc": "2026-04-23T15:40:36Z",
+  "capture_provenance": {
+    "client_profile_id": "chrome146_0_7680_178_android16_0f91bfe0",
+    "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming."
+  },
   "extractor": {
     "display_filter": "tcp && tls.handshake.type == 2",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
   "family": "chrome146_0_7680_178_android16_0f91bfe0",
+  "observed_server_endpoints": [
+    {
+      "ip": "192.144.14.155",
+      "port": 443
+    },
+    {
+      "ip": "192.144.14.155",
+      "port": 8443
+    }
+  ],
   "parser_version": "tls-serverhello-parser-v1",
   "route_mode": "non_ru_egress",
   "samples": [
@@ -15,12 +30,16 @@
         "0x0033"
       ],
       "fixture_family_id": "chrome146_0_7680_178_android16_0f91bfe0",
-      "fixture_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame64",
+      "fixture_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame64",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -29,12 +48,16 @@
         "0x0033"
       ],
       "fixture_family_id": "chrome146_0_7680_178_android16_0f91bfe0",
-      "fixture_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame135",
+      "fixture_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame135",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -43,12 +66,16 @@
         "0x0033"
       ],
       "fixture_family_id": "chrome146_0_7680_178_android16_0f91bfe0",
-      "fixture_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame237",
+      "fixture_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame237",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -57,12 +84,16 @@
         "0x0033"
       ],
       "fixture_family_id": "chrome146_0_7680_178_android16_0f91bfe0",
-      "fixture_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame305",
+      "fixture_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame305",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -71,15 +102,19 @@
         "0x0033"
       ],
       "fixture_family_id": "chrome146_0_7680_178_android16_0f91bfe0",
-      "fixture_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame340",
+      "fixture_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello:frame340",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     }
   ],
-  "scenario_id": "imported_chrome146_0_7680_178_android16_0f91bfe0_serverhello",
+  "scenario_id": "chrome146_0_7680_178_android16_0f91bfe0_serverhello",
   "source_kind": "browser_capture",
   "source_path": "/home/david_osipov/tdlib-obf/docs/Samples/Traffic dumps/Android/Android_16,_Chrome_146_0_7680_178,_auto_Android_10,_auto_Google.pcap",
   "source_sha256": "3c7157e96796bcdc8ee9a15631bf1e8b7f7418ccca8e2f710815bf647ca7d9ad",

@@ -1,10 +1,25 @@
 {
-  "capture_date_utc": "2026-04-11T14:39:50Z",
+  "artifact_type": "tls_serverhello_fixtures",
+  "capture_date_utc": "2026-04-23T15:41:00Z",
+  "capture_provenance": {
+    "client_profile_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
+    "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming."
+  },
   "extractor": {
     "display_filter": "tcp && tls.handshake.type == 2",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
   "family": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
+  "observed_server_endpoints": [
+    {
+      "ip": "192.144.14.155",
+      "port": 443
+    },
+    {
+      "ip": "192.144.14.155",
+      "port": 8443
+    }
+  ],
   "parser_version": "tls-serverhello-parser-v1",
   "route_mode": "non_ru_egress",
   "samples": [
@@ -15,12 +30,16 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame22",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame22",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -29,12 +48,16 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame82",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame82",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -43,12 +66,16 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame100",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame100",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -57,12 +84,16 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame222",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame222",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -71,12 +102,16 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame290",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame290",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -85,15 +120,19 @@
         "0x0033"
       ],
       "fixture_family_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e",
-      "fixture_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame313",
+      "fixture_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello:frame313",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     }
   ],
-  "scenario_id": "imported_safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello",
+  "scenario_id": "safari26_4_21624_1_16_11_4_macostahoe_26_4_25e246_arm64_e918887e_serverhello",
   "source_kind": "browser_capture",
   "source_path": "/home/david_osipov/tdlib-obf/docs/Samples/Traffic dumps/macOS/macOS_Tahoe_26_4_25E246_arm64,_Safari_26_4_21624_1_16_11_4,_auto.pcap",
   "source_sha256": "c80ba3c847b74a0a6675b4dbff98c3ae3db4f6076ebf302eeaa3d5083c099cd3",

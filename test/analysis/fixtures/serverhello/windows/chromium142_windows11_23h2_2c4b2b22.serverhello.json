@@ -1,10 +1,25 @@
 {
-  "capture_date_utc": "2026-04-11T14:39:27Z",
+  "artifact_type": "tls_serverhello_fixtures",
+  "capture_date_utc": "2026-04-23T15:41:05Z",
+  "capture_provenance": {
+    "client_profile_id": "chromium142_windows11_23h2_2c4b2b22",
+    "path_layout_note": "ServerHello fixture path mirrors client capture provenance; validation keys on fixture_family_id and source metadata, not OS directory naming."
+  },
   "extractor": {
     "display_filter": "tcp && tls.handshake.type == 2",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
   "family": "chromium142_windows11_23h2_2c4b2b22",
+  "observed_server_endpoints": [
+    {
+      "ip": "192.144.14.155",
+      "port": 443
+    },
+    {
+      "ip": "192.144.14.155",
+      "port": 8443
+    }
+  ],
   "parser_version": "tls-serverhello-parser-v1",
   "route_mode": "non_ru_egress",
   "samples": [
@@ -16,12 +31,16 @@
         "0x0029"
       ],
       "fixture_family_id": "chromium142_windows11_23h2_2c4b2b22",
-      "fixture_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello:frame85",
+      "fixture_id": "chromium142_windows11_23h2_2c4b2b22_serverhello:frame85",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -31,12 +50,16 @@
         "0x0029"
       ],
       "fixture_family_id": "chromium142_windows11_23h2_2c4b2b22",
-      "fixture_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello:frame218",
+      "fixture_id": "chromium142_windows11_23h2_2c4b2b22_serverhello:frame218",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -46,12 +69,16 @@
         "0x0029"
       ],
       "fixture_family_id": "chromium142_windows11_23h2_2c4b2b22",
-      "fixture_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello:frame231",
+      "fixture_id": "chromium142_windows11_23h2_2c4b2b22_serverhello:frame231",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -60,12 +87,16 @@
         "0x0033"
       ],
       "fixture_family_id": "chromium142_windows11_23h2_2c4b2b22",
-      "fixture_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello:frame308",
+      "fixture_id": "chromium142_windows11_23h2_2c4b2b22_serverhello:frame308",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     },
     {
       "cipher_suite": "0x1301",
@@ -75,15 +106,19 @@
         "0x0029"
       ],
       "fixture_family_id": "chromium142_windows11_23h2_2c4b2b22",
-      "fixture_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello:frame356",
+      "fixture_id": "chromium142_windows11_23h2_2c4b2b22_serverhello:frame356",
       "record_layout_signature": [
         22,
         20
       ],
-      "selected_version": "0x0304"
+      "selected_version": "0x0304",
+      "server_endpoint": {
+        "ip": "192.144.14.155",
+        "port": 8443
+      }
     }
   ],
-  "scenario_id": "imported_chromium142_windows11_23h2_2c4b2b22_serverhello",
+  "scenario_id": "chromium142_windows11_23h2_2c4b2b22_serverhello",
   "source_kind": "browser_capture",
   "source_path": "/home/david_osipov/tdlib-obf/docs/Samples/Traffic dumps/Windows/Windows_11_23h2,_Chromium_142,_auto_Windows_10_0,_auto_Chromium.pcap",
   "source_sha256": "ad59c803602c23f8ebb7377db5ffb3a26d714e3bfe6db8d4ea02323feae2e63e",

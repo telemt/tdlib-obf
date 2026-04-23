@@ -55,16 +55,18 @@ def make_server_hello_artifact(
     source_kind: str = "browser_capture",
     scenario_id: str = "chrome133_serverhello",
     source_path: str = "/captures/chrome133_serverhello.pcapng",
-    source_sha256: str = "artifact-sha256",
+    source_sha256: str = "a" * 64,
     family: str = "chromium_44cd_mlkem_linux_desktop",
 ) -> dict:
     return {
+        "artifact_type": "tls_serverhello_fixtures",
         "route_mode": route_mode,
         "scenario_id": scenario_id,
         "source_path": source_path,
         "source_sha256": source_sha256,
         "parser_version": parser_version,
         "source_kind": source_kind,
+        "transport": "tcp",
         "samples": [
             {
                 "fixture_id": "chrome133_serverhello:frame8",
@@ -73,8 +75,15 @@ def make_server_hello_artifact(
                 "cipher_suite": "0x1301",
                 "extensions": ["0x002b", "0x0033"],
                 "record_layout_signature": [22, 20] if layout_signature is None else list(layout_signature),
+                "server_endpoint": {
+                    "ip": "142.250.186.46",
+                    "port": 443,
+                },
             }
         ],
+        "capture_provenance": {
+            "client_profile_id": "chrome133_linux_desktop"
+        },
     }
 
 
@@ -124,13 +133,13 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
     def test_rejects_parser_version_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_path = pathlib.Path(temp_dir) / "serverhello.json"
-            artifact_path.write_text(
-                json.dumps(make_server_hello_artifact(parser_version="tls-serverhello-parser-v2")),
-                encoding="utf-8",
-            )
+            artifact_path.write_text(json.dumps(make_server_hello_artifact()), encoding="utf-8")
             samples = load_server_hello_artifact(artifact_path)
 
-        ok, failures = check_server_hello_matrix(samples, make_registry())
+        registry = make_registry()
+        registry["server_hello_matrix"]["chromium_44cd_mlkem_linux_desktop"]["parser_version"] = "tls-serverhello-parser-v2"
+
+        ok, failures = check_server_hello_matrix(samples, registry)
 
         self.assertFalse(ok)
         self.assertIn("sample[0]: parser version mismatch for family chromium_44cd_mlkem_linux_desktop", failures)
@@ -145,12 +154,8 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_path = pathlib.Path(temp_dir) / "serverhello-duplicate-fixture-id.json"
             artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
-            samples = load_server_hello_artifact(artifact_path)
-
-        ok, failures = check_server_hello_matrix(samples, make_registry())
-
-        self.assertFalse(ok)
-        self.assertIn("sample[1]: duplicate fixture_id chrome133_serverhello:frame8", failures)
+            with self.assertRaises(ValueError):
+                load_server_hello_artifact(artifact_path)
 
     def test_rejects_fixed_synthetic_layout_collapse(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -192,6 +197,20 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertIn("sample[0]: non-authoritative ServerHello source_kind advisory_code_sample", failures)
+
+    def test_rejects_missing_observed_server_endpoint(self) -> None:
+        artifact = make_server_hello_artifact()
+        del artifact["samples"][0]["server_endpoint"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = pathlib.Path(temp_dir) / "serverhello-missing-endpoint.json"
+            artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+            samples = load_server_hello_artifact(artifact_path)
+
+        ok, failures = check_server_hello_matrix(samples, make_registry())
+
+        self.assertFalse(ok)
+        self.assertIn("sample[0]: missing observed server endpoint", failures)
 
     def test_rejects_mixed_scenario_id_batch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -238,11 +257,11 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
             first_path = pathlib.Path(temp_dir) / "serverhello-sha-a.json"
             second_path = pathlib.Path(temp_dir) / "serverhello-sha-b.json"
             first_path.write_text(
-                json.dumps(make_server_hello_artifact(source_sha256="artifact-sha256-a")),
+                json.dumps(make_server_hello_artifact(source_sha256="a" * 64)),
                 encoding="utf-8",
             )
             second_path.write_text(
-                json.dumps(make_server_hello_artifact(source_sha256="artifact-sha256-b")),
+                json.dumps(make_server_hello_artifact(source_sha256="b" * 64)),
                 encoding="utf-8",
             )
 
@@ -257,23 +276,15 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_path = pathlib.Path(temp_dir) / "serverhello-missing-source-path.json"
             artifact_path.write_text(json.dumps(make_server_hello_artifact(source_path="")), encoding="utf-8")
-            samples = load_server_hello_artifact(artifact_path)
-
-        ok, failures = check_server_hello_matrix(samples, make_registry())
-
-        self.assertFalse(ok)
-        self.assertIn("sample[0]: missing source_path", failures)
+            with self.assertRaises(ValueError):
+                load_server_hello_artifact(artifact_path)
 
     def test_rejects_missing_source_sha256(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             artifact_path = pathlib.Path(temp_dir) / "serverhello-missing-source-sha.json"
             artifact_path.write_text(json.dumps(make_server_hello_artifact(source_sha256="")), encoding="utf-8")
-            samples = load_server_hello_artifact(artifact_path)
-
-        ok, failures = check_server_hello_matrix(samples, make_registry())
-
-        self.assertFalse(ok)
-        self.assertIn("sample[0]: missing source_sha256", failures)
+            with self.assertRaises(ValueError):
+                load_server_hello_artifact(artifact_path)
 
     def test_rejects_mixed_fixture_family_batch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

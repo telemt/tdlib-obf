@@ -98,6 +98,9 @@ def check_server_hello_matrix(samples: list[ServerHello], registry: dict[str, An
                 f"sample[{index}]: non-authoritative ServerHello source_kind {sample.metadata.source_kind}"
             )
             continue
+        if sample.server_endpoint is None:
+            failures.append(f"sample[{index}]: missing observed server endpoint")
+            continue
 
         family = sample.metadata.fixture_family_id
         policy = matrix.get(family)

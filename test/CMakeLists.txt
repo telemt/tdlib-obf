@@ -99,6 +99,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_proxy_route_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_light_fuzz.cpp
@@ -219,8 +220,12 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_backoff_overflow_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_contract_mutation_smoke.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_truncation_boundary_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dc_option_secret_validation_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_recovery_proxy_secret_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_proxy_inheritance_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_setup_error_emitters_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp

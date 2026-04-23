@@ -849,8 +849,9 @@ Result<mtproto::TransportType> ConnectionCreator::resolve_raw_ip_transport_type(
     if (requested_transport_type.type != mtproto::TransportType::ObfuscatedTcp) {
       return Status::Error("MTProto proxy raw-IP route requires ObfuscatedTcp transport");
     }
+    TRY_RESULT(validated_proxy_secret, mtproto::ProxySecret::from_binary(proxy.secret().get_raw_secret()));
     return mtproto::TransportType{mtproto::TransportType::ObfuscatedTcp, requested_transport_type.dc_id,
-                                  proxy.secret()};
+                                  std::move(validated_proxy_secret)};
   }
 
   return requested_transport_type;

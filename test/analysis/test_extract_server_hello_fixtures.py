@@ -10,7 +10,10 @@ from extract_server_hello_fixtures import parse_tshark_server_hello_rows
 
 class ExtractServerHelloFixturesTest(unittest.TestCase):
     def test_parses_server_hello_rows_into_artifact_samples(self) -> None:
-        rows = "7|22,20|0x0304|0x1301|43,51,41\n8|22,20|0x0304|0x1301|43,51\n"
+        rows = (
+            "7|22,20|0x0304|0x1301|43,51,41|142.250.186.46||443\n"
+            "8|22,20|0x0304|0x1301|43,51|142.250.186.46||443\n"
+        )
 
         samples = parse_tshark_server_hello_rows(rows, "chrome146_serverhello", "chromium_44cd_mlkem_linux_desktop")
 
@@ -21,6 +24,15 @@ class ExtractServerHelloFixturesTest(unittest.TestCase):
         self.assertEqual("0x0304", samples[0]["selected_version"])
         self.assertEqual("0x1301", samples[0]["cipher_suite"])
         self.assertEqual(["0x002B", "0x0033", "0x0029"], samples[0]["extensions"])
+        self.assertEqual({"ip": "142.250.186.46", "port": 443}, samples[0]["server_endpoint"])
+
+    def test_uses_ipv6_server_source_when_ipv4_source_is_empty(self) -> None:
+        rows = "12|22,20|0x0304|0x1301|43,51||2a00:1450:4001:829::200e|443\n"
+
+        samples = parse_tshark_server_hello_rows(rows, "chrome146_serverhello", "chromium_44cd_mlkem_linux_desktop")
+
+        self.assertEqual(1, len(samples))
+        self.assertEqual({"ip": "2a00:1450:4001:829::200e", "port": 443}, samples[0]["server_endpoint"])
 
     def test_rejects_malformed_tshark_rows(self) -> None:
         with self.assertRaises(ValueError):

@@ -70,6 +70,8 @@ def run_generation(registry_path: pathlib.Path, input_root: pathlib.Path, output
                 family,
                 "--out",
                 str(output_path),
+                "--client-profile-id",
+                str(artifact.get("profile_id", "")),
             ],
             check=True,
         )
