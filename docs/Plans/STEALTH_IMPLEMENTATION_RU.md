@@ -288,6 +288,30 @@ Stealth-ветка выдвигает более строгое требован
 - `test/stealth/test_connection_creator_proxy_route_security.cpp` фиксирует route policy для explicit raw-IP соединений;
 - `test/stealth/test_connection_creator_ping_proxy_security.cpp` фиксирует, что `nullptr` в ping API означает «использовать активный proxy, если он уже включён», а не «обходить его».
 
+#### Обновление 2026-04-23: raw-IP recovery теперь согласован с proxy secret/SNI policy
+
+После закрытия direct-SYN обхода в том же recovery-path оставалась ещё одна утечка, но уже на уровне transport secret.
+
+- `ConfigManager::get_full_config(...)` в ветке `request_raw_connection_by_ip(...)` передавал `TransportType` с `option_.get_secret()` (секрет из `DcOption`);
+- при активном MTProto proxy это означало, что TCP dial шёл к proxy IP (что уже правильно), но TLS-emulated lane мог строиться с чужим доменом из `DcOption`, а не с доменом активного proxy;
+- на реальном capture это проявлялось как короткие попытки с `SNI=www.google.com` и `fatal unrecognized_name (112)` от proxy, в то время как соседние успешные попытки шли с `SNI=api.realhosters.com`.
+
+Текущее поведение после апдейта:
+
+- в `ConnectionCreator` добавлен явный seam `resolve_raw_ip_transport_type(...)`;
+- `request_raw_connection_by_ip(...)` теперь всегда пропускает входной transport через этот seam до `prepare_connection(...)` и `RawConnection::create(...)`;
+- при активном `MTProto` proxy разрешается только `ObfuscatedTcp` (иначе fail-closed ошибка), а secret принудительно берётся из `proxy.secret()`;
+- для direct / `SOCKS5` / `HTTP TCP` веток запрошенный transport сохраняется как раньше.
+
+Смысл изменения: raw-IP recovery path теперь использует тот же source of truth для secret/SNI, что и обычный session-path (`get_transport_type(...)`), и больше не может «подмешать» DC-level secret в proxy TLS lane.
+
+Под это добавлены отдельные регрессии:
+
+- `test/stealth/test_connection_creator_raw_ip_transport_contract.cpp`;
+- `test/stealth/test_connection_creator_raw_ip_transport_adversarial.cpp`;
+- `test/stealth/test_connection_creator_raw_ip_transport_light_fuzz.cpp`;
+- расширение `test/stealth/test_connection_creator_proxy_route_security.cpp` для `HTTP TCP` explicit raw-IP route.
+
 ### 1.15. Runtime params loader сделан с security hardening, а не как «прочитать JSON как-нибудь»
 
 В `td/mtproto/stealth/StealthRuntimeParams.*` и `StealthParamsLoader.cpp` реализованы:
@@ -360,6 +384,7 @@ Stealth-ветка выдвигает более строгое требован
 
 - `ImmediateClose`: peer закрывает сокет до валидного ответа;
 - `MalformedTlsResponse`: peer отдаёт TLS-like ответ с заведомо некорректной структурой;
+- `TlsFatalUnrecognizedNameAlert`: peer возвращает TLS `Alert(Level=Fatal, Description=Unrecognized Name)`;
 - `WrongRegimeHttpResponse`: peer отвечает HTTP-префиксом вместо TLS record;
 - `WrongRegimeSocksResponse`: peer отвечает SOCKS-подобным префиксом в TLS lane.
 
@@ -379,6 +404,7 @@ Stealth-ветка выдвигает более строгое требован
 Что фиксирует:
 
 - реальный `TlsInit` path выдаёт нужный typed status code на malformed TLS;
+- TLS fatal `unrecognized_name` в текущем parser-policy классифицируется как `TlsHelloMalformedResponse` и идёт по deterministic proxy-reject ветке;
 - wrong-regime через HTTP bytes действительно отделён от malformed TLS;
 - immediate close не деградирует обратно в безликий generic path;
 - SOCKS-like response в TLS lane тоже маркируется как wrong-regime reject.

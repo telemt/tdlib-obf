@@ -33,6 +33,21 @@ TEST(ProxyRejectionRetryHarnessIntegration, MalformedTlsScenarioProducesTypedDet
             static_cast<td::int32>(classification.reason));
 }
 
+TEST(ProxyRejectionRetryHarnessIntegration,
+     TlsFatalUnrecognizedNameAlertIsClassifiedAsDeterministicTlsMalformedResponse) {
+  auto status =
+      td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::TlsFatalUnrecognizedNameAlert);
+  ASSERT_TRUE(status.is_error());
+
+  auto classification = td::classify_connection_failure(true, tls_proxy(), status);
+
+  ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::TlsHelloMalformedResponse), status.code());
+  ASSERT_TRUE(classification.is_deterministic_proxy_rejection());
+  ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureStage::TlsHello), static_cast<td::int32>(classification.stage));
+  ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureReason::MalformedResponse),
+            static_cast<td::int32>(classification.reason));
+}
+
 TEST(ProxyRejectionRetryHarnessIntegration, WrongRegimeScenarioProducesTypedDeterministicReject) {
   auto status = td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::WrongRegimeHttpResponse);
   ASSERT_TRUE(status.is_error());

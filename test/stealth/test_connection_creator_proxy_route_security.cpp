@@ -50,6 +50,18 @@ TEST(ConnectionCreatorProxyRouteSecurity, Socks5RawIpRouteTunnelsTelegramAddress
   ASSERT_EQ(route.ok().mtproto_ip_address.get_port(), 443);
 }
 
+TEST(ConnectionCreatorProxyRouteSecurity, HttpTcpRawIpRouteTunnelsTelegramAddress) {
+  auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(
+      td::Proxy::http_tcp("proxy.example", 8080, "user", "password"), ipv4_address("203.0.113.30", 8080),
+      ipv4_address("149.154.167.50", 443));
+  ASSERT_TRUE(route.is_ok());
+
+  ASSERT_EQ(route.ok().socket_ip_address.get_ip_str(), "203.0.113.30");
+  ASSERT_EQ(route.ok().socket_ip_address.get_port(), 8080);
+  ASSERT_EQ(route.ok().mtproto_ip_address.get_ip_str(), "149.154.167.50");
+  ASSERT_EQ(route.ok().mtproto_ip_address.get_port(), 443);
+}
+
 TEST(ConnectionCreatorProxyRouteSecurity, ProxyRawIpRouteFailsClosedWithoutResolvedProxyAddress) {
   auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(
       td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), td::IPAddress(),

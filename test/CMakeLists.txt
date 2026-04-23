@@ -99,6 +99,9 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_light_fuzz.cpp
@@ -222,6 +225,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_profile_record_limit.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_ipt_fail_closed.cpp

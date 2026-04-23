@@ -98,6 +98,8 @@ class ConnectionCreator final : public NetQueryCallback {
   static Result<RawIpConnectionRoute> resolve_raw_ip_connection_route(const Proxy &proxy,
                                                                       const IPAddress &proxy_ip_address,
                                                                       const IPAddress &target_ip_address);
+  static Result<mtproto::TransportType> resolve_raw_ip_transport_type(
+      const Proxy &proxy, const mtproto::TransportType &requested_transport_type);
   static Proxy resolve_effective_ping_proxy(const Proxy &active_proxy, const Proxy *requested_proxy);
 
   struct ProxyAddressCandidates {

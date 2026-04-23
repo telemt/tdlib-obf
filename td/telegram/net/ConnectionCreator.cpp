@@ -839,6 +839,23 @@ Result<ConnectionCreator::RawIpConnectionRoute> ConnectionCreator::resolve_raw_i
   return Status::Error("HTTP caching proxy is unsupported for explicit IP connection requests");
 }
 
+Result<mtproto::TransportType> ConnectionCreator::resolve_raw_ip_transport_type(
+    const Proxy &proxy, const mtproto::TransportType &requested_transport_type) {
+  if (!proxy.use_proxy()) {
+    return requested_transport_type;
+  }
+
+  if (proxy.use_mtproto_proxy()) {
+    if (requested_transport_type.type != mtproto::TransportType::ObfuscatedTcp) {
+      return Status::Error("MTProto proxy raw-IP route requires ObfuscatedTcp transport");
+    }
+    return mtproto::TransportType{mtproto::TransportType::ObfuscatedTcp, requested_transport_type.dc_id,
+                                  proxy.secret()};
+  }
+
+  return requested_transport_type;
+}
+
 Proxy ConnectionCreator::resolve_effective_ping_proxy(const Proxy &active_proxy, const Proxy *requested_proxy) {
   if (requested_proxy != nullptr) {
     return *requested_proxy;
@@ -942,6 +959,7 @@ void ConnectionCreator::request_raw_connection_by_ip(IPAddress ip_address, mtpro
                                                      Promise<unique_ptr<mtproto::RawConnection>> promise) {
   Proxy proxy = active_proxy_id_ == 0 ? Proxy() : proxies_[active_proxy_id_];
   TRY_RESULT_PROMISE(promise, route, resolve_raw_ip_connection_route(proxy, proxy_ip_address_, ip_address));
+  TRY_RESULT_PROMISE(promise, effective_transport_type, resolve_raw_ip_transport_type(proxy, transport_type));
 
   SocketFd socket_fd;
   if (proxy.use_proxy()) {
@@ -957,22 +975,22 @@ void ConnectionCreator::request_raw_connection_by_ip(IPAddress ip_address, mtpro
   }
 
   auto connection_promise = PromiseCreator::lambda([actor_id = actor_id(this), promise = std::move(promise),
-                                                    transport_type, network_generation = network_generation_,
+                                                    effective_transport_type, network_generation = network_generation_,
                                                     ip_address](Result<ConnectionData> r_connection_data) mutable {
     if (r_connection_data.is_error()) {
       return promise.set_error(400, r_connection_data.error().public_message());
     }
     auto connection_data = r_connection_data.move_as_ok();
     auto raw_connection = mtproto::RawConnection::create(ip_address, std::move(connection_data.buffered_socket_fd),
-                                                         transport_type, nullptr);
+                                                         effective_transport_type, nullptr);
     raw_connection->extra().extra = network_generation;
     promise.set_value(std::move(raw_connection));
   });
 
   auto token = next_token();
   auto ref = prepare_connection(route.socket_ip_address, std::move(socket_fd), proxy, route.mtproto_ip_address,
-                                transport_type, "Raw", route.debug_str, nullptr, create_reference(token), false,
-                                std::move(connection_promise));
+                                effective_transport_type, "Raw", route.debug_str, nullptr, create_reference(token),
+                                false, std::move(connection_promise));
   if (!ref.empty()) {
     children_[token] = {false, std::move(ref)};
   }

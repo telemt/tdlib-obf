@@ -29,6 +29,7 @@ namespace test {
 enum class ProxyRejectScenario {
   ImmediateClose,
   MalformedTlsResponse,
+  TlsFatalUnrecognizedNameAlert,
   WrongRegimeHttpResponse,
   WrongRegimeSocksResponse,
 };
@@ -77,6 +78,19 @@ inline Status run_tls_proxy_rejection_scenario(ProxyRejectScenario scenario) {
       response[3] = static_cast<char>(0x41);
       response[4] = static_cast<char>(0x01);
       auto write_status = mtproto::test::write_all(socket_pair.peer, response);
+      if (write_status.is_error()) {
+        return write_status;
+      }
+      auto &fd = mtproto::test::TlsInitTestPeer::fd(tls_init);
+      fd.get_poll_info().add_flags(PollFlags::Read());
+      auto flush_status = fd.flush_read();
+      if (flush_status.is_error()) {
+        return flush_status.move_as_error();
+      }
+      return mtproto::test::TlsInitTestPeer::wait_hello_response(tls_init);
+    }
+    case ProxyRejectScenario::TlsFatalUnrecognizedNameAlert: {
+      auto write_status = mtproto::test::write_all(socket_pair.peer, Slice("\x15\x03\x03\x00\x02\x02\x70", 7));
       if (write_status.is_error()) {
         return write_status;
       }
