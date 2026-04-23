@@ -219,7 +219,7 @@ std::string TD_TL_writer_hpp::gen_additional_proxy_function_begin(const std::str
       "template <class T>\n"
       "bool downcast_call(" +
       class_name +
-      " &obj, const T &func) {\n"
+      " &obj, const T &func) {  //-V2008\n"
       "  switch (obj.get_id()) {\n";
 }
 

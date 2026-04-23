@@ -52,13 +52,14 @@
 namespace td {
 
 static string temporary_dir;
+static constexpr int32 kPrivateDirectoryMode = 488;  // rwxr-x---
 
 Status set_temporary_dir(CSlice dir) {
   string input_dir = dir.str();
   if (!dir.empty() && dir.back() != TD_DIR_SLASH) {
     input_dir += TD_DIR_SLASH;
   }
-  TRY_STATUS(mkpath(input_dir, 0750));
+  TRY_STATUS(mkpath(input_dir, kPrivateDirectoryMode));
   TRY_RESULT_ASSIGN(temporary_dir, realpath(input_dir));
   return Status::OK();
 }

@@ -293,13 +293,13 @@ Result<BufferSlice> Decryptor::append(BufferSlice data) {
   sha256_state_.feed(data.as_slice());
   if (!skipped_prefix_) {
     to_skip_ = data.as_slice().ubegin()[0];
-    size_t to_skip = min(to_skip_, data.size());
-    if (to_skip_ > data.size()) {
-      to_skip_ = 0;  // to fail final to_skip check
-    }
+    remaining_prefix_to_skip_ = to_skip_;
     skipped_prefix_ = true;
-    data = data.from_slice(data.as_slice().remove_prefix(to_skip));
   }
+
+  auto to_skip_now = min(remaining_prefix_to_skip_, data.size());
+  remaining_prefix_to_skip_ -= to_skip_now;
+  data = data.from_slice(data.as_slice().remove_prefix(to_skip_now));
   return std::move(data);
 }
 
@@ -307,7 +307,7 @@ Result<ValueHash> Decryptor::finish() {
   if (!skipped_prefix_) {
     return Status::Error("No data was given");
   }
-  if (to_skip_ < 32) {
+  if (to_skip_ < 32 || remaining_prefix_to_skip_ != 0) {
     return Status::Error("Too small random prefix");
   }
 

@@ -41,8 +41,8 @@ static bool is_suitable(int file_number, int file_count, int &counter) {
 template <class T>
 void gen_to_json_constructor(StringBuilder &sb, const T *constructor, bool is_header,
                              td::FlatHashSet<std::string> &to_json_types) {
-  sb << "void to_json(JsonValueScope &jv, "
-     << "const td_api::" << tl::simple::gen_cpp_name(constructor->name) << " &object)";
+  sb << "void to_json(JsonValueScope &jv, " << "const td_api::" << tl::simple::gen_cpp_name(constructor->name)
+     << " &object)";
   if (is_header) {
     to_json_types.insert(constructor->name);
     sb << ";\n\n";
@@ -276,7 +276,7 @@ Status from_json(td_api::object_ptr<Function> &to, td::JsonValue from) {
   return td::from_json(to, std::move(from));
 }
 
-void to_json(JsonValueScope &jv, const Object &object) {
+void to_json(JsonValueScope &jv, const Object &object) {  //-V2008
   switch (object.get_id()) {
 )ABCD";
     std::vector<std::string> type_names;

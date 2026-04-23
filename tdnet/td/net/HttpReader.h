@@ -64,6 +64,8 @@ class HttpReader {
   Slice content_encoding_;
   Slice content_type_;
   string content_type_lowercased_;
+  bool has_content_length_header_ = false;
+  uint64 raw_content_length_ = 0;
   size_t total_parameters_length_ = 0;
   size_t total_headers_length_ = 0;
 
@@ -91,7 +93,7 @@ class HttpReader {
   Result<size_t> do_read_next(bool can_be_slow);
 
   Result<size_t> split_header() TD_WARN_UNUSED_RESULT;
-  void process_header(MutableSlice header_name, MutableSlice header_value);
+  Status process_header(MutableSlice header_name, MutableSlice header_value);
   Result<bool> parse_multipart_form_data(bool can_be_slow) TD_WARN_UNUSED_RESULT;
   Status parse_url(MutableSlice url) TD_WARN_UNUSED_RESULT;
   Status parse_parameters(MutableSlice parameters) TD_WARN_UNUSED_RESULT;

@@ -54,7 +54,7 @@ Result<int32> HttpDate::parse_http_date(string slice) {
   p.skip_nofail('0');
   TRY_RESULT(day, to_integer_safe<int32>(p.read_word()));
   auto month_name = p.read_word();
-  to_lower_inplace(month_name);
+  static_cast<void>(to_lower_inplace(month_name));
   TRY_RESULT(year, to_integer_safe<int32>(p.read_word()));
   p.skip_whitespaces();
   p.skip_nofail('0');

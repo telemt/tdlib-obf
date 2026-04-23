@@ -75,7 +75,7 @@ class HttpHeaderCreator {
  private:
   static CSlice get_status_line(int http_status_code);
 
-  char header_[MAX_HEADER];
+  char header_[MAX_HEADER]{};
   StringBuilder sb_;
 };
 

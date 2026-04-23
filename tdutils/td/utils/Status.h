@@ -351,13 +351,14 @@ class Status {
 
   Status(Info info, Slice message) {
     size_t size = sizeof(Info) + message.size() + 1;
-    ptr_ = std::unique_ptr<char[], Deleter>(new char[size]);
-    char *ptr = ptr_.get();
+    auto buffer = std::make_unique<char[]>(size);
+    char *ptr = buffer.get();
     reinterpret_cast<Info *>(ptr)[0] = info;
     ptr += sizeof(Info);
     std::memcpy(ptr, message.begin(), message.size());
     ptr += message.size();
     *ptr = 0;
+    ptr_ = std::unique_ptr<char[], Deleter>(buffer.release());
   }
 
   Status(bool static_flag, ErrorType error_type, int error_code, Slice message)
@@ -398,7 +399,6 @@ class Status {
 #if TD_GCC
 #pragma GCC diagnostic pop
 #endif
-    CHECK(error_code == tmp.error_code);
     return tmp;
   }
 

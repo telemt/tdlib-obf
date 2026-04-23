@@ -2007,7 +2007,7 @@ LinkManager::LinkInfo LinkManager::get_link_info(Slice link) {
     }
 
     auto host = url_decode(http_url.host_, false);
-    to_lower_inplace(host);
+    static_cast<void>(to_lower_inplace(host));
     if (ends_with(host, ".t.me") && host.size() >= 9 && host.find('.') == host.size() - 5) {
       Slice subdomain(&host[0], host.size() - 5);
       static const FlatHashSet<Slice, SliceHash> disallowed_subdomains(

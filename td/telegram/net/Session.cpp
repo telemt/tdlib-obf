@@ -444,6 +444,16 @@ bool Session::resolve_need_create_main_auth_key(bool can_destroy_auth_key, bool 
   return !can_destroy_auth_key && need_main_auth_key && now >= reauth_not_before;
 }
 
+Session::ConnectionOnlineUpdateDecision Session::resolve_connection_online_update_decision(
+    bool current_connection_online_flag, bool online_flag, bool logging_out_flag, bool has_queries,
+    double last_activity_timestamp, double now, bool is_primary, bool force) {
+  ConnectionOnlineUpdateDecision decision;
+  decision.new_connection_online_flag =
+      (online_flag || logging_out_flag) && (has_queries || last_activity_timestamp + 10 > now || is_primary);
+  decision.should_update = force || current_connection_online_flag != decision.new_connection_online_flag;
+  return decision;
+}
+
 bool Session::can_destroy_auth_key() const {
   return need_destroy_auth_key_;
 }
@@ -510,12 +520,13 @@ void Session::on_logging_out(bool logging_out_flag) {
 }
 
 void Session::connection_online_update(double now, bool force) {
-  bool new_connection_online_flag =
-      (online_flag_ || logging_out_flag_) && (has_queries() || last_activity_timestamp_ + 10 > now || is_primary_);
-  if (connection_online_flag_ == new_connection_online_flag && !force) {
+  auto decision =
+      resolve_connection_online_update_decision(connection_online_flag_, online_flag_, logging_out_flag_, has_queries(),
+                                                last_activity_timestamp_, now, is_primary_, force);
+  if (!decision.should_update) {
     return;
   }
-  connection_online_flag_ = new_connection_online_flag;
+  connection_online_flag_ = decision.new_connection_online_flag;
   VLOG(dc) << "Set connection_online " << connection_online_flag_;
   if (main_connection_.connection_) {
     main_connection_.connection_->set_online(connection_online_flag_, is_primary_);

@@ -22,6 +22,7 @@
 #include "td/utils/misc.h"
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 namespace td {
@@ -350,7 +351,9 @@ string DialogFilter::get_emoji_by_icon_name(const string &icon_name) {
 
 string DialogFilter::get_icon_name_by_emoji(const string &emoji) {
   init_icon_names();
-  auto it = emoji_to_icon_name_.find(emoji);
+  auto normalized_emoji = emoji;
+  remove_emoji_modifiers_in_place(normalized_emoji);
+  auto it = emoji_to_icon_name_.find(normalized_emoji);
   if (it != emoji_to_icon_name_.end()) {
     return it->second;
   }
@@ -899,26 +902,29 @@ StringBuilder &operator<<(StringBuilder &string_builder, const DialogFilter &fil
 
 void DialogFilter::init_icon_names() {
   static bool is_inited = [&] {
-    vector<string> emojis{"\xF0\x9F\x92\xAC",         "\xE2\x9C\x85",     "\xF0\x9F\x94\x94",
-                          "\xF0\x9F\xA4\x96",         "\xF0\x9F\x93\xA2", "\xF0\x9F\x91\xA5",
-                          "\xF0\x9F\x91\xA4",         "\xF0\x9F\x93\x81", "\xF0\x9F\x93\x8B",
-                          "\xF0\x9F\x90\xB1",         "\xF0\x9F\x91\x91", "\xE2\xAD\x90\xEF\xB8\x8F",
-                          "\xF0\x9F\x8C\xB9",         "\xF0\x9F\x8E\xAE", "\xF0\x9F\x8F\xA0",
-                          "\xE2\x9D\xA4\xEF\xB8\x8F", "\xF0\x9F\x8E\xAD", "\xF0\x9F\x8D\xB8",
-                          "\xE2\x9A\xBD\xEF\xB8\x8F", "\xF0\x9F\x8E\x93", "\xF0\x9F\x93\x88",
-                          "\xE2\x9C\x88\xEF\xB8\x8F", "\xF0\x9F\x92\xBC", "\xF0\x9F\x9B\xAB",
-                          "\xF0\x9F\x93\x95",         "\xF0\x9F\x92\xA1", "\xF0\x9F\x91\x8D",
-                          "\xF0\x9F\x92\xB0",         "\xF0\x9F\x8E\xB5", "\xF0\x9F\x8E\xA8"};
-    vector<string> icon_names{"All",   "Unread", "Unmuted", "Bots",     "Channels", "Groups", "Private", "Custom",
-                              "Setup", "Cat",    "Crown",   "Favorite", "Flower",   "Game",   "Home",    "Love",
-                              "Mask",  "Party",  "Sport",   "Study",    "Trade",    "Travel", "Work",    "Airplane",
-                              "Book",  "Light",  "Like",    "Money",    "Note",     "Palette"};
+    static const std::array<const char *, 30> emojis = {
+        "\xF0\x9F\x92\xAC",         "\xE2\x9C\x85",     "\xF0\x9F\x94\x94",
+        "\xF0\x9F\xA4\x96",         "\xF0\x9F\x93\xA2", "\xF0\x9F\x91\xA5",
+        "\xF0\x9F\x91\xA4",         "\xF0\x9F\x93\x81", "\xF0\x9F\x93\x8B",
+        "\xF0\x9F\x90\xB1",         "\xF0\x9F\x91\x91", "\xE2\xAD\x90\xEF\xB8\x8F",
+        "\xF0\x9F\x8C\xB9",         "\xF0\x9F\x8E\xAE", "\xF0\x9F\x8F\xA0",
+        "\xE2\x9D\xA4\xEF\xB8\x8F", "\xF0\x9F\x8E\xAD", "\xF0\x9F\x8D\xB8",
+        "\xE2\x9A\xBD\xEF\xB8\x8F", "\xF0\x9F\x8E\x93", "\xF0\x9F\x93\x88",
+        "\xE2\x9C\x88\xEF\xB8\x8F", "\xF0\x9F\x92\xBC", "\xF0\x9F\x9B\xAB",
+        "\xF0\x9F\x93\x95",         "\xF0\x9F\x92\xA1", "\xF0\x9F\x91\x8D",
+        "\xF0\x9F\x92\xB0",         "\xF0\x9F\x8E\xB5", "\xF0\x9F\x8E\xA8"};
+    static const std::array<const char *, 30> icon_names = {
+        "All",   "Unread",   "Unmuted", "Bots",     "Channels", "Groups", "Private", "Custom", "Setup", "Cat",
+        "Crown", "Favorite", "Flower",  "Game",     "Home",     "Love",   "Mask",    "Party",  "Sport", "Study",
+        "Trade", "Travel",   "Work",    "Airplane", "Book",     "Light",  "Like",    "Money",  "Note",  "Palette"};
 
-    CHECK(emojis.size() == icon_names.size());
+    static_assert(emojis.size() == icon_names.size(), "DialogFilter icon registry size mismatch");
     for (size_t i = 0; i < emojis.size(); i++) {
-      remove_emoji_modifiers_in_place(emojis[i]);
-      bool is_inserted = emoji_to_icon_name_.emplace(emojis[i], icon_names[i]).second &&
-                         icon_name_to_emoji_.emplace(icon_names[i], emojis[i]).second;
+      string emoji = emojis[i];
+      remove_emoji_modifiers_in_place(emoji);
+      string icon_name = icon_names[i];
+      bool is_inserted =
+          emoji_to_icon_name_.emplace(emoji, icon_name).second && icon_name_to_emoji_.emplace(icon_name, emoji).second;
       CHECK(is_inserted);
     }
     return true;

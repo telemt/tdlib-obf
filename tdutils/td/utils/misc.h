@@ -78,7 +78,8 @@ inline MutableSlice to_lower_inplace(MutableSlice slice) {
 
 inline string to_lower(Slice slice) {
   auto result = slice.str();
-  to_lower_inplace(result);
+  auto lowered = to_lower_inplace(result);
+  static_cast<void>(lowered);
   return result;
 }
 

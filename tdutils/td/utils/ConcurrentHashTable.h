@@ -101,7 +101,7 @@ class ConcurrentHashMap {
 
  public:
   explicit ConcurrentHashMap(size_t n = 32) {
-    n = 1;
+    n = td::max<size_t>(n, 1);
     hash_map_.store(make_unique<HashMap>(n).release());
   }
   ConcurrentHashMap(const ConcurrentHashMap &) = delete;

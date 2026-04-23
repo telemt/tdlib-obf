@@ -100,7 +100,7 @@ struct StealthConfig final {
   PaddingPolicy padding_policy;
   CryptoPaddingPolicy crypto_padding_policy;
   RecordPaddingPolicy record_padding_policy;
-  GreetingCamouflagePolicy greeting_camouflage_policy;
+  GreetingCamouflagePolicy greeting_camouflage_policy{};
   BidirectionalCorrelationPolicy bidirectional_correlation_policy;
   ChaffPolicy chaff_policy;
   IptParams ipt_params;

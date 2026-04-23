@@ -21,14 +21,40 @@
 
 #include <cstddef>
 #include <cstring>
+#include <limits>
 
 namespace td {
+
+namespace {
+
+Result<uint64> parse_content_length_header_value(Slice value) {
+  if (value.empty()) {
+    return Status::Error(400, "Bad Request: empty Content-Length header");
+  }
+
+  uint64 result = 0;
+  for (auto c : value) {
+    if (!is_digit(c)) {
+      return Status::Error(400, "Bad Request: malformed Content-Length header");
+    }
+    auto digit = static_cast<uint64>(c - '0');
+    if (result > (std::numeric_limits<uint64>::max() - digit) / 10) {
+      return Status::Error(400, "Bad Request: Content-Length overflow");
+    }
+    result = result * 10 + digit;
+  }
+  return result;
+}
+
+}  // namespace
 
 void HttpReader::init(ChainBufferReader *input, size_t max_post_size, size_t max_files) {
   input_ = input;
   state_ = State::ReadHeaders;
   headers_read_length_ = 0;
   content_length_ = -1;
+  has_content_length_header_ = false;
+  raw_content_length_ = 0;
   query_ = nullptr;
   max_post_size_ = max_post_size;
   max_files_ = max_files;
@@ -139,8 +165,6 @@ Result<size_t> HttpReader::do_read_next(bool can_be_slow) {
             end_p--;
           }
 
-          // V547: defense-in-depth — p confirmed non-null from find() result
-          CHECK(p != nullptr);
           Slice boundary(p, static_cast<size_t>(end_p - p));
           if (boundary.empty() || boundary.size() > MAX_BOUNDARY_LENGTH) {
             return Status::Error(400, "Bad Request: boundary too big or empty");
@@ -320,7 +344,7 @@ Result<bool> HttpReader::parse_multipart_form_data(bool can_be_slow) {
 
             header_name = trim(header_name);
             header_value = trim(header_value);
-            to_lower_inplace(header_name);
+            header_name = to_lower_inplace(header_name);
 
             if (header_name == "content-disposition") {
               if (header_value.substr(0, 10) != "form-data;") {
@@ -561,20 +585,28 @@ Result<size_t> HttpReader::split_header() {
   return input_->size() + 1;
 }
 
-void HttpReader::process_header(MutableSlice header_name, MutableSlice header_value) {
+Status HttpReader::process_header(MutableSlice header_name, MutableSlice header_value) {
   header_name = trim(header_name);
   header_value = trim(header_value);  // TODO need to remove "\r\n" from value
-  to_lower_inplace(header_name);
+  header_name = to_lower_inplace(header_name);
   LOG(DEBUG) << "Process header [" << header_name << "=>" << header_value << "]";
   query_->headers_.emplace_back(header_name, header_value);
   if (header_name == "content-length") {
-    auto content_length = to_integer<uint64>(header_value);
+    if (!transfer_encoding_.empty()) {
+      return Status::Error(400, "Bad Request: Content-Length and Transfer-Encoding must not be combined");
+    }
+    TRY_RESULT(content_length, parse_content_length_header_value(header_value));
+    if (has_content_length_header_ && raw_content_length_ != content_length) {
+      return Status::Error(400, "Bad Request: conflicting Content-Length headers");
+    }
+    has_content_length_header_ = true;
+    raw_content_length_ = content_length;
     if (content_length > MAX_CONTENT_SIZE) {
       content_length = MAX_CONTENT_SIZE;
     }
     content_length_ = static_cast<int64>(content_length);
   } else if (header_name == "connection") {
-    to_lower_inplace(header_value);
+    header_value = to_lower_inplace(header_value);
     if (header_value == "close") {
       query_->keep_alive_ = false;
     } else {
@@ -583,14 +615,21 @@ void HttpReader::process_header(MutableSlice header_name, MutableSlice header_va
   } else if (header_name == "content-type") {
     content_type_ = header_value;
     content_type_lowercased_ = header_value.str();
-    to_lower_inplace(content_type_lowercased_);
+    static_cast<void>(to_lower_inplace(content_type_lowercased_));
   } else if (header_name == "content-encoding") {
-    to_lower_inplace(header_value);
+    header_value = to_lower_inplace(header_value);
     content_encoding_ = header_value;
   } else if (header_name == "transfer-encoding") {
-    to_lower_inplace(header_value);
+    header_value = to_lower_inplace(header_value);
+    if (has_content_length_header_) {
+      return Status::Error(400, "Bad Request: Content-Length and Transfer-Encoding must not be combined");
+    }
+    if (!transfer_encoding_.empty() && transfer_encoding_ != header_value) {
+      return Status::Error(400, "Bad Request: conflicting Transfer-Encoding headers");
+    }
     transfer_encoding_ = header_value;
   }
+  return Status::OK();
 }
 
 Status HttpReader::parse_url(MutableSlice url) {
@@ -758,6 +797,8 @@ Status HttpReader::parse_head(MutableSlice head) {
   parser.skip('\n');
 
   content_length_ = -1;
+  has_content_length_header_ = false;
+  raw_content_length_ = 0;
   content_type_ = Slice("application/octet-stream");
   content_type_lowercased_ = content_type_.str();
   transfer_encoding_ = Slice();
@@ -778,7 +819,7 @@ Status HttpReader::parse_head(MutableSlice head) {
       parser.skip('\n');
     } while (parser.status().is_ok() && (parser.peek_char() == ' ' || parser.peek_char() == '\t'));
 
-    process_header(header_name, {header_value_begin, header_value_end});
+    TRY_STATUS(process_header(header_name, {header_value_begin, header_value_end}));
   }
   return parser.status().is_ok() ? Status::OK() : Status::Error(400, "Bad Request");
 }

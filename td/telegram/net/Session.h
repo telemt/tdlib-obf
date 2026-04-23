@@ -99,6 +99,11 @@ class Session final
     int32 failure_count{0};
   };
 
+  struct ConnectionOnlineUpdateDecision {
+    bool new_connection_online_flag{false};
+    bool should_update{false};
+  };
+
   static EncryptedMessageInvalidAction resolve_encrypted_message_invalid_action(bool session_uses_pfs,
                                                                                 bool has_immunity);
   static bool resolve_need_send_bind_key(bool use_pfs, bool bind_flag, uint64 tmp_auth_key_id,
@@ -113,6 +118,9 @@ class Session final
   static bool should_drop_main_auth_key_after_check_failure(const MainKeyCheckFailureState &failure_state);
   static bool resolve_need_create_main_auth_key(bool can_destroy_auth_key, bool need_main_auth_key, double now,
                                                 double reauth_not_before);
+  static ConnectionOnlineUpdateDecision resolve_connection_online_update_decision(
+      bool current_connection_online_flag, bool online_flag, bool logging_out_flag, bool has_queries,
+      double last_activity_timestamp, double now, bool is_primary, bool force);
 
  private:
   struct Query final : private ListNode {

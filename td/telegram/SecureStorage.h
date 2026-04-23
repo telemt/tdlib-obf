@@ -158,6 +158,7 @@ class Decryptor {
   Sha256State sha256_state_;
   bool skipped_prefix_{false};
   size_t to_skip_{0};
+  size_t remaining_prefix_to_skip_{0};
 };
 
 // Encryption

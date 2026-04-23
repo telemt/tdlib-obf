@@ -27,13 +27,17 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/sqlite_phase3_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/sqlite_vendor_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/http.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/http_reader_smuggling_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/link.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/message_entities.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/socks5_response_parser_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/mtproto.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/dns_resolver.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/ip_address_security.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/dialog_filter_icon_mapping_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/poll.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/pvs_regressions.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/pvs_level1_contracts_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/query_merger.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/secret.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/secure_storage.cpp
@@ -103,6 +107,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_bootstrap_state_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_protocol_envelope_frame_safety.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_policy_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_online_update_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_entry_count_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_entry_count_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_window_count_contract.cpp

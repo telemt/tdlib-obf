@@ -901,7 +901,8 @@ TEST(MessageEntities, fix_formatted_text) {
     for (td::int32 offset = -10; offset <= 10; offset++) {
       td::vector<td::MessageEntity> entities;
       entities.emplace_back(td::MessageEntity::Type::Bold, offset, length);
-      if (length < 0 || offset < 0 || (length > 0 && static_cast<size_t>(length) + static_cast<size_t>(offset) > str.size())) {
+      if (length < 0 || offset < 0 ||
+          (length > 0 && static_cast<size_t>(length) + static_cast<size_t>(offset) > str.size())) {
         check_fix_formatted_text(str, entities, true, false, false, false);
         check_fix_formatted_text(str, entities, false, false, false, true);
         continue;
@@ -1407,6 +1408,30 @@ TEST(MessageEntities, parse_html) {
                    {{td::MessageEntity::Type::ExpandableBlockQuote, 0, 4}, {td::MessageEntity::Type::Pre, 2, 2}});
   check_parse_html("<blockquote   expandable=false>a&lt;<pre  >b;</></>", "a<b;",
                    {{td::MessageEntity::Type::ExpandableBlockQuote, 0, 4}, {td::MessageEntity::Type::Pre, 2, 2}});
+}
+
+TEST(MessageEntities, parse_html_pre_code_adversarial_light_fuzz) {
+  auto make_token = [](size_t size) {
+    td::string token;
+    token.reserve(size);
+    for (size_t i = 0; i < size; i++) {
+      token += static_cast<char>('a' + (i % 26));
+    }
+    return token;
+  };
+
+  for (int i = 1; i <= 128; i++) {
+    td::string token = make_token(static_cast<size_t>(i));
+
+    check_parse_html("<pre>" + token + "</pre>", token,
+                     {{td::MessageEntity::Type::Pre, 0, static_cast<td::int32>(token.size())}});
+    check_parse_html("<code>" + token + "</code>", token,
+                     {{td::MessageEntity::Type::Code, 0, static_cast<td::int32>(token.size())}});
+    check_parse_html("<pre><code class=\"language-fift\">" + token + "</code></pre>", token,
+                     {{td::MessageEntity::Type::PreCode, 0, static_cast<td::int32>(token.size()), "fift"}});
+    check_parse_html("<code class=\"language-fift\"><pre>" + token + "</pre></code>", token,
+                     {{td::MessageEntity::Type::PreCode, 0, static_cast<td::int32>(token.size()), "fift"}});
+  }
 }
 
 static void check_parse_markdown(td::string text, const td::string &result,

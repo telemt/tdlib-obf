@@ -16,6 +16,9 @@ class Socks5 final : public TransparentProxy {
  public:
   using TransparentProxy::TransparentProxy;
 
+  // Returns parsed packet size, 0 when more bytes are needed, or an error for malformed responses.
+  static Result<size_t> parse_connect_response_packet_size(Slice data);
+
  private:
   enum class State {
     SendGreeting,

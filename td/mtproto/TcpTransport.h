@@ -161,7 +161,7 @@ class ObfuscatedTransport final : public IStreamTransport {
     max_tls_packet_length_ = std::max<int32>(256, std::min<int32>(size, 16384));
     if (stealth_record_padding_target_ > max_tls_packet_length_) {
       stealth_record_padding_target_ = max_tls_packet_length_;
-      if (has_pending_stealth_target_ && stealth_record_padding_target_ > 0) {
+      if (has_pending_stealth_target_) {
         impl_.set_stealth_target_frame_size(static_cast<size_t>(stealth_record_padding_target_));
       }
     }

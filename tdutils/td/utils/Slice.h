@@ -14,7 +14,12 @@
 
 namespace td {
 
-inline MutableSlice::MutableSlice() : s_(const_cast<char *>("")), len_(0) {
+inline char *mutable_slice_empty_data() {
+  static char empty = '\0';
+  return &empty;
+}
+
+inline MutableSlice::MutableSlice() : s_(mutable_slice_empty_data()), len_(0) {
 }
 
 inline MutableSlice::MutableSlice(char *s, size_t len) : s_(s), len_(len) {

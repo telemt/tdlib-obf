@@ -15,6 +15,43 @@
 
 namespace td {
 
+Result<size_t> Socks5::parse_connect_response_packet_size(Slice data) {
+  if (data.size() < 4) {
+    return 0;
+  }
+
+  if (data[0] != '\x05') {
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
+  }
+
+  auto reply_code = static_cast<uint8>(data[1]);
+  if (reply_code != 0) {
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksConnectRejected, PSLICE() << "Receive error code "
+                                                                                      << static_cast<int32>(reply_code)
+                                                                                      << " from server");
+  }
+
+  if (data[2] != '\0') {
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Byte must be zero");
+  }
+
+  size_t address_size = 0;
+  auto address_type = data[3];
+  if (address_type == '\x01') {
+    address_size = 4;
+  } else if (address_type == '\x04') {
+    address_size = 16;
+  } else {
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
+  }
+
+  size_t total_size = 4 + address_size + 2;
+  if (data.size() < total_size) {
+    return 0;
+  }
+  return total_size;
+}
+
 void Socks5::send_greeting() {
   VLOG(proxy) << "Send greeting to proxy";
   CHECK(state_ == State::SendGreeting);
@@ -128,45 +165,11 @@ Status Socks5::wait_ip_address_response() {
   CHECK(state_ == State::WaitIpAddressResponse);
   auto it = fd_.input_buffer().clone();
   VLOG(proxy) << "Receive IP address response of size " << it.size();
-  if (it.size() < 4) {
+  auto data = it.read_as_buffer_slice().as_slice();
+  TRY_RESULT(total_size, parse_connect_response_packet_size(data));
+  if (total_size == 0) {
     return Status::OK();
   }
-  char c;
-  MutableSlice c_slice(&c, 1);
-  it.advance(1, c_slice);
-  if (c != '\x05') {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
-  }
-  it.advance(1, c_slice);
-  if (c != '\0') {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksConnectRejected,
-                                  PSLICE() << "Receive error code " << static_cast<int32>(c) << " from server");
-  }
-  it.advance(1, c_slice);
-  if (c != '\0') {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Byte must be zero");
-  }
-  it.advance(1, c_slice);
-  size_t total_size = 6;
-  if (c == '\x01') {
-    if (it.size() < 4) {
-      return Status::OK();
-    }
-    it.advance(4);
-    total_size += 4;
-  } else if (c == '\x04') {
-    if (it.size() < 16) {
-      return Status::OK();
-    }
-    it.advance(16);
-    total_size += 16;
-  } else {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
-  }
-  if (it.size() < 2) {
-    return Status::OK();
-  }
-  it.advance(2);
   fd_.input_buffer().advance(total_size);
   stop();
   return Status::OK();

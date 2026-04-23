@@ -625,12 +625,14 @@ Status TdDb::check_parameters(Parameters &parameters) {
     parameters.use_file_database_ = true;
   }
 
+  constexpr int32 kPrivateDirectoryMode = 488;  // rwxr-x---
+
   auto prepare_dir = [](string dir) -> Result<string> {
     CHECK(!dir.empty());
     if (dir.back() != TD_DIR_SLASH) {
       dir += TD_DIR_SLASH;
     }
-    TRY_STATUS(mkpath(dir, 0750));
+    TRY_STATUS(mkpath(dir, kPrivateDirectoryMode));
     TRY_RESULT(real_dir, realpath(dir, true));
     if (real_dir.empty()) {
       return Status::Error(PSTRING() << "Failed to get realpath for \"" << dir << '"');
