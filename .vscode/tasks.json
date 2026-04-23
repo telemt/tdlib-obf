@@ -52,7 +52,7 @@
             ],
             "group": "build",
             "dependsOn": [
-                "cmake build tests fast"
+                "cmake build tests preset"
             ],
             "problemMatcher": [
                 "$gcc"
