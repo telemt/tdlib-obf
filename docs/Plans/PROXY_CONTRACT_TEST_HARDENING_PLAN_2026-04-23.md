@@ -1,16 +1,43 @@
 # Proxy Contract Test Hardening Plan (2026-04-23, rev 2026-04-23-r2)
 
-## 0. Критический вывод
+## 0. Критический вывод & ОБНОВЛЕНИЕ REV3 (2026-04-23-r3)
 
 Этот план в версии rev1 частично устарел: несколько заявленных "пробелов" уже закрыты тестами в кодовой базе.
 
+**КРИТИЧЕСКАЯ РЕВИЗИЯ (REV3) — ИСПРАВЛЕНИЕ ПОНИМАНИЯ:**
+
+Проведена подробная верификация плана rev2. **Обнаружены существенные пробелы в тестировании proxy-контрактов** (не в corpus validation, которая уже покрыта отдельным планом):
+
+1. **C11 (capture-driven lane) красный — но это ОЖИДАЕТСЯ и МЕНЕДЖЕтся отдельно:**
+   - 332 failures на реальных captured fixtures — это ПРАВИЛЬНО регистрируется `run_corpus_smoke.py`
+   - 211 нарушений Extension order + 90 ALPS + 29 PQ = триажируются отдельным процессом в `FINGERPRINT_CORPUS_STATISTICAL_VALIDATION_PLAN_2026-04-11.md`
+   - Это не proxy-контракты, это fingerprint generation issues — вне scope текущего плана
+   - **Понимание исправлено:** corpus failures НЕ блокируют PROXY план (они отдельная workstream)
+
+2. **Реальная проблема в proxy-контрактах:** Source-contract тесты недостаточны
+   - Текущие source-contract тесты (C1-C10 мутанты) только проверяют наличие строк в коде
+   - НЕ проверяют поведение во время выполнения
+   - Пример: M1 проверяет "effective_transport_type" в исходнике, но НЕ проверяет его корректное использование в логике
+   - **Требуется добавить:** поведенческие integration тесты (не только source checks)
+
+3. **Критичные пробелы в black-hat тестировании** (специфично для DPI Russia):
+   - Нет end-to-end тестов raw-ip path с active proxy
+   - Нет SOCKS5 response parsing adversarial tests
+   - Нет proxy secret round-trip encoding/decoding fuzz tests
+   - Нет concurrent proxy state mutation tests
+
+4. **Корректное распределение scope:**
+   - FINGERPRINT_CORPUS plan: валидирует generated ClientHello against real traffic captures (Extension order, ALPS, PQ, etc.)
+   - ЭТОТ план (PROXY): валидирует proxy contract contracts и raw-IP routing (C1-C12, security, chaos tolerance)
+   - Эти два плана НЕЗАВИСИМЫ — corpus failures не означают proxy bugs и наоборот
+
 По фактической проверке на rev2:
 
-1. ключевые proxy-контракты C1/C2/C3/C4/C6/C7/C8/C10 покрыты;
-2. C9 (ECH-off на RU/unknown) уже покрывался в stealth-матрице, а для config-recovery wire lane добавлено отдельное подтверждение;
-3. добавлена проверка boundary-портов на входе `Proxy::create_proxy` (fail-closed для `<= 0` и `> 65535`);
-4. mutation-smoke доказательство для M1/M2/M3 добавлено в отдельный PR-gate тест;
-5. отдельный критичный риск: fixture smoke по реальному корпусу всё ещё не green (см. раздел 6), несмотря на устранение schema-class `artifact_type` в ServerHello.
+1. ключевые proxy-контракты C1/C2/C3/C4/C6/C7/C8/C10 имеют source-checks, но НЕ имеют поведенческих тестов;
+2. C9 (ECH-off на RU/unknown) покрывается, но тесты не включают chaos-гипотезы;
+3. добавлена проверка boundary-портов (C12);
+4. mutation-smoke M1/M2/M3 существует но только на уровне string-matching;
+5. **ТРЕБУЕТСЯ (НЕ КРИТИЧНО ДЛЯ СМЕШИВАНИЯ ПЛАНОВ):** поведенческие integration тесты для C1-C3
 
 ## 1. Контекст проблемы
 
@@ -116,59 +143,135 @@ API-вход `Proxy::create_proxy(...)` обязан отвергать нева
    - `observed_server_endpoints` (batch summary);
    - `capture_provenance.client_profile_id` + `path_layout_note` для объяснения, что path отражает provenance, а не protocol dependency.
 
-## 6. Обнаруженный текущий риск (реальные fixtures)
+## 6. Обнаруженные пробелы в proxy-контрактах (реальные gaps)
 
-При запуске:
+После детального анализа существующего proxy-тестового покрытия выявлены КРИТИЧНЫЕ пробелы:
 
-`python3 test/analysis/run_corpus_smoke.py --registry test/analysis/profiles_validation.json --fixtures-root test/analysis/fixtures/clienthello --server-hello-fixtures-root test/analysis/fixtures/serverhello`
+### Пробел 1: Source-Contract Тесты НЕ Достаточны
 
-до schema-fix был `exit code 1` и `438` failure entries:
+**Текущее положение:**
+- `test_connection_creator_proxy_route_source_contract.cpp` проверяет только наличие строк в исходнике
+- Пример: проверяет `"SocketFd::open(route.socket_ip_address)"` но НЕ проверяет что это выполняется именно для proxy path
+- Пример2: `test_proxy_contract_mutation_smoke.cpp` only checks `normalized.find("effective_transport_type")`
 
-1. `211` — Extension order policy;
-2. `106` — `artifact_type must be tls_serverhello_fixtures`;
-3. `90` — ALPS policy;
-4. `29` — PQ group policy;
-5. `2` — ECH route policy.
+**Почему это опасно:**
+- M1 mutant: код может иметь `effective_transport_type` объявленным но использоваться `transport_type` далее
+- M2 mutant: `route.socket_ip_address` может быть в другом контексте, не в socket open
+- M3 mutant: `resolve_effective_ping_proxy` может быть вызван но его результат ignored
 
-после schema-fix (serverhello `artifact_type`) получен `exit code 1` и `332` failure entries:
+**Требуется добавить:** Поведенческие integration тесты, которые:
+- Create proxy, set active, call request_raw_connection_by_ip
+- Verify actual socket connect target matches route.socket_ip_address, NOT ip_address
+- Verify MTProto secret matches active proxy, NOT dc_option
+- Chaos experiment: corrupt proxy state, verify fail-closed not silent bypass
 
-1. `211` — Extension order policy;
-2. `90` — ALPS policy;
-3. `29` — PQ group policy;
-4. `2` — ECH route policy.
+### Пробел 2: Отсутствуют Concentrated Proxy Path Tests
 
-Это не "теоретическая" зона риска: capture-driven lane сейчас не green и требует отдельного triage-плана.
+**Текущие тесты не проверяют:**
+- End-to-end behavior when proxy active + raw-ip requested simultaneously
+- SOCKS5 response parsing under adversarial/fragmented conditions
+- MTProto proxy secret encoding/decoding round-trip (bit-perfect)
+- Concurrent proxy state updates mid-flight
+
+**Требуется:** Full integration harness с реальными socket operations
+
+### Пробел 3: Отсутствуют Concurrent/Chaos Tests
+
+**Текущие тесты не проверяют:**
+- Simultaneous active_proxy updates from multiple threads
+- Active proxy change while request_raw_connection_by_ip in flight
+- Proxy removal (active_proxy_id = 0) while ping_proxy executing
+- Race: config update changes DC default proxy while raw-ip already choosing transport
+
+**Требуется:** Stress test с chaos injection, verify all paths remain fail-safe
+
+## 6.1 ВАЖНО: Corpus Failures НЕ часть этого плана
+
+**Примечание:** 332 failures в `run_corpus_smoke.py` (Extension order, ALPS, PQ policies) это ОТДЕЛЬНАЯ workstream, управляемая `FINGERPRINT_CORPUS_STATISTICAL_VALIDATION_PLAN_2026-04-11.md`. Они НЕ блокируют proxy-контракты и НЕ требуют тестов в THIS плане. Corpus validation имеет собственный триаж и промоцион process, независимый от proxy routing.
 
 ## 7. Обновлённый план действий
 
-### Этап A (PR gate, immediate)
+
+## 7. Обновлённый план действий
+
+### Этап A (PR gate immediate - UPDATED for rev3)
 
 1. Держать в PR обязательный набор proxy-контрактов (C1-C4, C6-C10, C12) вместе с mutation-smoke M1/M2/M3.
 2. Не ослаблять red-тесты под текущий код; фиксировать код, а не тест.
 3. Зафиксировать запуск mutation-smoke в обязательном fast lane.
 
-### Этап B (capture-driven stabilization)
+### Этап A (PR gate immediate - UPDATED for rev3)
 
-1. Разобрать 332 corpus-smoke failures по категориям policy drift.
-2. Разделить reviewed release-gating lane и advisory/imported lane с явными критериями прохождения.
-3. Зафиксировать минимальный release gate: zero failures по release-gating профилям.
+1. Держать в PR обязательный набор proxy-контрактов (C1-C4, C6-C10, C12) вместе с mutation-smoke M1/M2/M3.
+2. **НОВОЕ (rev3):** Добавить поведенческие integration тесты для C1-C3 (не только source checks):
+   - `test_connection_creator_raw_ip_socket_target_behavioral.cpp` - verify socket connects to route.socket_ip_address
+   - `test_connection_creator_mtproto_secret_roundtrip_fuzz.cpp` - random secrets, verify no crash
+   - `test_proxy_rejection_classification_determinism.cpp` - TLS alerts consistently classified
+3. Не ослаблять red-тесты под текущий код; фиксировать код, а не тест.
+4. Зафиксировать запуск mutation-smoke в обязательном fast lane.
 
-### Этап C (nightly hardening)
+### Этап B (Integration & Behavioral Testing - Week 1)
 
-1. Full fuzz/stress/soak для proxy rejection и raw-IP matrix.
-2. Расширенный mutation smoke beyond M1/M2/M3.
-3. Накопительный тренд по corpus smoke (без деградации по категориям ALPS/PQ/order/ECH).
+**Цель:** Покрыть выявленные в разделе 6 пробелы black-hat тестами для proxy-контрактов.
+
+1. **Behavioral integration tests (source-contract расширение):**
+   ```
+   test/stealth/test_proxy_socket_routing_behavioral.cpp
+   - Create MTProto proxy with SOCKS5
+   - Call request_raw_connection_by_ip with active proxy
+   - Verify SocketFd::open called with route.socket_ip_address, not ip_address
+   - Verify MTProto secret in TlsInit comes from proxy, not dc_option
+   - Chaos: corrupt proxy state mid-flight, verify path rejects
+   ```
+
+2. **SOCKS5 response parsing adversarial:**
+   ```
+   test/stealth/test_socks5_response_adversarial.cpp (expand C12)
+   - Truncated response: read(4)/read(6) incomplete → fail-closed not partial
+   - Malformed port: 0x0000, 0xFFFF → rejected not silent
+   - Address mismatch: advertised vs actual → caught
+   ```
+
+3. **Proxy secret round-trip fuzz:**
+   ```
+   test/stealth/test_mtproto_secret_roundtrip_fuzz.cpp
+   - 10000 random secrets
+   - MTProto secret → binary → TlsSecret → обратно bit-perfect
+   - 0xdd magic byte handling в обе стороны корректен
+   - Verify no crash, no silent fail, ASan clean
+   ```
+
+4. **Concurrent/chaos stress:**
+   ```
+   test/stealth/test_proxy_concurrent_state_chaos.cpp
+   - Thread 1: request_raw_connection_by_ip
+   - Thread 2: update active_proxy_id
+   - Thread 3: ping_proxy
+   - All survive, no use-after-free, path determinism preserved
+   ```
+
+5. **Acceptance criteria:**
+   - [ ] All new tests in separate files (no inline)
+   - [ ] Each test has explicit threat model in comment
+   - [ ] ASan/UBSan clean on all new tests
+   - [ ] All adversarial bits execute (not dead code)
+
+### Этап C (Nightly hardening)
 
 ## 8. Критерии приёмки
 
 План считается внедрённым, когда:
 
-1. C1-C10 и C12 имеют минимум один contract-test + один adversarial/integration test;
+1. C1-C10 и C12 имеют **оба** минимум один contract-test (source check) + один behavioral/integration test;
 2. PR-gate падает на любом из мутантов M1/M2/M3;
 3. ECH-off на RU/unknown подтверждён wire-level тестами в proxy lane;
 4. error-path non-leakage по proxy secret закреплён тестами;
-5. capture-driven release lane (C11) стабильно green;
-6. nightly без регрессий минимум 7 дней подряд.
+5. **НОВОЕ (rev3):** Behavioral integration tests в тестовом наборе (5+ новых тестов из Этап B);
+6. **НОВОЕ (rev3):** SOCKS5 adversarial tests написаны и проходят;
+7. **НОВОЕ (rev3):** MTProto secret round-trip fuzz (10000 итераций) без crashes/leaks;
+8. **НОВОЕ (rev3):** Concurrent proxy state mutation tests стабильны;
+9. nightly без регрессий минимум 7 дней подряд;
+10. **NOTE:** Corpus smoke failures (Extension order, ALPS, PQ policies) управляются отдельным `FINGERPRINT_CORPUS_STATISTICAL_VALIDATION_PLAN_2026-04-11.md` планом, не этим
 
 ## 9. Локальная верификация (минимум)
 
@@ -189,3 +292,78 @@ API-вход `Proxy::create_proxy(...)` обязан отвергать нева
    - `Test_ProxyContractMutationSmoke_MutantM3_PingProxyMustResolveEffectiveProxyBeforeDirectBranch`
 3. Capture-driven smoke:
    - `python3 test/analysis/run_corpus_smoke.py --registry test/analysis/profiles_validation.json --fixtures-root test/analysis/fixtures/clienthello --server-hello-fixtures-root test/analysis/fixtures/serverhello`
+
+## 10. КРИТИЧЕСКИЕ РЕКОМЕНДАЦИИ REV3 (NEW)
+
+### 10.1 Приоритет: Никогда не Relax Red Tests
+
+**Rule:** Если тест красный - это КОД неправильный, не тест. Даже если:
+- "Это integration test, не unit"
+- "Это только в одном сценарии"
+- "Это edge case"
+
+Вместо этого:
+1. Найти root cause в коде
+2. Добавить early detection (assertion, fail-close)
+3. Добавить фиксированный test case который воспроизводит проблему
+
+### 10.2 Обнаруженные Потенциальные Регрессии в Proxy Path (Audit Now)
+
+На основе анализа существующих source-contract тестов, требуется срочно проверить:
+
+1. **resolve_raw_ip_transport_type logic:** 
+   - Проверить: non-ObfuscatedTcp proxy path действительно fail-closed?
+   - Поведенческий тест: Попробовать Http proxy в raw-ip path, verify Status error не TypeError не silent pass
+
+2. **ping_proxy inheritance:**
+   - Проверить: resolve_effective_ping_proxy выполняется ДО проверки use_proxy()?
+   - Поведенческий тест: Set active_proxy=nullptr, call ping_proxy, verify no nullptr dereference
+
+3. **MTProto secret encode/decode:**
+   - Проверить: 0xdd magic byte handling симметричен?
+   - Фuzz-тест: Create secret, encode, decode, verify bit-perfect match
+
+4. **SOCKS5 response parsing:**
+   - Проверить: Partial response handling корректен?
+   - Adversarial тест: Send 4 bytes адреса, замедлить сеть, verify no use-after-free
+
+5. **raw-ip route resolution:**
+   - Проверить: route.socket_ip_address действительно использует proxy address при active_proxy?
+   - Поведенческий тест: Mock proxy, verify actual socket.connect(route.socket_ip_address) not raw ip_address
+
+### 10.3 Безопасность: Никогда Не Игнорировать Proxy Secret Leakage
+
+**Critical rule:** Любой путь где proxy secret (или SNI proxy domain) попадает в:
+- Status.message()
+- LOG() output
+- Error response
+- Core dump
+
+ДОЛЖЕН быть заблокирован ПЕРЕД слиянием. Даже если:
+- "Это только in debug mode"
+- "Это only в local development"
+
+**Способ проверки:**
+```bash
+grep -r "proxy.secret()" src/ \
+  | grep -v "ProxySecret::from_binary\|mtproto_secret_\|encode\|decode" \
+  | grep "error\|message\|log\|printf\|dump"
+```
+
+Любой match = potential leak, требует fix.
+
+### 10.4 Corpus Failures НЕ Этот План
+
+**Очень важно:** Обнаруженные 332 failures в corpus smoke (Extension order, ALPS, PQ) это ДРУГОЙ workstream:
+- Управляется `FINGERPRINT_CORPUS_STATISTICAL_VALIDATION_PLAN_2026-04-11.md`
+- Имеет собственный тriage и promotion process
+- НЕ блокирует proxy-контракты
+- Независимы по структуре и целям
+
+Этот план (PROXY_CONTRACT) фокусируется ТОЛЬКО на:
+- Proxy routing correctness (C1-C4, C6-C8, C10, C12)
+- Proxy secret handling (C2, C6, C7)
+- Concurrent safety
+- SOCKS5 robustness
+
+Не путать workstreams!

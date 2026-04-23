@@ -222,12 +222,16 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_contract_mutation_smoke.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_contract_concurrency_chaos.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_socket_routing_behavioral.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_truncation_boundary_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_mtproto_secret_roundtrip_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dc_option_secret_validation_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_recovery_proxy_secret_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_proxy_inheritance_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_setup_error_emitters_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_classification_determinism.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy_adversarial.cpp
