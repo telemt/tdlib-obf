@@ -22,6 +22,8 @@ Status DhHandshake::check_config(Slice prime_str, const BigNum &prime, int32 g_i
                                  DhCallback *callback) {
   // check that 2^2047 <= p < 2^2048
   if (prime.get_num_bits() != 2048) {
+    LOG(ERROR) << "DH config validation failed" << " [reason=prime_bits_mismatch]"
+               << " [prime_bits=" << prime.get_num_bits() << "]" << " [g=" << g_int << "]";
     return Status::Error("p is not 2048-bit number");
   }
 
@@ -59,6 +61,8 @@ Status DhHandshake::check_config(Slice prime_str, const BigNum &prime, int32 g_i
       mod_ok = false;
   }
   if (!mod_ok) {
+    LOG(ERROR) << "DH config validation failed" << " [reason=bad_prime_mod_4g]"
+               << " [prime_bits=" << prime.get_num_bits() << "]" << " [g=" << g_int << "]";
     return Status::Error("Bad prime mod 4g");
   }
 
@@ -68,9 +72,15 @@ Status DhHandshake::check_config(Slice prime_str, const BigNum &prime, int32 g_i
     is_good_prime = callback->is_good_prime(prime_str);
   }
   if (is_good_prime != -1) {
+    if (!is_good_prime) {
+      LOG(WARNING) << "DH config validation failed" << " [reason=prime_cache_rejected]"
+                   << " [prime_bits=" << prime.get_num_bits() << "]" << " [g=" << g_int << "]";
+    }
     return is_good_prime ? Status::OK() : Status::Error("p or (p - 1) / 2 is not a prime number");
   }
   if (!prime.is_prime(ctx)) {
+    LOG(ERROR) << "DH config validation failed" << " [reason=prime_not_prime]"
+               << " [prime_bits=" << prime.get_num_bits() << "]" << " [g=" << g_int << "]";
     if (callback) {
       callback->add_bad_prime(prime_str);
     }
@@ -81,6 +91,8 @@ Status DhHandshake::check_config(Slice prime_str, const BigNum &prime, int32 g_i
   half_prime -= 1;
   half_prime /= 2;
   if (!half_prime.is_prime(ctx)) {
+    LOG(ERROR) << "DH config validation failed" << " [reason=half_prime_not_prime]"
+               << " [prime_bits=" << prime.get_num_bits() << "]" << " [g=" << g_int << "]";
     if (callback) {
       callback->add_bad_prime(prime_str);
     }
@@ -105,21 +117,16 @@ Status DhHandshake::dh_check(const BigNum &prime, const BigNum &g_a, const BigNu
   BigNum right;
   BigNum::sub(right, prime, left);
 
-  if (BigNum::compare(left, g_a) > 0 || BigNum::compare(g_a, right) > 0 || BigNum::compare(left, g_b) > 0 ||
-      BigNum::compare(g_b, right) > 0) {
-    std::string x(2048, '0');
-    std::string y(2048, '0');
-    for (int i = 0; i < 2048; i++) {
-      if (g_a.is_bit_set(i)) {
-        x[i] = '1';
-      }
-      if (g_b.is_bit_set(i)) {
-        y[i] = '1';
-      }
-    }
-    LOG(ERROR) << x;
-    LOG(ERROR) << y;
-    return Status::Error("g^a or g^b is not between 2^{2048-64} and dh_prime - 2^{2048-64}");
+  bool g_a_below_min = BigNum::compare(left, g_a) > 0;
+  bool g_a_above_max = BigNum::compare(g_a, right) > 0;
+  bool g_b_below_min = BigNum::compare(left, g_b) > 0;
+  bool g_b_above_max = BigNum::compare(g_b, right) > 0;
+  if (g_a_below_min || g_a_above_max || g_b_below_min || g_b_above_max) {
+    LOG(ERROR) << "DH range validation failed" << " [prime_bits=" << prime.get_num_bits() << "]"
+               << " [g_a_bits=" << g_a.get_num_bits() << "]" << " [g_b_bits=" << g_b.get_num_bits() << "]"
+               << " [g_a_below_min=" << g_a_below_min << "]" << " [g_a_above_max=" << g_a_above_max << "]"
+               << " [g_b_below_min=" << g_b_below_min << "]" << " [g_b_above_max=" << g_b_above_max << "]";
+    return Status::Error("DH share is outside required range");
   }
 
   return Status::OK();
@@ -184,6 +191,8 @@ Status DhHandshake::run_checks(bool skip_config_check, DhCallback *callback) {
   CHECK(has_g_a_ && has_config_);
 
   if (has_g_a_hash_ && !ok_g_a_hash_) {
+    LOG(ERROR) << "DH checks failed" << " [reason=g_a_hash_mismatch]" << " [has_g_a_hash=" << has_g_a_hash_ << "]"
+               << " [ok_g_a_hash=" << ok_g_a_hash_ << "]";
     return Status::Error("g_a_hash mismatch");
   }
 

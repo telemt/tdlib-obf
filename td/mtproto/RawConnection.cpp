@@ -166,7 +166,9 @@ class RawConnectionDefault final : public RawConnection {
       if (tmp.second) {
         use_quick_ack = true;
       } else {
-        LOG(ERROR) << "Quick ack " << packet_info.message_ack << " collision";
+        LOG(ERROR) << "Quick ack token collision" << tag("quick_ack", packet_info.message_ack)
+                   << tag("transport", transport_type_name(transport_->get_type()))
+                   << tag("dc_id", transport_->get_type().dc_id);
       }
     }
 
@@ -350,13 +352,17 @@ class RawConnectionDefault final : public RawConnection {
 
   Status on_quick_ack(uint32 quick_ack, Callback &callback) {
     if ((quick_ack & (1u << 31)) == 0) {
-      LOG(ERROR) << "Receive invalid quick_ack " << quick_ack;
+      LOG(ERROR) << "Receive invalid quick_ack" << tag("quick_ack", quick_ack)
+                 << tag("transport", transport_type_name(transport_->get_type()))
+                 << tag("dc_id", transport_->get_type().dc_id);
       return Status::OK();
     }
 
     auto it = quick_ack_to_token_.find(quick_ack);
     if (it == quick_ack_to_token_.end()) {
-      LOG(WARNING) << "Receive unknown quick_ack " << quick_ack;
+      LOG(WARNING) << "Receive unknown quick_ack" << tag("quick_ack", quick_ack)
+                   << tag("transport", transport_type_name(transport_->get_type()))
+                   << tag("dc_id", transport_->get_type().dc_id);
       return Status::OK();
     }
     auto token = it->second;

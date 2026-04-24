@@ -12,6 +12,8 @@
 #include "td/mtproto/stealth/StealthTransportDecorator.h"
 #include "td/mtproto/TcpTransport.h"
 
+#include "td/utils/logging.h"
+
 namespace td {
 namespace mtproto {
 
@@ -39,19 +41,26 @@ unique_ptr<IStreamTransport> create_transport(TransportType type) {
         auto config = stealth::make_transport_stealth_config(secret_copy, *rng);
         if (config.is_error()) {
           auto error = config.move_as_error();
-          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport: reason=config_validation_failed dc_id="
-                       << type.dc_id << " error=" << error;
+          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport"
+                       << tag("reason", "config_validation_failed") << tag("transport", "obfuscated_tcp")
+                       << tag("dc_id", type.dc_id) << tag("tls_emulation", true) << tag("status_code", error.code())
+                       << tag("status_message",
+                              "stealth runtime config rejected; review stealth params and proxy setup");
           return inner;
         }
         auto decorator = stealth::StealthTransportDecorator::create(std::move(inner), config.move_as_ok(),
                                                                     std::move(rng), stealth::make_clock());
         if (decorator.is_error()) {
           auto error = decorator.move_as_error();
-          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport: reason=decorator_init_failed dc_id="
-                       << type.dc_id << " error=" << error;
+          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport" << tag("reason", "decorator_init_failed")
+                       << tag("transport", "obfuscated_tcp") << tag("dc_id", type.dc_id) << tag("tls_emulation", true)
+                       << tag("status_code", error.code())
+                       << tag("status_message",
+                              "stealth decorator initialization failed; check transport capabilities");
           return td::make_unique<tcp::ObfuscatedTransport>(type.dc_id, std::move(secret_copy));
         }
-        LOG(INFO) << "Stealth shaping enabled for emulate_tls transport: dc_id=" << type.dc_id;
+        LOG(INFO) << "Stealth shaping enabled for emulate_tls transport" << tag("transport", "obfuscated_tcp")
+                  << tag("dc_id", type.dc_id) << tag("tls_emulation", true);
         return decorator.move_as_ok();
       }
 #else

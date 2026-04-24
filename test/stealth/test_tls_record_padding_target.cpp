@@ -97,6 +97,26 @@ TEST(TlsRecordPaddingTarget, DecoratorManualRecordSizeOverrideForwardsPadUpTarge
   ASSERT_EQ(1400, inner_ptr->stealth_record_padding_targets.back());
 }
 
+TEST(TlsRecordPaddingTarget, DecoratorManualPaddingTargetOverrideForwardsToInnerTransport) {
+  auto config = make_fixed_record_size_config(1400);
+  ASSERT_TRUE(config.validate().is_ok());
+
+  auto inner = td::make_unique<RecordingTransport>();
+  auto *inner_ptr = inner.get();
+  inner_ptr->supports_tls_record_sizing_result = true;
+
+  auto decorator = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(11),
+                                                     td::make_unique<MockClock>());
+  ASSERT_TRUE(decorator.is_ok());
+  auto transport = decorator.move_as_ok();
+
+  transport->set_stealth_record_padding_target(1200);
+  ASSERT_FALSE(inner_ptr->stealth_record_padding_targets.empty());
+  ASSERT_EQ(1200, inner_ptr->stealth_record_padding_targets.back());
+  ASSERT_FALSE(inner_ptr->max_tls_record_sizes.empty());
+  ASSERT_TRUE(inner_ptr->max_tls_record_sizes.back() >= 1200);
+}
+
 TEST(TlsRecordPaddingTarget, DecoratorManualRecordSizeOverridePreservesRequestedWireRecordLength) {
   auto config = make_fixed_record_size_config(1400);
   ASSERT_TRUE(config.validate().is_ok());

@@ -6,6 +6,7 @@
 //
 #include "td/mtproto/TlsReaderByteFlow.h"
 
+#include "td/utils/logging.h"
 #include "td/utils/Slice.h"
 #include "td/utils/Status.h"
 
@@ -51,6 +52,12 @@ bool TlsReaderByteFlow::loop() {
   uint8 buf[5];
   it.advance(5, MutableSlice(buf, 5));
   if (Slice(buf, 3) != Slice("\x17\x03\x03")) {
+    auto declared_payload_size = static_cast<size_t>((buf[3] << 8) | buf[4]);
+    LOG(WARNING) << "TLS emulation reader rejected unexpected record header"
+                 << " [content_type=" << static_cast<int>(buf[0]) << "]"
+                 << " [version_major=" << static_cast<int>(buf[1]) << "]"
+                 << " [version_minor=" << static_cast<int>(buf[2]) << "]"
+                 << " [declared_payload_size=" << declared_payload_size << "]";
     close_input(Status::Error("Invalid bytes at the beginning of a packet (emulated tls)"));
     return false;
   }

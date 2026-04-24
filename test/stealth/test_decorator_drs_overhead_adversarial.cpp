@@ -154,4 +154,13 @@ TEST(DecoratorDrsOverheadAdversarial, IgnoresHostileNegativePayloadOverheadBefor
   ASSERT_EQ(1200, fixture.inner->max_tls_record_sizes.back());
 }
 
+TEST(DecoratorDrsOverheadAdversarial, ManualRecordSizeOverrideAccountsForTransportPayloadOverhead) {
+  auto fixture = make_test_decorator(200);
+  ASSERT_FALSE(fixture.inner->max_tls_record_sizes.empty());
+
+  fixture.decorator->set_max_tls_record_size(1200);
+
+  ASSERT_EQ(1400, fixture.inner->max_tls_record_sizes.back());
+}
+
 }  // namespace

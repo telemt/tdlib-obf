@@ -190,17 +190,24 @@ Result<unique_ptr<StealthTransportDecorator>> StealthTransportDecorator::create(
                                                                                 unique_ptr<IRng> rng,
                                                                                 unique_ptr<IClock> clock) {
   if (inner == nullptr) {
-    return Status::Error("inner transport must not be null");
+    return Status::Error("StealthTransportDecorator::create requires non-null inner transport");
   }
   if (rng == nullptr) {
-    return Status::Error("rng must not be null");
+    return Status::Error("StealthTransportDecorator::create requires non-null rng");
   }
   if (clock == nullptr) {
-    return Status::Error("clock must not be null");
+    return Status::Error("StealthTransportDecorator::create requires non-null clock");
   }
-  TRY_STATUS(config.validate());
+  auto config_status = config.validate();
+  if (config_status.is_error()) {
+    return Status::Error("StealthTransportDecorator::create rejected stealth config: " + config_status.message().str());
+  }
   if (config.greeting_camouflage_policy.greeting_record_count != 0 && !inner->supports_tls_record_sizing()) {
-    return Status::Error("greeting camouflage requires TLS record sizing support");
+    return Status::Error(
+        "StealthTransportDecorator::create: greeting camouflage requires TLS record sizing support "
+        "[greeting_record_count=" +
+        std::to_string(config.greeting_camouflage_policy.greeting_record_count) +
+        "] [supports_tls_record_sizing=false]");
   }
 
   return unique_ptr<StealthTransportDecorator>(
@@ -618,7 +625,22 @@ void StealthTransportDecorator::set_max_tls_record_size(int32 size) {
   has_manual_record_size_override_ = true;
   current_record_size_ = apply_small_record_budget(clamp_tls_record_size(size));
   if (inner_->supports_tls_record_sizing()) {
-    inner_->set_max_tls_record_size(current_record_size_);
+    TransportPayloadOverhead payload_overhead;
+    payload_overhead.bytes = inner_->tls_record_sizing_payload_overhead();
+    auto effective_record_size = adjust_tls_record_size_for_payload_overhead(current_record_size_, payload_overhead);
+    inner_->set_max_tls_record_size(effective_record_size);
+    inner_->set_stealth_record_padding_target(current_record_size_);
+  }
+}
+
+void StealthTransportDecorator::set_stealth_record_padding_target(int32 target_bytes) {
+  has_manual_record_size_override_ = true;
+  current_record_size_ = apply_small_record_budget(clamp_tls_record_size(target_bytes));
+  if (inner_->supports_tls_record_sizing()) {
+    TransportPayloadOverhead payload_overhead;
+    payload_overhead.bytes = inner_->tls_record_sizing_payload_overhead();
+    auto effective_record_size = adjust_tls_record_size_for_payload_overhead(current_record_size_, payload_overhead);
+    inner_->set_max_tls_record_size(effective_record_size);
     inner_->set_stealth_record_padding_target(current_record_size_);
   }
 }

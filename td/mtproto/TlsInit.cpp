@@ -248,6 +248,17 @@ void TlsInit::send_hello() {
       hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
 #endif
 
+  if (hello.size() < kTlsHelloResponseRandomOffset + kTlsHelloResponseRandomSize) {
+    LOG(ERROR) << "TlsInit hello generation failed " << tag("destination", username_)
+               << tag("profile", hello_profile_name_) << tag("hello_bytes", hello.size())
+               << tag("min_expected", kTlsHelloResponseRandomOffset + kTlsHelloResponseRandomSize);
+    on_error(make_proxy_setup_error(
+        ProxySetupErrorCode::TlsHelloMalformedResponse,
+        PSLICE() << "generated TLS hello is shorter than random extraction envelope: hello_bytes=" << hello.size()
+                 << " min_expected=" << (kTlsHelloResponseRandomOffset + kTlsHelloResponseRandomSize)));
+    return;
+  }
+
   LOG(DEBUG) << "TlsInit hello prepared " << tag("destination", username_) << tag("route_known", route_hints_.is_known)
              << tag("route_ru", route_hints_.is_ru) << tag("ech_mode", hello_ech_mode_name_)
              << tag("ech_enabled", hello_uses_ech_) << tag("profile", hello_profile_name_)

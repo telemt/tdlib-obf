@@ -22,7 +22,10 @@
 #include "td/utils/logging.h"
 #include "td/utils/Random.h"
 #include "td/utils/Time.h"
+#include "td/utils/tl_parsers.h"
 #include "td/utils/UInt.h"
+
+#include <cstring>
 
 namespace td {
 namespace mtproto {
@@ -45,9 +48,14 @@ class PingConnectionReqPQ final
   }
 
   Status flush() final {
+    if (ping_count_ == 0) {
+      return Status::Error("req_pq ping_count must be positive [ping_count=0]");
+    }
     if (!was_ping_) {
       UInt128 nonce;
       Random::secure_bytes(nonce.raw, sizeof(nonce));
+      pending_nonce_ = nonce;
+      has_pending_nonce_ = true;
       raw_connection_->send_no_crypto(PacketStorer<NoCryptoImpl>(
           MessageId(static_cast<uint64>(1)), create_function_storer(mtproto_api::req_pq_multi(nonce))));
       was_ping_ = true;
@@ -68,10 +76,28 @@ class PingConnectionReqPQ final
 
   Status on_raw_packet(const PacketInfo &packet_info, BufferSlice packet) final {
     if (packet.size() < 12) {
-      return Status::Error("Result is too small");
+      return Status::Error(PSLICE() << "req_pq response packet is too small" << " [packet_bytes=" << packet.size()
+                                    << "]" << " [min_bytes=12]");
     }
-    packet.confirm_read(12);
-    // TODO: fetch_result
+    TlParser parser(packet.as_slice());
+    auto response = mtproto_api::req_pq_multi::fetch_result(parser);
+    if (response == nullptr || parser.get_error() != nullptr) {
+      return Status::Error(PSLICE() << "failed to parse req_pq response payload" << " [packet_bytes=" << packet.size()
+                                    << "]" << " [parse_error="
+                                    << (parser.get_error() == nullptr ? "unknown" : parser.get_error()) << "]");
+    }
+    parser.fetch_end();
+    if (parser.get_error() != nullptr) {
+      return Status::Error(PSLICE() << "failed to parse req_pq response payload" << " [packet_bytes=" << packet.size()
+                                    << "]" << " [parse_error=" << parser.get_error() << "]");
+    }
+    if (!has_pending_nonce_) {
+      return Status::Error("req_pq response received without pending request nonce");
+    }
+    if (std::memcmp(response->nonce_.raw, pending_nonce_.raw, sizeof(pending_nonce_.raw)) != 0) {
+      return Status::Error(PSLICE() << "req_pq response nonce mismatch" << " [packet_bytes=" << packet.size() << "]");
+    }
+    has_pending_nonce_ = false;
 
     if (--ping_count_ > 0) {
       was_ping_ = false;
@@ -85,6 +111,8 @@ class PingConnectionReqPQ final
  private:
   unique_ptr<RawConnection> raw_connection_;
   size_t ping_count_ = 1;
+  UInt128 pending_nonce_{};
+  bool has_pending_nonce_ = false;
   double start_time_ = 0.0;
   double finish_time_ = 0.0;
   bool was_ping_ = false;
@@ -129,6 +157,16 @@ class PingConnectionPingPong final
   }
 
   void on_session_failed(Status status) final {
+    if (!status.is_error()) {
+      status = Status::Error("session failure while pinging callback must report error status");
+    }
+    LOG(WARNING) << "session failure while pinging" << " [status_code=" << status.code() << "]"
+                 << " [status_message=" << status.public_message() << "]" << " [pong_count=" << pong_cnt_ << "]"
+                 << " [is_closed=" << is_closed_ << "]";
+    if (!is_closed_) {
+      is_closed_ = true;
+      status_ = std::move(status);
+    }
   }
 
   void on_container_sent(MessageId container_message_id, vector<MessageId> message_ids) final {
@@ -153,14 +191,42 @@ class PingConnectionPingPong final
   }
 
   Status on_message_result_ok(MessageId message_id, BufferSlice packet, size_t original_size) final {
-    LOG(ERROR) << "Unexpected message";
-    return Status::OK();
+    LOG(ERROR) << "Unexpected ping response payload" << " [message_id=" << message_id << "]"
+               << " [packet_bytes=" << packet.size() << "]" << " [original_size=" << original_size << "]"
+               << " [pong_count=" << pong_cnt_ << "]" << " [is_closed=" << is_closed_ << "]"
+               << " [packet_preview=" << packet.as_slice().substr(0, 32) << "]";
+    if (!is_closed_) {
+      is_closed_ = true;
+      status_ = Status::Error(PSLICE() << "unexpected ping response payload" << " [message_id=" << message_id << "]"
+                                       << " [packet_bytes=" << packet.size() << "]"
+                                       << " [original_size=" << original_size << "]");
+    }
+    return std::move(status_);
   }
 
   void on_message_result_error(MessageId message_id, int code, string message) final {
+    LOG(WARNING) << "ping result returned error" << " [message_id=" << message_id << "]" << " [rpc_error_code=" << code
+                 << "]" << " [rpc_error_message_size=" << message.size() << "]" << " [pong_count=" << pong_cnt_ << "]"
+                 << " [is_closed=" << is_closed_ << "]";
+    if (!is_closed_) {
+      is_closed_ = true;
+      status_ = Status::Error(PSLICE() << "ping RPC result error" << " [message_id=" << message_id << "]"
+                                       << " [rpc_error_code=" << code << "]"
+                                       << " [rpc_error_message_size=" << message.size() << "]");
+    }
   }
 
   void on_message_failed(MessageId message_id, Status status) final {
+    if (!status.is_error()) {
+      status = Status::Error("ping message delivery failed callback must report error status");
+    }
+    LOG(WARNING) << "ping message delivery failed" << " [message_id=" << message_id << "]"
+                 << " [status_code=" << status.code() << "]" << " [status_message=" << status.public_message() << "]"
+                 << " [pong_count=" << pong_cnt_ << "]" << " [is_closed=" << is_closed_ << "]";
+    if (!is_closed_) {
+      is_closed_ = true;
+      status_ = std::move(status);
+    }
   }
 
   void on_message_info(MessageId message_id, int32 state, MessageId answer_message_id, int32 answer_size,
@@ -168,8 +234,9 @@ class PingConnectionPingPong final
   }
 
   Status on_destroy_auth_key() final {
-    LOG(ERROR) << "Destroy auth key";
-    return Status::OK();
+    LOG(ERROR) << "received destroy_auth_key while pinging" << " [pong_count=" << pong_cnt_ << "]"
+               << " [is_closed=" << is_closed_ << "]";
+    return Status::Error("received destroy_auth_key while pinging");
   }
 
   PollableFdInfo &get_poll_info() final {

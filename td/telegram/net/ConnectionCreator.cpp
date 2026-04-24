@@ -548,16 +548,21 @@ void ConnectionCreator::ping_proxy(td_api::object_ptr<td_api::proxy> input_proxy
     for (auto &info : infos) {
       auto r_transport_type = get_transport_type(Proxy(), info);
       if (r_transport_type.is_error()) {
-        LOG(ERROR) << r_transport_type.error();
-        on_ping_main_dc_result(token, r_transport_type.move_as_error());
+        auto error = r_transport_type.move_as_error();
+        LOG(ERROR) << "Ping main DC transport resolution failed" << tag("dc_id", main_dc_id)
+                   << tag("target_ip", info.option->get_ip_address()) << tag("status_code", error.code())
+                   << tag("status_message", error.public_message());
+        on_ping_main_dc_result(token, std::move(error));
         continue;
       }
 
       auto ip_address = info.option->get_ip_address();
       auto r_socket_fd = SocketFd::open(ip_address);
       if (r_socket_fd.is_error()) {
-        LOG(DEBUG) << "Failed to open socket: " << r_socket_fd.error();
-        on_ping_main_dc_result(token, r_socket_fd.move_as_error());
+        auto error = r_socket_fd.move_as_error();
+        LOG(WARNING) << "Ping main DC socket open failed" << tag("dc_id", main_dc_id) << tag("target_ip", ip_address)
+                     << tag("status_code", error.code()) << tag("status_message", error.public_message());
+        on_ping_main_dc_result(token, std::move(error));
         continue;
       }
 
@@ -850,10 +855,16 @@ void ConnectionCreator::request_raw_connection(
 Result<ConnectionCreator::RawIpConnectionRoute> ConnectionCreator::resolve_raw_ip_connection_route(
     const Proxy &proxy, const IPAddress &proxy_ip_address, const IPAddress &target_ip_address) {
   if (!target_ip_address.is_valid()) {
+    LOG(WARNING) << "Raw-IP route validation failed" << tag("reason", "invalid_target_ip")
+                 << tag("proxy_mode", proxy_mode_name(proxy)) << tag("target_ip_valid", false)
+                 << tag("proxy_ip_valid", proxy_ip_address.is_valid());
     return Status::Error("Target IP address is invalid");
   }
 
   if (proxy.use_proxy() && !proxy_ip_address.is_valid()) {
+    LOG(WARNING) << "Raw-IP route validation failed" << tag("reason", "invalid_proxy_ip")
+                 << tag("proxy_mode", proxy_mode_name(proxy)) << tag("target_ip_valid", true)
+                 << tag("proxy_ip_valid", false);
     return Status::Error("Proxy IP address is invalid");
   }
 
@@ -1346,7 +1357,10 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
     auto r_socket_fd = find_connection(proxy, proxy_ip_address_, client.dc_id, client.allow_media_only, extra);
     check_mode |= extra.check_mode;
     if (r_socket_fd.is_error()) {
-      LOG(WARNING) << extra.debug_str << ": " << r_socket_fd.error();
+      auto error = r_socket_fd.move_as_error();
+      LOG(WARNING) << "Client loop socket open failed" << tag("dc_id", client.dc_id)
+                   << tag("connection_context", extra.debug_str) << tag("status_code", error.code())
+                   << tag("status_message", error.public_message());
       if (extra.stat) {
         extra.stat->on_error();  // TODO: different kind of error
       }
@@ -1366,7 +1380,9 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
     if (debug_ip_status.is_ok()) {
       extra.debug_str = PSTRING() << extra.debug_str << " from " << debug_ip;
     } else {
-      LOG(ERROR) << debug_ip_status;
+      LOG(ERROR) << "Client loop local endpoint introspection failed" << tag("dc_id", client.dc_id)
+                 << tag("connection_context", extra.debug_str) << tag("status_code", debug_ip_status.code())
+                 << tag("status_message", debug_ip_status.public_message());
     }
 #endif
 

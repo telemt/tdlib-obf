@@ -38,6 +38,7 @@ class StealthTransportDecorator final : public IStreamTransport {
   double get_shaping_wakeup() const final;
   void set_traffic_hint(TrafficHint hint) final;
   void set_max_tls_record_size(int32 size) final;
+  void set_stealth_record_padding_target(int32 target_bytes) final;
   bool supports_tls_record_sizing() const final;
   size_t traffic_bulk_threshold_bytes() const final;
 

@@ -57,7 +57,7 @@ uint64 load_uint64_le(Slice slice) {
 }  // namespace
 
 template <class T>
-static Result<typename T::ReturnType> fetch_result(Slice message, bool check_end = true) {
+static Result<typename T::ReturnType> fetch_result(Slice message, Slice phase, bool check_end = true) {
   TlParser parser(message);
   auto result = T::fetch_result(parser);
 
@@ -66,8 +66,10 @@ static Result<typename T::ReturnType> fetch_result(Slice message, bool check_end
   }
   const char *error = parser.get_error();
   if (error != nullptr) {
-    LOG(ERROR) << "Can't parse: " << format::as_hex_dump<4>(message);
-    return Status::Error(500, Slice(error));
+    LOG(ERROR) << "Failed to parse handshake TL payload" << tag("payload_size", message.size())
+               << tag("phase", phase)
+               << tag("parse_error", error);
+    return Status::Error(500, PSLICE() << "Handshake " << phase << " parse failed: " << error);
   }
 
   return std::move(result);
@@ -150,9 +152,9 @@ Status AuthKeyHandshake::on_res_pq(Slice message, Callback *connection, PublicRs
     return Status::Error("Handshake ResPQ timeout expired");
   }
 
-  TRY_RESULT(res_pq, fetch_result<mtproto_api::req_pq_multi>(message, false));
+  TRY_RESULT(res_pq, fetch_result<mtproto_api::req_pq_multi>(message, "ResPQ", false));
   if (res_pq->nonce_ != nonce_) {
-    return Status::Error("Nonce mismatch");
+    return Status::Error("Handshake ResPQ nonce mismatch");
   }
 
   server_nonce_ = res_pq->server_nonce_;
@@ -236,14 +238,14 @@ Status AuthKeyHandshake::on_server_dh_params(Slice message, Callback *connection
     return Status::Error("Handshake DH params timeout expired");
   }
 
-  TRY_RESULT(dh_params, fetch_result<mtproto_api::req_DH_params>(message, false));
+  TRY_RESULT(dh_params, fetch_result<mtproto_api::req_DH_params>(message, "ServerDHParams", false));
 
   // server_DH_params_ok#d0e8075c nonce:int128 server_nonce:int128 encrypted_answer:string = Server_DH_Params;
   if (dh_params->nonce_ != nonce_) {
-    return Status::Error("Nonce mismatch");
+    return Status::Error("Handshake ServerDHParams nonce mismatch");
   }
   if (dh_params->server_nonce_ != server_nonce_) {
-    return Status::Error("Server nonce mismatch");
+    return Status::Error("Handshake ServerDHParams server_nonce mismatch");
   }
   if (dh_params->encrypted_answer_.size() & 15) {
     return Status::Error("Bad padding for encrypted part");
@@ -283,10 +285,10 @@ Status AuthKeyHandshake::on_server_dh_params(Slice message, Callback *connection
   }
 
   if (dh_inner_data.nonce_ != nonce_) {
-    return Status::Error("Nonce mismatch");
+    return Status::Error("Handshake ServerDHInnerData nonce mismatch");
   }
   if (dh_inner_data.server_nonce_ != server_nonce_) {
-    return Status::Error("Server nonce mismatch");
+    return Status::Error("Handshake ServerDHInnerData server_nonce mismatch");
   }
 
   server_time_diff_ = dh_inner_data.server_time_ - Time::now();
@@ -325,15 +327,15 @@ Status AuthKeyHandshake::on_server_dh_params(Slice message, Callback *connection
 }
 
 Status AuthKeyHandshake::on_dh_gen_response(Slice message, Callback *connection) {
-  TRY_RESULT(answer, fetch_result<mtproto_api::set_client_DH_params>(message, false));
+  TRY_RESULT(answer, fetch_result<mtproto_api::set_client_DH_params>(message, "DhGenResponse", false));
   switch (answer->get_id()) {
     case mtproto_api::dh_gen_ok::ID: {
       auto dh_gen_ok = move_tl_object_as<mtproto_api::dh_gen_ok>(answer);
       if (dh_gen_ok->nonce_ != nonce_) {
-        return Status::Error("Nonce mismatch");
+        return Status::Error("Handshake DhGen nonce mismatch");
       }
       if (dh_gen_ok->server_nonce_ != server_nonce_) {
-        return Status::Error("Server nonce mismatch");
+        return Status::Error("Handshake DhGen server_nonce mismatch");
       }
 
       UInt<160> auth_key_sha1;
@@ -368,15 +370,18 @@ void AuthKeyHandshake::do_send(Callback *connection, const Storer &storer) {
 }
 
 void AuthKeyHandshake::resume(Callback *connection) {
+  auto mode_name = mode_ == Mode::Main ? Slice("main") : Slice("temp");
   if (state_ == State::Start) {
     return on_start(connection).ignore();
   }
   if (state_ == State::Finish) {
-    LOG(ERROR) << "State is Finish during resume. UNREACHABLE";
+    LOG(ERROR) << "Resume called after handshake finish" << tag("dc_id", dc_id_)
+               << tag("mode", mode_name) << tag("state", state_);
     return clear();
   }
   if (last_query_.empty()) {
-    LOG(ERROR) << "Last query empty! UNREACHABLE " << state_;
+    LOG(ERROR) << "Resume failed because handshake query buffer is empty" << tag("dc_id", dc_id_)
+               << tag("mode", mode_name) << tag("state", state_);
     return clear();
   }
   LOG(INFO) << "Resume handshake";
@@ -409,7 +414,15 @@ Status AuthKeyHandshake::on_message(Slice message, Callback *connection, AuthKey
     }
   }();
   if (status.is_error()) {
-    LOG(WARNING) << "Failed to process hasdshake response in state " << state_ << ": " << status.message();
+    auto elapsed_sec = Time::now() - start_time_;
+    auto mode_name = mode_ == Mode::Main ? Slice("main") : Slice("temp");
+    if (elapsed_sec < 0) {
+      elapsed_sec = 0;
+    }
+    LOG(WARNING) << "Failed to process handshake response" << tag("state", state_) << tag("status_code", status.code())
+                 << tag("status_message", status.message()) << tag("payload_size", message.size())
+                 << tag("dc_id", dc_id_) << tag("mode", mode_name)
+                 << tag("elapsed_sec", elapsed_sec) << tag("timeout_sec", timeout_in_);
     clear();
   }
   return status;

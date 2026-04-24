@@ -46,7 +46,9 @@ TEST(StealthConfigFailClosed, DecoratorFactoryRejectsInvalidConfigWithoutAbort) 
   auto result = StealthTransportDecorator::create(td::make_unique<RecordingTransport>(), config,
                                                   td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(result.is_error());
-  ASSERT_STREQ("ring_capacity exceeds fail-closed maximum", result.error().message().c_str());
+  auto message = result.error().message().str();
+  ASSERT_TRUE(message.find("StealthTransportDecorator::create rejected stealth config") != td::string::npos);
+  ASSERT_TRUE(message.find("ring_capacity exceeds fail-closed maximum") != td::string::npos);
 }
 
 TEST(StealthConfigFailClosed, RejectsTooSmallBulkThresholdBytes) {
@@ -74,7 +76,9 @@ TEST(StealthConfigFailClosed, DecoratorFactoryRejectsInvalidBulkThresholdWithout
   auto result = StealthTransportDecorator::create(td::make_unique<RecordingTransport>(), config,
                                                   td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(result.is_error());
-  ASSERT_STREQ("bulk_threshold_bytes is out of allowed bounds", result.error().message().c_str());
+  auto message = result.error().message().str();
+  ASSERT_TRUE(message.find("StealthTransportDecorator::create rejected stealth config") != td::string::npos);
+  ASSERT_TRUE(message.find("bulk_threshold_bytes is out of allowed bounds") != td::string::npos);
 }
 
 TEST(StealthConfigFailClosed, DecoratorFactoryRejectsMissingDependencies) {
@@ -83,17 +87,23 @@ TEST(StealthConfigFailClosed, DecoratorFactoryRejectsMissingDependencies) {
   auto missing_inner =
       StealthTransportDecorator::create(nullptr, config, td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(missing_inner.is_error());
-  ASSERT_STREQ("inner transport must not be null", missing_inner.error().message().c_str());
+  auto missing_inner_message = missing_inner.error().message().str();
+  ASSERT_TRUE(missing_inner_message.find("StealthTransportDecorator::create") != td::string::npos);
+  ASSERT_TRUE(missing_inner_message.find("inner transport") != td::string::npos);
 
   auto missing_rng = StealthTransportDecorator::create(td::make_unique<RecordingTransport>(), config, nullptr,
                                                        td::make_unique<MockClock>());
   ASSERT_TRUE(missing_rng.is_error());
-  ASSERT_STREQ("rng must not be null", missing_rng.error().message().c_str());
+  auto missing_rng_message = missing_rng.error().message().str();
+  ASSERT_TRUE(missing_rng_message.find("StealthTransportDecorator::create") != td::string::npos);
+  ASSERT_TRUE(missing_rng_message.find("rng") != td::string::npos);
 
   auto missing_clock = StealthTransportDecorator::create(td::make_unique<RecordingTransport>(), config,
                                                          td::make_unique<MockRng>(7), nullptr);
   ASSERT_TRUE(missing_clock.is_error());
-  ASSERT_STREQ("clock must not be null", missing_clock.error().message().c_str());
+  auto missing_clock_message = missing_clock.error().message().str();
+  ASSERT_TRUE(missing_clock_message.find("StealthTransportDecorator::create") != td::string::npos);
+  ASSERT_TRUE(missing_clock_message.find("clock") != td::string::npos);
 }
 
 TEST(StealthConfigFailClosed, DecoratorFactoryConstructsValidatedInputs) {
@@ -102,6 +112,25 @@ TEST(StealthConfigFailClosed, DecoratorFactoryConstructsValidatedInputs) {
   auto result = StealthTransportDecorator::create(td::make_unique<RecordingTransport>(), config,
                                                   td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(result.is_ok());
+}
+
+TEST(StealthConfigFailClosed, GreetingCamouflageRequiresTlsRecordSizingCapability) {
+  auto config = make_valid_config();
+  config.greeting_camouflage_policy.greeting_record_count = 1;
+  config.greeting_camouflage_policy.record_models[0].bins = {{256, 256, 1}};
+  config.greeting_camouflage_policy.record_models[0].max_repeat_run = 1;
+  config.greeting_camouflage_policy.record_models[0].local_jitter = 0;
+
+  auto inner = td::make_unique<RecordingTransport>();
+  inner->supports_tls_record_sizing_result = false;
+
+  auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(7),
+                                                  td::make_unique<MockClock>());
+  ASSERT_TRUE(result.is_error());
+  auto message = result.error().message().str();
+  ASSERT_TRUE(message.find("greeting camouflage requires TLS record sizing support") != td::string::npos);
+  ASSERT_TRUE(message.find("greeting_record_count=1") != td::string::npos);
+  ASSERT_TRUE(message.find("supports_tls_record_sizing=false") != td::string::npos);
 }
 
 }  // namespace

@@ -6,7 +6,9 @@
 
 #include "td/mtproto/stealth/StealthParamsLoader.h"
 
+#include "td/utils/format.h"
 #include "td/utils/JsonBuilder.h"
+#include "td/utils/logging.h"
 #if TD_PORT_POSIX
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -577,6 +579,33 @@ Result<RuntimeRouteFailurePolicy> parse_route_failure(JsonValue value) {
   return route_failure;
 }
 
+string remediation_hint_for_reload_failure(Slice stage, Slice status_message) {
+  if (stage == "path_missing") {
+    return "create stealth params file at configured path or disable reload for this deployment";
+  }
+
+  auto message = status_message.str();
+  if (message.find("owned by the current user") != string::npos ||
+      message.find("must not be writable by group or others") != string::npos ||
+      message.find("parent directory") != string::npos) {
+    return "fix ownership and permissions (owner-only path; 0700 directory; 0600 file)";
+  }
+  if (message.find("must be a regular file") != string::npos || message.find("must be an object") != string::npos ||
+      message.find("Unsupported stealth params version") != string::npos) {
+    return "validate stealth params file type and schema (version=1 JSON object with required fields)";
+  }
+  if (message.find("exceeds size limit") != string::npos) {
+    return "reduce stealth params file size below hard limit";
+  }
+  if (stage == "publish_runtime") {
+    return "fix runtime policy invariants and retry publish";
+  }
+  if (stage == "load_strict") {
+    return "validate JSON syntax, schema, and fail-closed bounds in stealth params";
+  }
+  return "inspect status_message and restore last-known-good stealth params";
+}
+
 }  // namespace
 
 StealthParamsLoader::StealthParamsLoader(string config_path)
@@ -615,36 +644,60 @@ bool StealthParamsLoader::try_reload() noexcept {
   auto lock = std::lock_guard<std::mutex>(reload_mu_);
   auto now = Timestamp::now();
   if (reload_cooldown_until_ && !reload_cooldown_until_.is_in_past(now)) {
+    LOG(DEBUG) << "Stealth params reload skipped due to cooldown " << tag("path", config_path_)
+               << tag("cooldown_active", true)
+               << tag("cooldown_remaining_sec", std::max(0.0, reload_cooldown_until_.in()))
+               << tag("consecutive_failures", consecutive_reload_failures_);
     return false;
   }
 
-  auto note_reload_failure = [&] {
+  auto note_reload_failure = [&](Slice stage, const Status &status) {
     consecutive_reload_failures_++;
+    bool entered_cooldown = false;
     if (consecutive_reload_failures_ >= kReloadErrorCooldownThreshold) {
+      entered_cooldown = true;
       reload_cooldown_until_ = Timestamp::in(kReloadErrorCooldownSeconds, now);
     }
+
+    auto cooldown_active = reload_cooldown_until_ && !reload_cooldown_until_.is_in_past(now);
+    auto remediation_hint = remediation_hint_for_reload_failure(stage, status.public_message());
+    auto last_known_good = get_snapshot();
+    LOG(WARNING) << "Stealth params reload failed " << tag("path", config_path_) << tag("stage", stage)
+                 << tag("status_code", status.code()) << tag("status_message", status.public_message())
+                 << tag("remediation_hint", remediation_hint)
+                 << tag("consecutive_failures", consecutive_reload_failures_)
+                 << tag("entered_cooldown", entered_cooldown) << tag("cooldown_active", cooldown_active)
+                 << tag("cooldown_remaining_sec", cooldown_active ? std::max(0.0, reload_cooldown_until_.in()) : 0.0)
+                 << tag("last_good_bulk_threshold_bytes", static_cast<uint64>(last_known_good.bulk_threshold_bytes));
   };
 
   if (is_missing_config_path(config_path_)) {
-    note_reload_failure();
+    note_reload_failure("path_missing", Status::Error("Stealth params path does not exist"));
     return false;
   }
 
   auto result = try_load_strict(config_path_);
   if (result.is_error()) {
-    note_reload_failure();
+    note_reload_failure("load_strict", result.error());
     return false;
   }
   auto params = result.move_as_ok();
-  if (set_runtime_stealth_params(params).is_error()) {
-    note_reload_failure();
+  auto publish_status = set_runtime_stealth_params(params);
+  if (publish_status.is_error()) {
+    note_reload_failure("publish_runtime", publish_status);
     return false;
   }
+  auto previous_failures = consecutive_reload_failures_;
   consecutive_reload_failures_ = 0;
   reload_cooldown_until_ = Timestamp();
   {
     auto current_lock = std::lock_guard<std::mutex>(current_mu_);
     current_ = std::make_shared<const StealthRuntimeParams>(params);
+  }
+  if (previous_failures > 0) {
+    LOG(INFO) << "Stealth params reload succeeded " << tag("path", config_path_)
+              << tag("previous_failures", previous_failures)
+              << tag("bulk_threshold_bytes", static_cast<uint64>(params.bulk_threshold_bytes));
   }
   return true;
 }
@@ -743,7 +796,7 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
 
   TRY_RESULT(version, object.get_required_int_field("version"));
   if (version != 1) {
-    return Status::Error("Unsupported stealth params version");
+    return Status::Error("Unsupported stealth params version " + std::to_string(version) + " (expected 1)");
   }
 
   StealthRuntimeParams params = default_runtime_stealth_params();

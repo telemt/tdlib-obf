@@ -401,47 +401,79 @@ Status SessionConnection::on_packet(const MsgInfo &info,
 
     InvalidContainer = 64
   };
-  Slice common = ". BUG! CALL FOR A DEVELOPER! Session will be closed";
   switch (bad_msg_notification.error_code_) {
     case MsgIdTooLow:
-      LOG(WARNING) << bad_info << ": MessageId is too low. Message will be re-sent";
+      LOG(WARNING) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                   << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                   << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "resend_message")
+                   << tag("reason", "message_id_too_low");
       // time will be updated automagically
       on_message_failed(bad_info.message_id, Status::Error("MessageId is too low"));
       break;
     case MsgIdTooHigh:
-      LOG(WARNING) << bad_info << ": MessageId is too high. Session will be closed";
+      LOG(WARNING) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                   << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                   << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                   << tag("reason", "message_id_too_high");
       // All this queries will be re-sent by parent
       to_send_.clear();
       reset_server_time_difference(info.message_id);
       callback_->on_session_failed(Status::Error("MessageId is too high"));
       return Status::Error("MessageId is too high");
     case MsgIdMod4:
-      LOG(ERROR) << bad_info << ": MessageId is not divisible by 4" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "message_id_not_divisible_by_4");
       return Status::Error("MessageId is not divisible by 4");
     case MsgIdCollision:
-      LOG(ERROR) << bad_info << ": Container and older message MessageId collision" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "message_id_collision");
       return Status::Error("Container and older message MessageId collision");
     case MsgIdTooOld:
-      LOG(WARNING) << bad_info << ": MessageId is too old. Message will be re-sent";
+      LOG(WARNING) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                   << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                   << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "resend_message")
+                   << tag("reason", "message_id_too_old");
       on_message_failed(bad_info.message_id, Status::Error("MessageId is too old"));
       break;
     case SeqNoTooLow:
-      LOG(ERROR) << bad_info << ": SeqNo is too low" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "seqno_too_low");
       return Status::Error("SeqNo is too low");
     case SeqNoTooHigh:
-      LOG(ERROR) << bad_info << ": SeqNo is too high" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "seqno_too_high");
       return Status::Error("SeqNo is too high");
     case SeqNoNotEven:
-      LOG(ERROR) << bad_info << ": SeqNo is not even for an irrelevant message" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "seqno_not_even_for_irrelevant_message");
       return Status::Error("SeqNo is not even for an irrelevant message");
     case SeqNoNotOdd:
-      LOG(ERROR) << bad_info << ": SeqNo is not odd for a relevant message" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "seqno_not_odd_for_relevant_message");
       return Status::Error("SeqNo is not odd for a relevant message");
     case InvalidContainer:
-      LOG(ERROR) << bad_info << ": Invalid Container" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "invalid_container");
       return Status::Error("Invalid Container");
     default:
-      LOG(ERROR) << bad_info << ": Unknown error [code:" << bad_msg_notification.error_code_ << "]" << common;
+      LOG(ERROR) << "BadMsgNotification protocol violation" << tag("error_code", bad_msg_notification.error_code_)
+                 << tag("bad_msg_id", bad_msg_notification.bad_msg_id_)
+                 << tag("bad_msg_seqno", bad_msg_notification.bad_msg_seqno_) << tag("action", "close_session")
+                 << tag("reason", "unknown_error_code");
       return Status::Error("Unknown error code");
   }
   return Status::OK();
@@ -804,7 +836,9 @@ Status SessionConnection::on_raw_packet(const PacketInfo &packet_info, BufferSli
       send_ack(packet_info.message_id);
       return Status::OK();
     } else if (status.code() == 2) {
-      LOG(WARNING) << "Receive too old packet: " << status;
+      LOG(WARNING) << "Receive too old packet" << tag("status_code", status.code())
+                   << tag("status_message", status.public_message()) << tag("session_id", packet_info.session_id)
+                   << tag("packet_seq_no", packet_info.seq_no);
       callback_->on_session_failed(Status::Error("Receive too old packet"));
       return status;
     } else {

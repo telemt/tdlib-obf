@@ -198,6 +198,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_runtime.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_filesystem_fail_closed.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_reload_log_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_seam.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_overdue_shaping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_flush_order.cpp
@@ -206,6 +207,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_shaping_wakeup_seam.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_hints.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_handshake_bootstrap_hints.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_handshake_error_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_handshake_logging_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_bulk_threshold_runtime.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_bulk_threshold_max_runtime_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_ack_threshold_runtime_integration.cpp
@@ -361,6 +364,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_shaper_ring_buffer_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_activation_fail_closed.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_seam.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_transport_integration_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_drs_wire.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_record_size_sequence_hardening_wire.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_drs_primer_transition_wire.cpp

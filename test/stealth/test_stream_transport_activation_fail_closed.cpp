@@ -69,6 +69,12 @@ td::Result<StealthConfig> invalid_stealth_config_factory_for_logs(const ProxySec
   return td::Status::Error("test_config_error_marker");
 }
 
+td::Result<StealthConfig> invalid_stealth_config_factory_with_secret_leak(const ProxySecret &secret, IRng &rng) {
+  (void)rng;
+  g_config_factory_calls++;
+  return td::Status::Error("test_secret_leak_marker=" + secret.get_raw_secret().str());
+}
+
 class MarkerTransport final : public IStreamTransport {
  public:
   td::Result<size_t> read_next(td::BufferSlice *message, td::uint32 *quick_ack) final {
@@ -229,9 +235,43 @@ TEST(StreamTransportActivationFailClosed, InvalidRuntimeConfigLogsStructuredDisa
   ASSERT_EQ(1, g_config_factory_calls);
   ASSERT_EQ(TransportType::ObfuscatedTcp, transport->get_type().type);
   ASSERT_TRUE(capture.contains("Stealth shaping disabled for emulate_tls transport"));
-  ASSERT_TRUE(capture.contains("reason=config_validation_failed"));
-  ASSERT_TRUE(capture.contains("dc_id=2"));
-  ASSERT_TRUE(capture.contains("test_config_error_marker"));
+  ASSERT_TRUE(capture.contains("[reason:config_validation_failed]"));
+  ASSERT_TRUE(capture.contains("[dc_id:2]"));
+  ASSERT_TRUE(capture.contains("[tls_emulation:true]"));
+  ASSERT_TRUE(capture.contains("[status_code:"));
+  ASSERT_TRUE(capture.contains("stealth runtime config rejected"));
+}
+
+TEST(StreamTransportActivationFailClosed, InvalidRuntimeConfigLogRedactsProxySecretMaterial) {
+#if !TDLIB_STEALTH_SHAPING
+  ASSERT_TRUE(true);
+  return;
+#endif
+
+  g_config_factory_calls = 0;
+  auto previous_config_factory = set_stealth_config_factory_for_tests(&invalid_stealth_config_factory_with_secret_leak);
+  CapturingLog capture;
+  auto old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(INFO));
+  auto secret = make_tls_secret();
+  SCOPE_EXIT {
+    SET_VERBOSITY_LEVEL(old_verbosity);
+    td::log_interface = old_log_interface;
+    set_stealth_config_factory_for_tests(previous_config_factory);
+  };
+
+  auto transport = create_transport(TransportType{TransportType::ObfuscatedTcp, 2, ProxySecret::from_raw(secret)});
+
+  ASSERT_EQ(1, g_config_factory_calls);
+  ASSERT_EQ(TransportType::ObfuscatedTcp, transport->get_type().type);
+  ASSERT_TRUE(capture.contains("Stealth shaping disabled for emulate_tls transport"));
+  ASSERT_TRUE(capture.contains("[reason:config_validation_failed]"));
+  ASSERT_TRUE(capture.contains("[status_code:"));
+  ASSERT_TRUE(capture.contains("stealth runtime config rejected"));
+  ASSERT_FALSE(capture.contains("test_secret_leak_marker"));
+  ASSERT_FALSE(capture.contains(secret));
 }
 
 TEST(StreamTransportActivationFailClosed, SuccessfulActivationLogsEnableDecision) {
@@ -259,7 +299,9 @@ TEST(StreamTransportActivationFailClosed, SuccessfulActivationLogsEnableDecision
   ASSERT_EQ(1, g_config_factory_calls);
   ASSERT_EQ(TransportType::ObfuscatedTcp, transport->get_type().type);
   ASSERT_TRUE(capture.contains("Stealth shaping enabled for emulate_tls transport"));
-  ASSERT_TRUE(capture.contains("dc_id=2"));
+  ASSERT_TRUE(capture.contains("[transport:obfuscated_tcp]"));
+  ASSERT_TRUE(capture.contains("[dc_id:2]"));
+  ASSERT_TRUE(capture.contains("[tls_emulation:true]"));
 }
 
 }  // namespace
