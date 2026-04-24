@@ -585,6 +585,13 @@ string remediation_hint_for_reload_failure(Slice stage, Slice status_message) {
   }
 
   auto message = status_message.str();
+  if (message.find("has unknown field") != string::npos || message.find("has duplicate field") != string::npos) {
+    return "remove unsupported field names and keep the exact version=1 stealth params schema";
+  }
+  if (message.find("out of allowed bounds") != string::npos || message.find("must be within [") != string::npos ||
+      message.find("must be non-negative") != string::npos) {
+    return "restore stealth params numeric fields within documented fail-closed bounds";
+  }
   if (message.find("owned by the current user") != string::npos ||
       message.find("must not be writable by group or others") != string::npos ||
       message.find("parent directory") != string::npos) {
@@ -604,6 +611,27 @@ string remediation_hint_for_reload_failure(Slice stage, Slice status_message) {
     return "validate JSON syntax, schema, and fail-closed bounds in stealth params";
   }
   return "inspect status_message and restore last-known-good stealth params";
+}
+
+string sanitize_reload_status_message(Slice status_message, Slice fallback_message) {
+  auto message = status_message.str();
+  if (message.empty()) {
+    return fallback_message.str();
+  }
+
+  for (auto c : message) {
+    auto byte = static_cast<unsigned char>(c);
+    if (byte < 0x20) {
+      return fallback_message.str();
+    }
+  }
+
+  constexpr size_t kMaxLoggedReloadStatusMessageBytes = 256;
+  if (message.size() > kMaxLoggedReloadStatusMessageBytes) {
+    return fallback_message.str();
+  }
+
+  return message;
 }
 
 }  // namespace
@@ -660,10 +688,13 @@ bool StealthParamsLoader::try_reload() noexcept {
     }
 
     auto cooldown_active = reload_cooldown_until_ && !reload_cooldown_until_.is_in_past(now);
-    auto remediation_hint = remediation_hint_for_reload_failure(stage, status.public_message());
+    auto status_public_message = status.public_message();
+    auto remediation_hint = remediation_hint_for_reload_failure(stage, status_public_message);
+    auto safe_status_message = sanitize_reload_status_message(
+        status_public_message, "stealth params reload rejected configuration; see stage/remediation_hint for triage");
     auto last_known_good = get_snapshot();
     LOG(WARNING) << "Stealth params reload failed " << tag("path", config_path_) << tag("stage", stage)
-                 << tag("status_code", status.code()) << tag("status_message", status.public_message())
+                 << tag("status_code", status.code()) << tag("status_message", safe_status_message)
                  << tag("remediation_hint", remediation_hint)
                  << tag("consecutive_failures", consecutive_reload_failures_)
                  << tag("entered_cooldown", entered_cooldown) << tag("cooldown_active", cooldown_active)

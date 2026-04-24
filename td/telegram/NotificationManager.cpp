@@ -3936,7 +3936,7 @@ Result<int64> NotificationManager::get_push_receiver_id(string payload) {
   if (data.has_field("data")) {
     auto r_data_data = data.extract_required_field("data", JsonValue::Type::Object);
     if (r_data_data.is_error()) {
-      return Status::Error(400, r_data_data.error().message());
+      return Status::Error(400, r_data_data.error().public_message());
     }
     auto data_data = r_data_data.move_as_ok();
     data = std::move(data_data.get_object());

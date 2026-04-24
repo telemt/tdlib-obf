@@ -18,7 +18,27 @@ namespace td {
 namespace {
 
 bool has_status_prefix(const Status &status, Slice expected_prefix) {
-  return begins_with(status.message(), expected_prefix);
+  return begins_with(status.public_message(), expected_prefix);
+}
+
+string sanitize_failure_status_message_for_log(Slice message) {
+  if (message.empty()) {
+    return "status_message_unavailable";
+  }
+
+  for (auto c : message) {
+    auto byte = static_cast<unsigned char>(c);
+    if (byte < 0x20) {
+      return "status_message_redacted";
+    }
+  }
+
+  constexpr size_t kMaxFailureStatusMessageBytes = 256;
+  if (message.size() > kMaxFailureStatusMessageBytes) {
+    return "status_message_redacted";
+  }
+
+  return message.str();
 }
 
 }  // namespace
@@ -217,13 +237,14 @@ const char *connection_failure_action_hint(ProxyFailureStage stage, ProxyFailure
 
 string summarize_connection_failure_for_log(const ConnectionFailureClassification &classification,
                                             const Status &status) {
+  auto safe_status_message = sanitize_failure_status_message_for_log(status.public_message());
   return PSTRING() << "proxy_backed=" << classification.proxy_backed
                    << " deterministic=" << classification.deterministic
                    << " apply_backoff=" << classification.apply_exponential_backoff
                    << " bounded_retry=" << classification.bounded_retry
                    << " stage=" << proxy_failure_stage_name(classification.stage)
                    << " reason=" << proxy_failure_reason_name(classification.reason) << " status_code=" << status.code()
-                   << " status_message=" << status.message()
+                   << " status_message=" << safe_status_message
                    << " action_hint=" << connection_failure_action_hint(classification.stage, classification.reason);
 }
 

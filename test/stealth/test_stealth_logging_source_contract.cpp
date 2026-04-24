@@ -161,6 +161,61 @@ TEST(StealthLoggingSourceContract, ConnectionCreatorFailureLogContainsStructured
   ASSERT_TRUE(normalized.find("summarize_connection_failure_for_log") != td::string::npos);
 }
 
+TEST(StealthLoggingSourceContract, NetQueryErrorLogsUseStructuredPublicStatusContext) {
+  auto net_query_source = td::mtproto::test::read_repo_text_file("td/telegram/net/NetQuery.cpp");
+  auto net_query_region =
+      extract_source_region(net_query_source, "void NetQuery::set_error_impl(Status status, string source) {",
+                            "StringBuilder &operator<<(StringBuilder &string_builder, const NetQuery &net_query) {");
+  auto normalized_net_query = normalize_for_contract(net_query_region);
+
+  ASSERT_TRUE(normalized_net_query.find("Receiveerror") != td::string::npos);
+  ASSERT_TRUE(normalized_net_query.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_net_query.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_net_query.find("\"\"<<status") == td::string::npos);
+
+  auto verifier_source = td::mtproto::test::read_repo_text_file("td/telegram/net/NetQueryVerifier.cpp");
+  auto verifier_region = extract_source_region(
+      verifier_source, "void NetQueryVerifier::verify(NetQueryPtr query, string nonce) {",
+      "void NetQueryVerifier::check_recaptcha(NetQueryPtr query, string action, string recaptcha_key_id) {");
+  auto normalized_verifier = normalize_for_contract(verifier_region);
+
+  ASSERT_TRUE(normalized_verifier.find("Receiveinvalidverificationnonce") != td::string::npos);
+  ASSERT_TRUE(normalized_verifier.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_verifier.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_verifier.find("Receive<<status") == td::string::npos);
+
+  auto delayer_source = td::mtproto::test::read_repo_text_file("td/telegram/net/NetQueryDelayer.cpp");
+  auto delayer_region = extract_source_region(delayer_source, "void NetQueryDelayer::delay(NetQueryPtr query) {",
+                                              "void NetQueryDelayer::wakeup() {");
+  auto normalized_delayer = normalize_for_contract(delayer_region);
+
+  ASSERT_TRUE(normalized_delayer.find("tag(\"status_code\",error.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_delayer.find("tag(\"status_message\",error.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_delayer.find("becauseof<<error") == td::string::npos);
+
+  auto transparent_proxy_source = td::mtproto::test::read_repo_text_file("tdnet/td/net/TransparentProxy.cpp");
+  auto transparent_proxy_region =
+      extract_source_region(transparent_proxy_source, "void TransparentProxy::on_error(Status status) {",
+                            "void TransparentProxy::tear_down() {");
+  auto normalized_transparent_proxy = normalize_for_contract(transparent_proxy_region);
+
+  ASSERT_TRUE(normalized_transparent_proxy.find("Receiveproxysetuperror") != td::string::npos);
+  ASSERT_TRUE(normalized_transparent_proxy.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_transparent_proxy.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_transparent_proxy.find("Receive<<status") == td::string::npos);
+
+  auto http_connection_source = td::mtproto::test::read_repo_text_file("tdnet/td/net/HttpConnectionBase.cpp");
+  auto http_connection_region =
+      extract_source_region(http_connection_source, "void HttpConnectionBase::write_error(Status error) {",
+                            "void HttpConnectionBase::timeout_expired() {");
+  auto normalized_http_connection = normalize_for_contract(http_connection_region);
+
+  ASSERT_TRUE(normalized_http_connection.find("CloseHTTPconnection") != td::string::npos);
+  ASSERT_TRUE(normalized_http_connection.find("tag(\"status_code\",error.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_http_connection.find("tag(\"status_message\",error.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_http_connection.find("CloseHTTPconnection:<<error") == td::string::npos);
+}
+
 TEST(StealthLoggingSourceContract, ConnectionCreatorPingMainDcFailureLogsAreStructuredAndContextual) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/ConnectionCreator.cpp");
   auto region = extract_source_region(source, "void ConnectionCreator::ping_proxy(",
@@ -185,9 +240,12 @@ TEST(StealthLoggingSourceContract, SessionConnectionProtocolRejectionLogsAreStru
       "Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::bad_server_salt");
   auto raw_packet_region = extract_source_region(source, "Status SessionConnection::on_raw_packet(",
                                                  "Status SessionConnection::on_quick_ack(uint64 quick_ack_token)");
+  auto slice_packet_region = extract_source_region(source, "Status SessionConnection::on_slice_packet(",
+                                                   "Status SessionConnection::parse_packet(TlParser &parser)");
 
   auto normalized_bad_msg = normalize_for_contract(bad_msg_region);
   auto normalized_raw_packet = normalize_for_contract(raw_packet_region);
+  auto normalized_slice_packet = normalize_for_contract(slice_packet_region);
 
   ASSERT_TRUE(normalized_bad_msg.find("BadMsgNotificationprotocolviolation") != td::string::npos);
   ASSERT_TRUE(normalized_bad_msg.find("tag(\"error_code\"") != td::string::npos);
@@ -199,6 +257,86 @@ TEST(StealthLoggingSourceContract, SessionConnectionProtocolRejectionLogsAreStru
   ASSERT_TRUE(normalized_raw_packet.find("tag(\"status_code\"") != td::string::npos);
   ASSERT_TRUE(normalized_raw_packet.find("tag(\"status_message\"") != td::string::npos);
   ASSERT_TRUE(normalized_raw_packet.find("tag(\"session_id\"") != td::string::npos);
+  ASSERT_TRUE(normalized_raw_packet.find("Packetisignored") != td::string::npos);
+  ASSERT_TRUE(normalized_raw_packet.find("tag(\"message_id\",packet_info.message_id)") != td::string::npos);
+  ASSERT_TRUE(normalized_raw_packet.find("Packetisignored:<<status") == td::string::npos);
+
+  ASSERT_TRUE(normalized_slice_packet.find("Receiveveryold") != td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("tag(\"recheck_status_code\",recheck_status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("tag(\"recheck_status_message\",recheck_status.public_message())") !=
+              td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("Skip") != td::string::npos);
+  ASSERT_TRUE(normalized_slice_packet.find("<<get_update_description()<<\":\"<<status") == td::string::npos);
+}
+
+TEST(StealthLoggingSourceContract, SessionConnectionFlushCloseLogUsesStructuredPublicStatus) {
+  auto source = td::mtproto::test::read_repo_text_file("td/mtproto/SessionConnection.cpp");
+  auto region =
+      extract_source_region(source, "double SessionConnection::flush(SessionConnection::Callback *callback) {",
+                            "void SessionConnection::force_close(SessionConnection::Callback *callback) {");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("Closesessionbecauseoffailure") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("Closesessionbecauseof<<status") == td::string::npos);
+}
+
+TEST(StealthLoggingSourceContract, SessionDisconnectPropagationUsesPublicStatusMessage) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/Session.cpp");
+  auto region = extract_source_region(source, "void Session::on_closed(", "void Session::on_new_session_created(");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("Sessionfailed:") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("status.public_message()") != td::string::npos);
+  ASSERT_TRUE(normalized.find("status.message()") == td::string::npos);
+}
+
+TEST(StealthLoggingSourceContract, SessionFailedLogUsesStructuredPublicStatusContext) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/Session.cpp");
+  auto region = extract_source_region(source, "void Session::on_session_failed(Status status) {",
+                                      "void Session::on_container_sent(");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("Sessionfailed") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("<<status") == td::string::npos);
+}
+
+TEST(StealthLoggingSourceContract, SessionFailureEmittersUseStructuredPublicStatusContext) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/Session.cpp");
+  auto bind_region = extract_source_region(source, "void Session::on_bind_result(NetQueryPtr query) {",
+                                           "void Session::on_check_key_result(NetQueryPtr query) {");
+  auto check_region = extract_source_region(source, "void Session::on_check_key_result(NetQueryPtr query) {",
+                                            "void Session::on_result(NetQueryPtr query) {");
+  auto send_fail_region =
+      extract_source_region(source, "void Session::on_message_failed(mtproto::MessageId message_id, Status status) {",
+                            "Status Session::on_destroy_auth_key() {");
+
+  auto normalized_bind = normalize_for_contract(bind_region);
+  auto normalized_check = normalize_for_contract(check_region);
+  auto normalized_send_fail = normalize_for_contract(send_fail_region);
+
+  ASSERT_TRUE(normalized_bind.find("BindKeyfailed") != td::string::npos);
+  ASSERT_TRUE(normalized_bind.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_bind.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_bind.find("BindKeyfailed:") == td::string::npos);
+
+  ASSERT_TRUE(normalized_check.find("Checkmainkeyfailed") != td::string::npos);
+  ASSERT_TRUE(normalized_check.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_check.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_check.find("Checkmainkeyfailed:") == td::string::npos);
+
+  ASSERT_TRUE(normalized_send_fail.find("Failedtosend") != td::string::npos);
+  ASSERT_TRUE(normalized_send_fail.find("tag(\"message_id\",message_id)") != td::string::npos);
+  ASSERT_TRUE(normalized_send_fail.find("tag(\"status_code\",status.code())") != td::string::npos);
+  ASSERT_TRUE(normalized_send_fail.find("tag(\"status_message\",status.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized_send_fail.find("<<message_id<<\":\"<<status") == td::string::npos);
 }
 
 TEST(StealthLoggingSourceContract, ConnectionCreatorClientLoopSocketDiagnosticsAreStructured) {
@@ -215,6 +353,22 @@ TEST(StealthLoggingSourceContract, ConnectionCreatorClientLoopSocketDiagnosticsA
   ASSERT_TRUE(normalized.find("tag(\"connection_context\"") != td::string::npos);
   ASSERT_TRUE(normalized.find("LOG(WARNING)<<extra.debug_str<<\":\"<<r_socket_fd.error()") == td::string::npos);
   ASSERT_TRUE(normalized.find("LOG(ERROR)<<debug_ip_status") == td::string::npos);
+}
+
+TEST(StealthLoggingSourceContract, ConnectionCreatorProxySocketOpenErrorsUsePublicStatusMessages) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/ConnectionCreator.cpp");
+  auto region = extract_source_region(
+      source, "Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_socket(",
+      "Status ConnectionCreator::verify_connection_peer(");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("primary_error.public_message()") != td::string::npos);
+  ASSERT_TRUE(normalized.find("fallback_error.public_message()") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_code\",primary_error_for_retry.code())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_message\",primary_error_for_retry.public_message())") != td::string::npos);
+  ASSERT_TRUE(normalized.find("primary_error.message()") == td::string::npos);
+  ASSERT_TRUE(normalized.find("fallback_error.message()") == td::string::npos);
+  ASSERT_TRUE(normalized.find("<<r_socket.error()") == td::string::npos);
 }
 
 TEST(StealthLoggingSourceContract, TlsReaderHeaderRejectionLogsStructuredContext) {
@@ -236,6 +390,7 @@ TEST(StealthLoggingSourceContract, StreamTransportActivationLogsAreStructuredAnd
   auto normalized = normalize_for_contract(region);
 
   ASSERT_TRUE(normalized.find("Stealthshapingdisabledforemulate_tlstransport") != td::string::npos);
+  ASSERT_TRUE(normalized.find("sanitize_stealth_activation_status_message(error,secret_copy,") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"reason\"") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"dc_id\"") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"tls_emulation\"") != td::string::npos);

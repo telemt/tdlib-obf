@@ -86,7 +86,7 @@ Result<size_t> HttpReader::do_read_next(bool can_be_slow) {
         if (!temp_file_.empty()) {
           clean_temporary_file();
         }
-        return Status::Error(400, PSLICE() << "Bad Request: " << flow_sink_.status().message());
+        return Status::Error(400, PSLICE() << "Bad Request: " << flow_sink_.status().public_message());
       }
       need_size = flow_source_.get_need_size();
       if (need_size == 0) {
@@ -684,7 +684,8 @@ Status HttpReader::parse_json_parameters(MutableSlice parameters) {
   if (parser.peek_char() == '"') {
     auto r_value = json_string_decode(parser);
     if (r_value.is_error()) {
-      return Status::Error(400, PSLICE() << "Bad Request: can't parse string content: " << r_value.error().message());
+      return Status::Error(400,
+                           PSLICE() << "Bad Request: can't parse string content: " << r_value.error().public_message());
     }
     if (!parser.empty()) {
       return Status::Error(400, "Bad Request: extra data after string");
@@ -711,7 +712,8 @@ Status HttpReader::parse_json_parameters(MutableSlice parameters) {
     }
     auto r_key = json_string_decode(parser);
     if (r_key.is_error()) {
-      return Status::Error(400, PSLICE() << "Bad Request: can't parse parameter name: " << r_key.error().message());
+      return Status::Error(400,
+                           PSLICE() << "Bad Request: can't parse parameter name: " << r_key.error().public_message());
     }
     parser.skip_whitespaces();
     if (!parser.try_skip(':')) {
@@ -733,7 +735,8 @@ Status HttpReader::parse_json_parameters(MutableSlice parameters) {
       }
     }();
     if (r_value.is_error()) {
-      return Status::Error(400, PSLICE() << "Bad Request: can't parse parameter value: " << r_value.error().message());
+      return Status::Error(
+          400, PSLICE() << "Bad Request: can't parse parameter value: " << r_value.error().public_message());
     }
     query_->args_.emplace_back(r_key.move_as_ok(), r_value.move_as_ok());
 

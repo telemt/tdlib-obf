@@ -3819,7 +3819,7 @@ Result<vector<MessageEntity>> get_message_entities(const UserManager *user_manag
         }
         auto r_url = LinkManager::check_link(entity->url_);
         if (r_url.is_error()) {
-          return Status::Error(400, PSTRING() << "Entity " << r_url.error().message());
+          return Status::Error(400, PSTRING() << "Entity " << r_url.error().public_message());
         }
         entities.emplace_back(MessageEntity::Type::TextUrl, offset, length, r_url.move_as_ok());
         break;

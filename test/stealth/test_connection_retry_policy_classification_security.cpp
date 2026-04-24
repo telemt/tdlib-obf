@@ -10,6 +10,8 @@
 
 #include "td/utils/tests.h"
 
+#include <cerrno>
+
 namespace {
 
 TEST(ConnectionRetryPolicyClassificationSecurity, DirectOnlineFailureStaysOnFastRetryPath) {
@@ -223,6 +225,17 @@ TEST(ConnectionRetryPolicyClassificationSecurity, LegacyStringCloseFallbackStill
   ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureStage::Transport), static_cast<td::int32>(classification.stage));
   ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureReason::ImmediateClose),
             static_cast<td::int32>(classification.reason));
+}
+
+TEST(ConnectionRetryPolicyClassificationSecurity, PosixErrorRawPrefixMustNotOverridePublicMessageFallback) {
+  auto proxy = td::Proxy::http_tcp("proxy.example", 8080, "user", "password");
+  auto classification =
+      td::classify_connection_failure(true, proxy, td::Status::PosixError(EACCES, "Connection closed"));
+
+  ASSERT_TRUE(classification.proxy_backed);
+  ASSERT_FALSE(classification.deterministic);
+  ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureStage::None), static_cast<td::int32>(classification.stage));
+  ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureReason::Unknown), static_cast<td::int32>(classification.reason));
 }
 
 }  // namespace

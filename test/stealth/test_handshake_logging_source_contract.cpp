@@ -48,6 +48,8 @@ TEST(HandshakeLoggingSourceContract, ErrorLogUsesStructuredStatusAndNoTypo) {
   ASSERT_TRUE(normalized.find("tag(\"timeout_sec\"") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"status_code\"") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"status_message\"") != td::string::npos);
+  ASSERT_TRUE(normalized.find("status.public_message()") != td::string::npos);
+  ASSERT_TRUE(normalized.find("status.message()") == td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"payload_size\"") != td::string::npos);
 }
 
@@ -81,9 +83,10 @@ TEST(HandshakeLoggingSourceContract, DhRangeFailureLogUsesStructuredContextAndAv
 
 TEST(HandshakeLoggingSourceContract, DhConfigValidationLogsStructuredRejectionReasons) {
   auto source = td::mtproto::test::read_repo_text_file("td/mtproto/DhHandshake.cpp");
-  auto check_config_region = extract_source_region(source, "Status DhHandshake::check_config(",
-                                                   "Status DhHandshake::dh_check(");
-  auto run_checks_region = extract_source_region(source, "Status DhHandshake::run_checks(", "BigNum DhHandshake::get_g() const {");
+  auto check_config_region =
+      extract_source_region(source, "Status DhHandshake::check_config(", "Status DhHandshake::dh_check(");
+  auto run_checks_region =
+      extract_source_region(source, "Status DhHandshake::run_checks(", "BigNum DhHandshake::get_g() const {");
 
   auto normalized_check_config = normalize_for_contract(check_config_region);
   auto normalized_run_checks = normalize_for_contract(run_checks_region);

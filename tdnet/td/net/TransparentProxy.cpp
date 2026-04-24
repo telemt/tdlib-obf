@@ -27,7 +27,8 @@ TransparentProxy::TransparentProxy(SocketFd socket_fd, IPAddress ip_address, str
 
 void TransparentProxy::on_error(Status status) {
   CHECK(status.is_error());
-  VLOG(proxy) << "Receive " << status;
+  VLOG(proxy) << "Receive proxy setup error" << tag("status_code", status.code())
+              << tag("status_message", status.public_message());
   if (callback_) {
     callback_->set_result(std::move(status));
     callback_.reset();

@@ -10,6 +10,8 @@
 
 #include "td/utils/tests.h"
 
+#include <cerrno>
+
 namespace {
 
 TEST(ConnectionRetryPolicyLogContract, StageAndReasonNamesAreStableAndNonNumeric) {
@@ -43,6 +45,36 @@ TEST(ConnectionRetryPolicyLogContract, WrongRegimeSummaryProvidesSpecificRemedia
   ASSERT_TRUE(summary.find("stage=tls_hello") != td::string::npos);
   ASSERT_TRUE(summary.find("reason=wrong_regime") != td::string::npos);
   ASSERT_TRUE(summary.find("action_hint=check_proxy_secret_and_protocol_regime") != td::string::npos);
+}
+
+TEST(ConnectionRetryPolicyLogContract, FailureSummaryUsesPublicStatusMessageWithoutLeakingRawContext) {
+  auto status = td::Status::PosixError(EACCES, "proxy_secret_leak_marker");
+  auto classification = td::classify_connection_failure(
+      true, td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), status);
+
+  auto summary = td::summarize_connection_failure_for_log(classification, status);
+  ASSERT_TRUE(summary.find("status_message=") != td::string::npos);
+  ASSERT_TRUE(summary.find(status.public_message()) != td::string::npos);
+  ASSERT_TRUE(summary.find("proxy_secret_leak_marker") == td::string::npos);
+}
+
+TEST(ConnectionRetryPolicyLogContract, FailureSummaryRedactsMultilineStatusMessagePayloads) {
+  auto status = td::Status::Error("line1\nline2");
+  auto classification = td::classify_connection_failure(
+      true, td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), status);
+
+  auto summary = td::summarize_connection_failure_for_log(classification, status);
+  ASSERT_TRUE(summary.find("status_message=status_message_redacted") != td::string::npos);
+  ASSERT_TRUE(summary.find("line2") == td::string::npos);
+}
+
+TEST(ConnectionRetryPolicyLogContract, FailureSummaryRedactsOversizedStatusMessagePayloads) {
+  auto status = td::Status::Error(td::string(300, 'x'));
+  auto classification = td::classify_connection_failure(
+      true, td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), status);
+
+  auto summary = td::summarize_connection_failure_for_log(classification, status);
+  ASSERT_TRUE(summary.find("status_message=status_message_redacted") != td::string::npos);
 }
 
 }  // namespace

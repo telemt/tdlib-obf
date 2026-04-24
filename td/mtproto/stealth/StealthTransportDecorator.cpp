@@ -200,7 +200,7 @@ Result<unique_ptr<StealthTransportDecorator>> StealthTransportDecorator::create(
   }
   auto config_status = config.validate();
   if (config_status.is_error()) {
-    return Status::Error("StealthTransportDecorator::create rejected stealth config: " + config_status.message().str());
+    return Status::Error(config_status.code(), config_status.public_message());
   }
   if (config.greeting_camouflage_policy.greeting_record_count != 0 && !inner->supports_tls_record_sizing()) {
     return Status::Error(

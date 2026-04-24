@@ -21,6 +21,33 @@ namespace {
 
 StreamTransportFactoryForTests stream_transport_factory_for_tests = nullptr;
 
+string sanitize_stealth_activation_status_message(const Status &status, const ProxySecret &secret,
+                                                  Slice fallback_message) {
+  auto message = status.public_message();
+  if (message.empty()) {
+    return fallback_message.str();
+  }
+
+  auto raw_secret = secret.get_raw_secret().str();
+  if (!raw_secret.empty() && message.find(raw_secret) != string::npos) {
+    return fallback_message.str();
+  }
+
+  for (auto c : message) {
+    auto byte = static_cast<unsigned char>(c);
+    if (byte < 0x20) {
+      return fallback_message.str();
+    }
+  }
+
+  constexpr size_t kMaxLoggedStatusMessageBytes = 256;
+  if (message.size() > kMaxLoggedStatusMessageBytes) {
+    return fallback_message.str();
+  }
+
+  return message;
+}
+
 }  // namespace
 
 unique_ptr<IStreamTransport> create_transport(TransportType type) {
@@ -41,22 +68,23 @@ unique_ptr<IStreamTransport> create_transport(TransportType type) {
         auto config = stealth::make_transport_stealth_config(secret_copy, *rng);
         if (config.is_error()) {
           auto error = config.move_as_error();
+          auto safe_status_message = sanitize_stealth_activation_status_message(
+              error, secret_copy, "stealth runtime config rejected; review stealth params and proxy setup");
           LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport"
                        << tag("reason", "config_validation_failed") << tag("transport", "obfuscated_tcp")
                        << tag("dc_id", type.dc_id) << tag("tls_emulation", true) << tag("status_code", error.code())
-                       << tag("status_message",
-                              "stealth runtime config rejected; review stealth params and proxy setup");
+                       << tag("status_message", safe_status_message);
           return inner;
         }
         auto decorator = stealth::StealthTransportDecorator::create(std::move(inner), config.move_as_ok(),
                                                                     std::move(rng), stealth::make_clock());
         if (decorator.is_error()) {
           auto error = decorator.move_as_error();
+          auto safe_status_message = sanitize_stealth_activation_status_message(
+              error, secret_copy, "stealth decorator initialization failed; check transport capabilities");
           LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport" << tag("reason", "decorator_init_failed")
                        << tag("transport", "obfuscated_tcp") << tag("dc_id", type.dc_id) << tag("tls_emulation", true)
-                       << tag("status_code", error.code())
-                       << tag("status_message",
-                              "stealth decorator initialization failed; check transport capabilities");
+                       << tag("status_code", error.code()) << tag("status_message", safe_status_message);
           return td::make_unique<tcp::ObfuscatedTransport>(type.dc_id, std::move(secret_copy));
         }
         LOG(INFO) << "Stealth shaping enabled for emulate_tls transport" << tag("transport", "obfuscated_tcp")

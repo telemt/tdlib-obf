@@ -647,15 +647,19 @@ Status SessionConnection::on_slice_packet(const MsgInfo &info, Slice packet) {
   status = auth_data_->check_update(info.message_id);
   auto recheck_status = auth_data_->recheck_update(info.message_id);
   if (recheck_status.is_error() && recheck_status.code() == 2) {
-    LOG(WARNING) << "Receive very old " << get_update_description() << ": " << status << ' ' << recheck_status;
+    LOG(WARNING) << "Receive very old " << get_update_description() << tag("status_code", status.code())
+                 << tag("status_message", status.public_message()) << tag("recheck_status_code", recheck_status.code())
+                 << tag("recheck_status_message", recheck_status.public_message());
   }
   if (status.is_error()) {
     if (status.code() == 2) {
-      LOG(WARNING) << "Receive too old " << get_update_description() << ": " << status;
+      LOG(WARNING) << "Receive too old " << get_update_description() << tag("status_code", status.code())
+                   << tag("status_message", status.public_message());
       callback_->on_session_failed(Status::Error("Receive too old update"));
       return status;
     }
-    VLOG(mtproto) << "Skip " << get_update_description() << ": " << status;
+    VLOG(mtproto) << "Skip " << get_update_description() << tag("status_code", status.code())
+                  << tag("status_message", status.public_message());
     return Status::OK();
   } else {
     VLOG(mtproto) << "Receive " << get_update_description();
@@ -832,7 +836,9 @@ Status SessionConnection::on_raw_packet(const PacketInfo &packet_info, BufferSli
   }
   if (status.is_error()) {
     if (status.code() == 1) {
-      LOG(INFO) << "Packet is ignored: " << status;
+      LOG(INFO) << "Packet is ignored" << tag("status_code", status.code())
+                << tag("status_message", status.public_message()) << tag("session_id", packet_info.session_id)
+                << tag("message_id", packet_info.message_id);
       send_ack(packet_info.message_id);
       return Status::OK();
     } else if (status.code() == 2) {
@@ -1255,7 +1261,8 @@ double SessionConnection::flush(SessionConnection::Callback *callback) {
   auto status = do_flush();
   // check error
   if (status.is_error()) {
-    LOG(DEBUG) << "Close session because of " << status;
+    LOG(DEBUG) << "Close session because of failure" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     do_close(std::move(status));
     return 0;
   }

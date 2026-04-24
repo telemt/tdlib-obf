@@ -100,7 +100,8 @@ void NetQueryDelayer::delay(NetQueryPtr query) {
   if (query->total_timeout_ > query->total_timeout_limit_) {
     // TODO: support timeouts in DcAuth and GetConfig
     LOG(WARNING) << "Failed: " << query << " " << tag("timeout", timeout) << tag("total_timeout", query->total_timeout_)
-                 << " because of " << error << " from " << query->source_;
+                 << tag("status_code", error.code()) << tag("status_message", error.public_message()) << " from "
+                 << query->source_;
     // NB: code must differ from tdapi FLOOD_WAIT code
     query->set_error(Status::Error(429, PSLICE() << "Too Many Requests: retry after " << timeout));
     query->debug("DcManager: send to DcManager");
@@ -109,7 +110,8 @@ void NetQueryDelayer::delay(NetQueryPtr query) {
   }
 
   LOG(WARNING) << "Delay: " << query << " " << tag("timeout", timeout) << tag("total_timeout", query->total_timeout_)
-               << " because of " << error << " from " << query->source_;
+               << tag("status_code", error.code()) << tag("status_message", error.public_message()) << " from "
+               << query->source_;
   query->debug(PSTRING() << "delay for " << format::as_time(timeout));
   auto id = container_.create(QuerySlot());
   auto *query_slot = container_.get(id);

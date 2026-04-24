@@ -3972,7 +3972,7 @@ Result<FileId> FileManager::from_persistent_id(CSlice persistent_id, FileType fi
   if (persistent_id.find('.') != string::npos) {
     auto r_http_url = parse_url(persistent_id);
     if (r_http_url.is_error()) {
-      return Status::Error(400, PSLICE() << "Invalid file HTTP URL specified: " << r_http_url.error().message());
+      return Status::Error(400, PSLICE() << "Invalid file HTTP URL specified: " << r_http_url.error().public_message());
     }
     auto url = r_http_url.ok().get_url();
     if (!clean_input_string(url)) {
@@ -3983,7 +3983,8 @@ Result<FileId> FileManager::from_persistent_id(CSlice persistent_id, FileType fi
 
   auto r_binary = base64url_decode(persistent_id);
   if (r_binary.is_error()) {
-    return Status::Error(400, PSLICE() << "Wrong remote file identifier specified: " << r_binary.error().message());
+    return Status::Error(400,
+                         PSLICE() << "Wrong remote file identifier specified: " << r_binary.error().public_message());
   }
   auto binary = r_binary.move_as_ok();
   if (binary.empty()) {
@@ -4682,7 +4683,8 @@ void FileManager::on_download_ok(FileDownloadManager::QueryId query_id, FullLoca
   auto r_new_file_id = register_local(std::move(local), DialogId(), size, false, true, file_id);
   Status status = Status::OK();
   if (r_new_file_id.is_error()) {
-    status = Status::Error(PSLICE() << "Can't register local file after download: " << r_new_file_id.error().message());
+    status = Status::Error(PSLICE() << "Can't register local file after download: "
+                                    << r_new_file_id.error().public_message());
   } else {
     if (is_new && context_->need_notify_on_new_files()) {
       context_->on_new_file(size, get_file_view(r_new_file_id.ok()).get_allocated_local_size(), 1);
@@ -4992,7 +4994,7 @@ void FileManager::on_download_error_impl(FileNodePtr node, DownloadQuery::Type t
         node->drop_local_location();
       }
     }
-    status = Status::Error(400, status.message());
+    status = Status::Error(400, status.public_message());
   }
 
   on_file_load_error(node, std::move(status));
@@ -5025,7 +5027,7 @@ void FileManager::on_generate_error_impl(FileNodePtr node, bool was_active, Stat
       }
       node->delete_partial_remote_location();
     }
-    status = Status::Error(400, status.message());
+    status = Status::Error(400, status.public_message());
   }
 
   on_file_load_error(node, std::move(status));
@@ -5076,7 +5078,7 @@ void FileManager::on_upload_error_impl(FileNodePtr node, UploadQuery::Type type,
     if (status.code() == 0) {
       node->delete_partial_remote_location();
     }
-    status = Status::Error(400, status.message());
+    status = Status::Error(400, status.public_message());
   }
 
   on_file_load_error(node, std::move(status));

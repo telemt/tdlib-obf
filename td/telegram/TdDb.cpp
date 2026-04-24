@@ -179,7 +179,7 @@ Status init_binlog(Binlog &binlog, string path, BinlogKeyValue<Binlog> &binlog_p
     if (init_status.code() == static_cast<int>(Binlog::Error::WrongPassword)) {
       return Status::Error(401, "Wrong database encryption key");
     }
-    return Status::Error(400, init_status.message());
+    return Status::Error(400, init_status.public_message());
   }
   return Status::OK();
 }

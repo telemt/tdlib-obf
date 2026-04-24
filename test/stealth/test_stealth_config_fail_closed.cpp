@@ -47,7 +47,6 @@ TEST(StealthConfigFailClosed, DecoratorFactoryRejectsInvalidConfigWithoutAbort) 
                                                   td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(result.is_error());
   auto message = result.error().message().str();
-  ASSERT_TRUE(message.find("StealthTransportDecorator::create rejected stealth config") != td::string::npos);
   ASSERT_TRUE(message.find("ring_capacity exceeds fail-closed maximum") != td::string::npos);
 }
 
@@ -77,7 +76,6 @@ TEST(StealthConfigFailClosed, DecoratorFactoryRejectsInvalidBulkThresholdWithout
                                                   td::make_unique<MockRng>(7), td::make_unique<MockClock>());
   ASSERT_TRUE(result.is_error());
   auto message = result.error().message().str();
-  ASSERT_TRUE(message.find("StealthTransportDecorator::create rejected stealth config") != td::string::npos);
   ASSERT_TRUE(message.find("bulk_threshold_bytes is out of allowed bounds") != td::string::npos);
 }
 

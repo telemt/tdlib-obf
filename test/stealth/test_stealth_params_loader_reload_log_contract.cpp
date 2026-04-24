@@ -146,6 +146,117 @@ TEST(StealthParamsLoaderReloadLogContract, MissingPathFailureLogContainsActionab
   ASSERT_TRUE(logs.find("[remediation_hint:") != td::string::npos);
 }
 
+TEST(StealthParamsLoaderReloadLogContract, UnknownRootFieldLogPreservesExactFieldAndSchemaRemediation) {
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.json");
+  write_file(path,
+             "{"
+             "\"version\":1,"
+             "\"profile_weights\":{"
+             "\"chrome133\":50,\"chrome131\":20,\"chrome120\":15,\"firefox148\":15,"
+             "\"safari26_3\":20,\"ios14\":70,\"android11_okhttp_advisory\":30},"
+             "\"route_policy\":{"
+             "\"unknown\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"ru\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"non_ru\":{\"ech_mode\":\"rfc9180_outer\",\"allow_quic\":false}},"
+             "\"route_failure\":{"
+             "\"ech_failure_threshold\":3,\"ech_disable_ttl_seconds\":300.0,"
+             "\"persist_across_restart\":true},"
+             "\"bulk_threshold_bytes\":12288,"
+             "\"bulk_threshold_bites\":12288}");
+
+  StealthParamsLoader loader(path);
+
+  CapturingLog capture;
+  auto *old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG));
+  SCOPE_EXIT {
+    SET_VERBOSITY_LEVEL(old_verbosity);
+    td::log_interface = old_log_interface;
+  };
+
+  ASSERT_FALSE(loader.try_reload());
+
+  const auto &logs = capture.joined();
+  ASSERT_TRUE(logs.find("Stealth params reload failed") != td::string::npos);
+  ASSERT_TRUE(logs.find("[stage:load_strict]") != td::string::npos);
+  ASSERT_TRUE(logs.find("root has unknown field \"bulk_threshold_bites\"") != td::string::npos);
+  ASSERT_TRUE(logs.find("remove unsupported field names and keep the exact version=1 stealth params schema") !=
+              td::string::npos);
+}
+
+TEST(StealthParamsLoaderReloadLogContract, BoundsViolationLogIncludesFieldNameAndBoundsRemediation) {
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.json");
+  write_file(path, valid_loader_config("128"));
+
+  StealthParamsLoader loader(path);
+
+  CapturingLog capture;
+  auto *old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG));
+  SCOPE_EXIT {
+    SET_VERBOSITY_LEVEL(old_verbosity);
+    td::log_interface = old_log_interface;
+  };
+
+  ASSERT_FALSE(loader.try_reload());
+
+  const auto &logs = capture.joined();
+  ASSERT_TRUE(logs.find("Stealth params reload failed") != td::string::npos);
+  ASSERT_TRUE(logs.find("[stage:load_strict]") != td::string::npos);
+  ASSERT_TRUE(logs.find("bulk_threshold_bytes is out of allowed bounds") != td::string::npos);
+  ASSERT_TRUE(logs.find("restore stealth params numeric fields within documented fail-closed bounds") !=
+              td::string::npos);
+}
+
+TEST(StealthParamsLoaderReloadLogContract, OversizedStatusMessageFallsBackToSafeLogText) {
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.json");
+
+  td::string huge_field_name(320, 'x');
+  write_file(path,
+             "{"
+             "\"version\":1,"
+             "\"profile_weights\":{"
+             "\"chrome133\":50,\"chrome131\":20,\"chrome120\":15,\"firefox148\":15,"
+             "\"safari26_3\":20,\"ios14\":70,\"android11_okhttp_advisory\":30},"
+             "\"route_policy\":{"
+             "\"unknown\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"ru\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"non_ru\":{\"ech_mode\":\"rfc9180_outer\",\"allow_quic\":false}},"
+             "\"route_failure\":{"
+             "\"ech_failure_threshold\":3,\"ech_disable_ttl_seconds\":300.0,"
+             "\"persist_across_restart\":true},"
+             "\"bulk_threshold_bytes\":12288,"
+             "\"" +
+                 huge_field_name + "\":1}");
+
+  StealthParamsLoader loader(path);
+
+  CapturingLog capture;
+  auto *old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG));
+  SCOPE_EXIT {
+    SET_VERBOSITY_LEVEL(old_verbosity);
+    td::log_interface = old_log_interface;
+  };
+
+  ASSERT_FALSE(loader.try_reload());
+
+  const auto &logs = capture.joined();
+  ASSERT_TRUE(logs.find("Stealth params reload failed") != td::string::npos);
+  ASSERT_TRUE(logs.find("stealth params reload rejected configuration; see stage/remediation_hint for triage") !=
+              td::string::npos);
+  ASSERT_TRUE(logs.find(huge_field_name) == td::string::npos);
+}
+
 TEST(StealthParamsLoaderReloadLogContract, CooldownTransitionAndRecoveryLogsAreExplicit) {
   ScopedTempDir temp_dir;
   auto path = join_path(temp_dir.path(), "stealth-params.json");

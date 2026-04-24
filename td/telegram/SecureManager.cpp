@@ -1080,7 +1080,7 @@ void SecureManager::on_get_passport_authorization_form_secret(int32 authorizatio
       LOG(ERROR) << "Receive error instead of secret: " << error;
     }
     if (error.code() <= 0) {
-      error = Status::Error(400, error.message());  // TODO error.set_code(400) ?
+      error = Status::Error(400, error.public_message());  // TODO error.set_code(400) ?
     }
     return promise.set_error(std::move(error));
   }

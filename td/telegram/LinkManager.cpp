@@ -1903,9 +1903,9 @@ Result<string> LinkManager::check_link(CSlice link, bool http_only, bool https_o
   }
   auto error = result.move_as_error();
   if (check_utf8(link)) {
-    return Status::Error(400, PSLICE() << "URL '" << link << "' is invalid: " << error.message());
+    return Status::Error(400, PSLICE() << "URL '" << link << "' is invalid: " << error.public_message());
   } else {
-    return Status::Error(400, PSLICE() << "URL is invalid: " << error.message());
+    return Status::Error(400, PSLICE() << "URL is invalid: " << error.public_message());
   }
 }
 

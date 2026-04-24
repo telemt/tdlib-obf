@@ -66,8 +66,7 @@ static Result<typename T::ReturnType> fetch_result(Slice message, Slice phase, b
   }
   const char *error = parser.get_error();
   if (error != nullptr) {
-    LOG(ERROR) << "Failed to parse handshake TL payload" << tag("payload_size", message.size())
-               << tag("phase", phase)
+    LOG(ERROR) << "Failed to parse handshake TL payload" << tag("payload_size", message.size()) << tag("phase", phase)
                << tag("parse_error", error);
     return Status::Error(500, PSLICE() << "Handshake " << phase << " parse failed: " << error);
   }
@@ -375,8 +374,8 @@ void AuthKeyHandshake::resume(Callback *connection) {
     return on_start(connection).ignore();
   }
   if (state_ == State::Finish) {
-    LOG(ERROR) << "Resume called after handshake finish" << tag("dc_id", dc_id_)
-               << tag("mode", mode_name) << tag("state", state_);
+    LOG(ERROR) << "Resume called after handshake finish" << tag("dc_id", dc_id_) << tag("mode", mode_name)
+               << tag("state", state_);
     return clear();
   }
   if (last_query_.empty()) {
@@ -420,9 +419,9 @@ Status AuthKeyHandshake::on_message(Slice message, Callback *connection, AuthKey
       elapsed_sec = 0;
     }
     LOG(WARNING) << "Failed to process handshake response" << tag("state", state_) << tag("status_code", status.code())
-                 << tag("status_message", status.message()) << tag("payload_size", message.size())
-                 << tag("dc_id", dc_id_) << tag("mode", mode_name)
-                 << tag("elapsed_sec", elapsed_sec) << tag("timeout_sec", timeout_in_);
+                 << tag("status_message", status.public_message()) << tag("payload_size", message.size())
+                 << tag("dc_id", dc_id_) << tag("mode", mode_name) << tag("elapsed_sec", elapsed_sec)
+                 << tag("timeout_sec", timeout_in_);
     clear();
   }
   return status;

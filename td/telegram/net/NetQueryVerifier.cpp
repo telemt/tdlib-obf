@@ -44,7 +44,8 @@ void NetQueryVerifier::verify(NetQueryPtr query, string nonce) {
     return Status::OK();
   }();
   if (status.is_error()) {
-    LOG(ERROR) << "Receive " << status;
+    LOG(ERROR) << "Receive invalid verification nonce" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     query->set_error(Status::Error(400, "Invalid verification nonce"));
     G()->net_query_dispatcher().dispatch(std::move(query));
     return;

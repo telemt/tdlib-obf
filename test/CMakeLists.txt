@@ -106,6 +106,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_proxy_route_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_tls_init_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_logging_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tdnet_logging_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_light_fuzz.cpp

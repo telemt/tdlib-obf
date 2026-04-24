@@ -76,7 +76,8 @@ void HttpConnectionBase::write_ok() {
 
 void HttpConnectionBase::write_error(Status error) {
   CHECK(state_ == State::Write);
-  LOG(WARNING) << "Close HTTP connection: " << error;
+  LOG(WARNING) << "Close HTTP connection" << tag("status_code", error.code())
+               << tag("status_message", error.public_message());
   state_ = State::Close;
   loop();
 }

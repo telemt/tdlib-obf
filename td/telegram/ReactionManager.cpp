@@ -61,7 +61,8 @@ class GetAvailableReactionsQuery final : public Td::ResultHandler {
   }
 
   void on_error(Status status) final {
-    LOG(INFO) << "Receive error for GetAvailableReactionsQuery: " << status;
+    LOG(INFO) << "Receive error for GetAvailableReactionsQuery" << tag("status_code", status.code())
+              << tag("status_message", status.public_message());
     td_->reaction_manager_->on_get_available_reactions(nullptr);
   }
 };
@@ -107,7 +108,8 @@ class GetReactionListQuery final : public Td::ResultHandler {
   }
 
   void on_error(Status status) final {
-    LOG(INFO) << "Receive error for GetReactionListQuery: " << status;
+    LOG(INFO) << "Receive error for GetReactionListQuery" << tag("status_code", status.code())
+              << tag("status_message", status.public_message());
     td_->reaction_manager_->on_get_reaction_list(reaction_list_type_, nullptr);
   }
 };
@@ -135,7 +137,8 @@ class ClearRecentReactionsQuery final : public Td::ResultHandler {
 
   void on_error(Status status) final {
     if (!G()->is_expected_error(status)) {
-      LOG(ERROR) << "Receive error for clear recent reactions: " << status;
+      LOG(ERROR) << "Receive error for clear recent reactions" << tag("status_code", status.code())
+                 << tag("status_message", status.public_message());
     }
     td_->reaction_manager_->reload_reaction_list(ReactionListType::Recent, "ClearRecentReactionsQuery");
     promise_.set_error(std::move(status));
@@ -175,7 +178,8 @@ class SetDefaultReactionQuery final : public Td::ResultHandler {
       return;
     }
 
-    LOG(INFO) << "Receive error for SetDefaultReactionQuery: " << status;
+    LOG(INFO) << "Receive error for SetDefaultReactionQuery" << tag("status_code", status.code())
+              << tag("status_message", status.public_message());
     td_->option_manager_->set_option_empty("default_reaction_needs_sync");
     send_closure(G()->config_manager(), &ConfigManager::request_config, false);
   }
@@ -764,7 +768,8 @@ void ReactionManager::load_active_reactions() {
 
   auto status = log_event_parse(active_reaction_types_, active_reaction_types);
   if (status.is_error()) {
-    LOG(ERROR) << "Can't load active reactions: " << status;
+    LOG(ERROR) << "Can't load active reactions" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     active_reaction_types_ = {};
     return reload_reactions();
   }
@@ -792,7 +797,8 @@ void ReactionManager::load_reactions() {
   new_reactions.are_being_reloaded_ = reactions_.are_being_reloaded_;
   auto status = log_event_parse(new_reactions, reactions);
   if (status.is_error()) {
-    LOG(ERROR) << "Can't load available reactions: " << status;
+    LOG(ERROR) << "Can't load available reactions" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     return reload_reactions();
   }
   for (auto &reaction_type : new_reactions.reactions_) {
@@ -823,7 +829,8 @@ void ReactionManager::load_reaction_list(ReactionListType reaction_list_type) {
 
   auto status = log_event_parse(reaction_list, reactions_str);
   if (status.is_error()) {
-    LOG(ERROR) << "Can't load " << reaction_list_type << ": " << status;
+    LOG(ERROR) << "Can't load " << reaction_list_type << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     reaction_list = {};
     return reload_reaction_list(reaction_list_type, "load_reaction_list 2");
   }
@@ -1286,7 +1293,8 @@ void ReactionManager::load_message_effects() {
   new_message_effects.are_being_reloaded_ = message_effects_.are_being_reloaded_;
   auto status = log_event_parse(new_message_effects, message_effects);
   if (status.is_error()) {
-    LOG(ERROR) << "Can't load message effects: " << status;
+    LOG(ERROR) << "Can't load message effects" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     return reload_message_effects();
   }
   for (auto &effect : new_message_effects.effects_) {
@@ -1433,7 +1441,8 @@ void ReactionManager::load_active_message_effects() {
 
   auto status = log_event_parse(active_message_effects_, active_message_effects);
   if (status.is_error()) {
-    LOG(ERROR) << "Can't load active message effects: " << status;
+    LOG(ERROR) << "Can't load active message effects" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     active_message_effects_ = {};
     return reload_message_effects();
   }
@@ -1491,7 +1500,8 @@ void ReactionManager::load_default_paid_reaction_type() {
   if (!type.empty()) {
     auto status = log_event_parse(default_paid_reaction_type_, type);
     if (status.is_error()) {
-      LOG(ERROR) << "Can't load default paid reaction type: " << status;
+      LOG(ERROR) << "Can't load default paid reaction type" << tag("status_code", status.code())
+                 << tag("status_message", status.public_message());
       default_paid_reaction_type_ = {};
       save_default_paid_reaction_type();
     } else {

@@ -142,7 +142,8 @@ void NetQuery::set_error(Status status, string source) {
 }
 
 void NetQuery::set_error_impl(Status status, string source) {
-  VLOG(net_query) << "Receive error " << *this << " " << status;
+  VLOG(net_query) << "Receive error " << *this << tag("status_code", status.code())
+                  << tag("status_message", status.public_message());
   status_ = std::move(status);
   state_ = State::Error;
   source_ = std::move(source);

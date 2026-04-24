@@ -982,14 +982,16 @@ Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_s
 
   if (!candidates.fallback_ip_address.is_valid()) {
     auto primary_error = r_socket.move_as_error();
-    return Status::Error(primary_error.code(), PSLICE()
-                                                   << "Failed to connect to " << proxy_mode_name(proxy) << " proxy "
-                                                   << proxy.server() << ':' << proxy.port() << " via "
-                                                   << candidates.primary_ip_address << ": " << primary_error.message());
+    return Status::Error(primary_error.code(), PSLICE() << "Failed to connect to " << proxy_mode_name(proxy)
+                                                        << " proxy " << proxy.server() << ':' << proxy.port() << " via "
+                                                        << candidates.primary_ip_address << ": "
+                                                        << primary_error.public_message());
   }
 
-  VLOG(connections) << "Retry proxy connect via alternate family " << candidates.fallback_ip_address << " after "
-                    << r_socket.error();
+  const auto &primary_error_for_retry = r_socket.error();
+  VLOG(connections) << "Retry proxy connect via alternate family " << candidates.fallback_ip_address
+                    << tag("status_code", primary_error_for_retry.code())
+                    << tag("status_message", primary_error_for_retry.public_message());
   auto r_fallback_socket = try_open(candidates.fallback_ip_address);
   if (r_fallback_socket.is_ok()) {
     return r_fallback_socket;
@@ -1000,7 +1002,7 @@ Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_s
                                                        << proxy.server() << ':' << proxy.port() << " using primary "
                                                        << candidates.primary_ip_address << " and fallback "
                                                        << candidates.fallback_ip_address << ": "
-                                                       << fallback_error.message());
+                                                       << fallback_error.public_message());
 }
 
 Status ConnectionCreator::verify_connection_peer(const Proxy &proxy, const IPAddress &expected_peer_address,

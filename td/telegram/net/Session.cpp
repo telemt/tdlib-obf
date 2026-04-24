@@ -627,7 +627,8 @@ void Session::on_bind_result(NetQueryPtr query) {
       auth_data_.drop_tmp_auth_key();
       on_tmp_auth_key_updated();
     }
-    LOG(ERROR) << "BindKey failed: " << status;
+    LOG(ERROR) << "BindKey failed" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     connection_close(&main_connection_);
     connection_close(&long_poll_connection_);
     connection_close(&main_handover_connection_);
@@ -658,7 +659,8 @@ void Session::on_check_key_result(NetQueryPtr query) {
     main_key_check_failure_state_ = {};
   } else {
     main_key_check_failure_state_ = note_main_key_check_failure(main_key_check_failure_state_, Time::now());
-    LOG(ERROR) << "Check main key failed: " << status;
+    LOG(ERROR) << "Check main key failed" << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
     connection_close(&main_connection_);
     connection_close(&long_poll_connection_);
     connection_close(&main_handover_connection_);
@@ -859,17 +861,23 @@ void Session::on_closed(Status status) {
         LOG(WARNING) << "Use PFS to check main key";
         auth_data_.set_session_mode(true);
       } else {
-        LOG(WARNING) << "Session connection was closed: " << status << ' ' << current_info_->connection_->get_name();
+        LOG(WARNING) << "Session connection was closed" << tag("status_code", status.code())
+                     << tag("status_message", status.public_message())
+                     << tag("connection", current_info_->connection_->get_name());
       }
       yield();
     }
   } else {
     if (status.is_error()) {
-      LOG(WARNING) << "Session connection with " << sent_queries_.size() << " pending requests was closed: " << status
-                   << ' ' << current_info_->connection_->get_name();
+      LOG(WARNING) << "Session connection with pending requests was closed"
+                   << tag("pending_requests", sent_queries_.size()) << tag("status_code", status.code())
+                   << tag("status_message", status.public_message())
+                   << tag("connection", current_info_->connection_->get_name());
     } else {
-      LOG(INFO) << "Session connection with " << sent_queries_.size() << " pending requests was closed: " << status
-                << ' ' << current_info_->connection_->get_name();
+      LOG(INFO) << "Session connection with pending requests was closed"
+                << tag("pending_requests", sent_queries_.size()) << tag("status_code", status.code())
+                << tag("status_message", status.public_message())
+                << tag("connection", current_info_->connection_->get_name());
     }
   }
 
@@ -884,7 +892,7 @@ void Session::on_closed(Status status) {
         auto &query = it->second.net_query_;
         VLOG(net_query) << "Resend query (on_disconnected, no ack) " << query;
         query->set_message_id(0);
-        query->set_error(Status::Error(500, PSLICE() << "Session failed: " << status.message()),
+        query->set_error(Status::Error(500, PSLICE() << "Session failed: " << status.public_message()),
                          current_info_->connection_->get_name().str());
         return_query(std::move(query));
         it = sent_queries_.erase(it);
@@ -936,7 +944,8 @@ void Session::on_new_session_created(uint64 unique_id, mtproto::MessageId first_
 
 void Session::on_session_failed(Status status) {
   if (status.is_error()) {
-    LOG(WARNING) << "Session failed: " << status;
+    LOG(WARNING) << "Session failed" << tag("status_code", status.code())
+                 << tag("status_message", status.public_message());
   } else {
     LOG(INFO) << "Session will be closed soon";
   }
@@ -1222,7 +1231,8 @@ void Session::on_message_failed_inner(mtproto::MessageId message_id, bool in_con
 }
 
 void Session::on_message_failed(mtproto::MessageId message_id, Status status) {
-  LOG(INFO) << "Failed to send " << message_id << ": " << status;
+  LOG(INFO) << "Failed to send" << tag("message_id", message_id) << tag("status_code", status.code())
+            << tag("status_message", status.public_message());
   status.ignore();
 
   auto cit = sent_containers_.find(message_id);

@@ -521,7 +521,7 @@ Result<KeyboardButton> get_keyboard_button(td_api::object_ptr<td_api::keyboardBu
       }
       auto r_url = LinkManager::check_link(button_type->url_, true, !G()->is_test_dc());
       if (r_url.is_error()) {
-        return Status::Error(400, PSLICE() << "Keyboard button Web App " << r_url.error().message());
+        return Status::Error(400, PSLICE() << "Keyboard button Web App " << r_url.error().public_message());
       }
       current_button.type = KeyboardButton::Type::WebView;
       current_button.url = std::move(button_type->url_);
@@ -588,7 +588,7 @@ static Result<InlineKeyboardButton> get_inline_keyboard_button(tl_object_ptr<td_
       }
       auto r_url = LinkManager::check_link(button_type->url_);
       if (r_url.is_error()) {
-        return Status::Error(400, PSLICE() << "Inline keyboard button " << r_url.error().message());
+        return Status::Error(400, PSLICE() << "Inline keyboard button " << r_url.error().public_message());
       }
       current_button.type = InlineKeyboardButton::Type::Url;
       current_button.data = r_url.move_as_ok();
@@ -656,7 +656,7 @@ static Result<InlineKeyboardButton> get_inline_keyboard_button(tl_object_ptr<td_
       }
       auto r_url = LinkManager::check_link(button_type->url_, true, !G()->is_test_dc());
       if (r_url.is_error()) {
-        return Status::Error(400, PSLICE() << "Inline keyboard button login " << r_url.error().message());
+        return Status::Error(400, PSLICE() << "Inline keyboard button login " << r_url.error().public_message());
       }
       current_button.type = InlineKeyboardButton::Type::UrlAuth;
       current_button.data = r_url.move_as_ok();
@@ -691,7 +691,7 @@ static Result<InlineKeyboardButton> get_inline_keyboard_button(tl_object_ptr<td_
       }
       auto r_url = LinkManager::check_link(button_type->url_, true, !G()->is_test_dc());
       if (r_url.is_error()) {
-        return Status::Error(400, PSLICE() << "Inline keyboard button Web App " << r_url.error().message());
+        return Status::Error(400, PSLICE() << "Inline keyboard button Web App " << r_url.error().public_message());
       }
       current_button.type = InlineKeyboardButton::Type::WebView;
       current_button.data = r_url.move_as_ok();
