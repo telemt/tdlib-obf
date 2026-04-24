@@ -34,6 +34,91 @@ int64 lifecycle_now_ms() {
   return static_cast<int64>(Time::now() * 1000.0);
 }
 
+Slice traffic_hint_name(stealth::TrafficHint hint) {
+  switch (hint) {
+    case stealth::TrafficHint::Unknown:
+      return Slice("unknown");
+    case stealth::TrafficHint::Keepalive:
+      return Slice("keepalive");
+    case stealth::TrafficHint::AuthHandshake:
+      return Slice("auth_handshake");
+    case stealth::TrafficHint::Interactive:
+      return Slice("interactive");
+    case stealth::TrafficHint::BulkData:
+      return Slice("bulk_data");
+    default:
+      return Slice("unsupported");
+  }
+}
+
+Slice transport_type_name(const TransportType &transport_type) {
+  switch (transport_type.type) {
+    case TransportType::Tcp:
+      return Slice("tcp");
+    case TransportType::ObfuscatedTcp:
+      return Slice("obfuscated_tcp");
+    case TransportType::Http:
+      return Slice("http");
+    default:
+      return Slice("unknown");
+  }
+}
+
+Slice mtproto_error_classification_name(int32 error_code) {
+  switch (error_code) {
+    case -429:
+      return Slice("flood_wait_reject");
+    case -404:
+      return Slice("auth_key_not_found");
+    default:
+      return Slice("unexpected_transport_reject");
+  }
+}
+
+Slice mtproto_error_action_hint(int32 error_code) {
+  switch (error_code) {
+    case -429:
+      return Slice("backoff_and_reconnect");
+    case -404:
+      return Slice("refresh_auth_key");
+    default:
+      return Slice("inspect_transport_state");
+  }
+}
+
+int32 raw_connection_status_code_for_mtproto_error(int32 error_code) {
+  if (error_code == -404) {
+    return -404;
+  }
+  return 500;
+}
+
+Status make_mtproto_error_status(int32 error_code) {
+  return Status::Error(raw_connection_status_code_for_mtproto_error(error_code),
+                       PSLICE() << "MTProto error: " << error_code
+                                << " [classification=" << mtproto_error_classification_name(error_code)
+                                << " action_hint=" << mtproto_error_action_hint(error_code) << ']');
+}
+
+void log_raw_connection_flush_failure(const TransportType &transport_type, const Status &status, bool had_error,
+                                      bool mtproto_error_notified, bool has_mtproto_error, int32 mtproto_error) {
+  auto classification = has_mtproto_error ? mtproto_error_classification_name(mtproto_error) : Slice("none");
+  auto action_hint = has_mtproto_error ? mtproto_error_action_hint(mtproto_error) : Slice("inspect_socket_state");
+
+  LOG(WARNING) << "Raw connection flush failed " << tag("transport", transport_type_name(transport_type))
+               << tag("dc_id", transport_type.dc_id) << tag("tls_emulation", transport_type.secret.emulate_tls())
+               << tag("status_code", status.code()) << tag("status_message", status.public_message())
+               << tag("mtproto_error", has_mtproto_error ? mtproto_error : 0) << tag("classification", classification)
+               << tag("action_hint", action_hint) << tag("mtproto_error_notified", mtproto_error_notified)
+               << tag("had_previous_error", had_error);
+}
+
+void log_handshake_packet_metadata(const TransportType &transport_type, stealth::TrafficHint hint, size_t packet_size) {
+  LOG(INFO) << "Send handshake packet " << tag("transport", transport_type_name(transport_type))
+            << tag("dc_id", transport_type.dc_id) << tag("hint", traffic_hint_name(hint))
+            << tag("tls_emulation", transport_type.secret.emulate_tls()) << tag("handshake_packet_bytes", packet_size);
+}
+
 }  // namespace
 
 RawConnection::~RawConnection() {
@@ -86,6 +171,9 @@ class RawConnectionDefault final : public RawConnection {
     }
 
     auto packet_size = packet.size();
+    LOG(DEBUG) << "Send encrypted packet " << tag("transport", transport_type_name(transport_->get_type()))
+               << tag("dc_id", transport_->get_type().dc_id) << tag("hint", traffic_hint_name(hint))
+               << tag("quick_ack", use_quick_ack) << tag("crypto_packet_bytes", packet_size);
     transport_->set_traffic_hint(hint);
     transport_->write(std::move(packet), use_quick_ack);
     return packet_size;
@@ -97,7 +185,7 @@ class RawConnectionDefault final : public RawConnection {
     auto packet = Transport::write(storer, AuthKey(), &packet_info, transport_->max_prepend_size(),
                                    transport_->max_append_size());
 
-    LOG(INFO) << "Send handshake packet: " << format::as_hex_dump<4>(packet.as_slice());
+    log_handshake_packet_metadata(transport_->get_type(), hint, packet.size());
     transport_->set_traffic_hint(hint);
     transport_->write(std::move(packet), false);
   }
@@ -120,9 +208,13 @@ class RawConnectionDefault final : public RawConnection {
 
   // NB: After first returned error, all subsequent calls will return error too.
   Status flush(const AuthKey &auth_key, Callback &callback) final {
+    auto had_error = has_error_;
+    reset_last_error_context();
     auto status = do_flush(auth_key, callback);
     if (status.is_error()) {
-      if (stats_callback_ && status.code() != 2) {
+      log_raw_connection_flush_failure(transport_->get_type(), status, had_error, last_mtproto_error_notified_,
+                                       last_error_was_mtproto_, last_mtproto_error_code_);
+      if (!had_error && stats_callback_ && status.code() != 2) {
         stats_callback_->on_error();
       }
       has_error_ = true;
@@ -156,10 +248,19 @@ class RawConnectionDefault final : public RawConnection {
   unique_ptr<IStreamTransport> transport_;
   FlatHashMap<uint32, uint64> quick_ack_to_token_;
   bool has_error_{false};
+  bool last_error_was_mtproto_{false};
+  bool last_mtproto_error_notified_{false};
+  int32 last_mtproto_error_code_{0};
 
   unique_ptr<StatsCallback> stats_callback_;
 
   ConnectionManager::ConnectionToken connection_token_;
+
+  void reset_last_error_context() {
+    last_error_was_mtproto_ = false;
+    last_mtproto_error_notified_ = false;
+    last_mtproto_error_code_ = 0;
+  }
 
   void on_read(size_t size, Callback &callback) {
     if (size <= 0) {
@@ -236,16 +337,15 @@ class RawConnectionDefault final : public RawConnection {
   }
 
   Status on_read_mtproto_error(int32 error_code) {
+    last_error_was_mtproto_ = true;
+    last_mtproto_error_code_ = error_code;
     if (error_code == -429) {
+      last_mtproto_error_notified_ = true;
       if (stats_callback_) {
         stats_callback_->on_mtproto_error();
       }
-      return Status::Error(500, PSLICE() << "MTProto error: " << error_code);
     }
-    if (error_code == -404) {
-      return Status::Error(-404, PSLICE() << "MTProto error: " << error_code);
-    }
-    return Status::Error(PSLICE() << "MTProto error: " << error_code);
+    return make_mtproto_error_status(error_code);
   }
 
   Status on_quick_ack(uint32 quick_ack, Callback &callback) {
@@ -328,6 +428,9 @@ class RawConnectionHttp final : public RawConnection {
     auto packet = Transport::write(storer, auth_key, &packet_info);
 
     auto packet_size = packet.size();
+    LOG(DEBUG) << "Send encrypted packet " << tag("transport", transport_type_name(transport_->get_type()))
+               << tag("dc_id", transport_->get_type().dc_id) << tag("hint", traffic_hint_name(hint))
+               << tag("quick_ack", false) << tag("crypto_packet_bytes", packet_size);
     transport_->set_traffic_hint(hint);
     send_packet(packet.as_buffer_slice());
     return packet_size;
@@ -338,7 +441,7 @@ class RawConnectionHttp final : public RawConnection {
     packet_info.no_crypto_flag = true;
     auto packet = Transport::write(storer, AuthKey(), &packet_info);
 
-    LOG(INFO) << "Send handshake packet: " << format::as_hex_dump<4>(packet.as_slice());
+    log_handshake_packet_metadata(transport_->get_type(), hint, packet.size());
     transport_->set_traffic_hint(hint);
     send_packet(packet.as_buffer_slice());
   }
@@ -361,9 +464,13 @@ class RawConnectionHttp final : public RawConnection {
 
   // NB: After first returned error, all subsequent calls will return error too.
   Status flush(const AuthKey &auth_key, Callback &callback) final {
+    auto had_error = has_error_;
+    reset_last_error_context();
     auto status = do_flush(auth_key, callback);
     if (status.is_error()) {
-      if (stats_callback_ && status.code() != 2) {
+      log_raw_connection_flush_failure(transport_->get_type(), status, had_error, last_mtproto_error_notified_,
+                                       last_error_was_mtproto_, last_mtproto_error_code_);
+      if (!had_error && stats_callback_ && status.code() != 2) {
         stats_callback_->on_error();
       }
       has_error_ = true;
@@ -393,6 +500,9 @@ class RawConnectionHttp final : public RawConnection {
   PublicFields extra_;
   IPAddress ip_address_;
   bool has_error_{false};
+  bool last_error_was_mtproto_{false};
+  bool last_mtproto_error_notified_{false};
+  int32 last_mtproto_error_code_{0};
   EventFd event_fd_;
 
   enum Mode { Send, Receive } mode_{Send};
@@ -402,6 +512,12 @@ class RawConnectionHttp final : public RawConnection {
   ConnectionManager::ConnectionToken connection_token_;
   std::shared_ptr<MpscPollableQueue<Result<BufferSlice>>> answers_;
   std::vector<BufferSlice> to_send_;
+
+  void reset_last_error_context() {
+    last_error_was_mtproto_ = false;
+    last_mtproto_error_notified_ = false;
+    last_mtproto_error_code_ = 0;
+  }
 
   void on_read(size_t size, Callback &callback) {
     if (size <= 0) {
@@ -467,16 +583,15 @@ class RawConnectionHttp final : public RawConnection {
   }
 
   Status on_read_mtproto_error(int32 error_code) {
+    last_error_was_mtproto_ = true;
+    last_mtproto_error_code_ = error_code;
     if (error_code == -429) {
+      last_mtproto_error_notified_ = true;
       if (stats_callback_) {
         stats_callback_->on_mtproto_error();
       }
-      return Status::Error(500, PSLICE() << "MTProto error: " << error_code);
     }
-    if (error_code == -404) {
-      return Status::Error(-404, PSLICE() << "MTProto error: " << error_code);
-    }
-    return Status::Error(PSLICE() << "MTProto error: " << error_code);
+    return make_mtproto_error_status(error_code);
   }
 
   Status flush_write() {

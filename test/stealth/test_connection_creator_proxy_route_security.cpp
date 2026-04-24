@@ -27,6 +27,25 @@ TEST(ConnectionCreatorProxyRouteSecurity, DirectRawIpRouteUsesExplicitTelegramAd
   ASSERT_FALSE(route.ok().mtproto_ip_address.is_valid());
 }
 
+TEST(ConnectionCreatorProxyRouteSecurity, DirectRawIpRouteRejectsInvalidTargetAddress) {
+  auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(td::Proxy(), td::IPAddress(), td::IPAddress());
+  ASSERT_TRUE(route.is_error());
+}
+
+TEST(ConnectionCreatorProxyRouteSecurity, MtprotoProxyRawIpRouteRejectsInvalidTargetAddress) {
+  auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(
+      td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")),
+      ipv4_address("203.0.113.10", 443), td::IPAddress());
+  ASSERT_TRUE(route.is_error());
+}
+
+TEST(ConnectionCreatorProxyRouteSecurity, Socks5RawIpRouteRejectsInvalidTargetAddress) {
+  auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(
+      td::Proxy::socks5("proxy.example", 1080, "user", "password"), ipv4_address("203.0.113.20", 1080),
+      td::IPAddress());
+  ASSERT_TRUE(route.is_error());
+}
+
 TEST(ConnectionCreatorProxyRouteSecurity, MtprotoProxyRawIpRouteUsesProxyAddress) {
   auto route = td::ConnectionCreator::resolve_raw_ip_connection_route(
       td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")),

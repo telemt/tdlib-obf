@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <fcntl.h>
 #include <mutex>
 #include <netinet/in.h>
@@ -166,8 +167,10 @@ class Ipv4LoopbackListener final {
 
 struct SharedProxyState {
   std::mutex mutex;
+  std::condition_variable cv;
   td::Proxy active_proxy;
   td::IPAddress proxy_ip_address;
+  td::uint64 mutation_epoch{0};
 };
 
 TEST(ProxySocketRoutingBehavioral, ActiveProxySnapshotSurvivesMidFlightMutationAndNeverDialsDcEndpoint) {
@@ -185,11 +188,15 @@ TEST(ProxySocketRoutingBehavioral, ActiveProxySnapshotSurvivesMidFlightMutationA
   std::thread mutator([&]() {
     bool flip = false;
     while (!stop.load(std::memory_order_relaxed)) {
-      std::lock_guard<std::mutex> lock(state.mutex);
-      state.active_proxy =
-          td::Proxy::mtproto("127.0.0.1", proxy_listener.ok().port(),
-                             make_tls_secret(flip ? td::Slice("api.realhosters.com") : td::Slice("cdn.realhosters.com"),
-                                             flip ? 'a' : 'b'));
+      {
+        std::lock_guard<std::mutex> lock(state.mutex);
+        state.active_proxy = td::Proxy::mtproto(
+            "127.0.0.1", proxy_listener.ok().port(),
+            make_tls_secret(flip ? td::Slice("api.realhosters.com") : td::Slice("cdn.realhosters.com"),
+                            flip ? 'a' : 'b'));
+        state.mutation_epoch++;
+      }
+      state.cv.notify_all();
       flip = !flip;
     }
   });
@@ -202,11 +209,15 @@ TEST(ProxySocketRoutingBehavioral, ActiveProxySnapshotSurvivesMidFlightMutationA
   for (int i = 0; i < kIterations; i++) {
     td::Proxy snapshotted_proxy;
     td::IPAddress snapshotted_proxy_ip;
+    td::uint64 snapshotted_epoch = 0;
     {
       std::lock_guard<std::mutex> lock(state.mutex);
       snapshotted_proxy = state.active_proxy;
       snapshotted_proxy_ip = state.proxy_ip_address;
+      snapshotted_epoch = state.mutation_epoch;
     }
+
+    ASSERT_TRUE(snapshotted_proxy.use_proxy());
 
     auto route =
         td::ConnectionCreator::resolve_raw_ip_connection_route(snapshotted_proxy, snapshotted_proxy_ip, target_dc_ip);
@@ -229,12 +240,22 @@ TEST(ProxySocketRoutingBehavioral, ActiveProxySnapshotSurvivesMidFlightMutationA
     auto opened = td::ConnectionCreator::open_proxy_socket(snapshotted_proxy, route.ok().socket_ip_address);
     ASSERT_TRUE(opened.is_ok());
     auto opened_socket = opened.move_as_ok();
+    ASSERT_EQ(opened_socket.connected_proxy_ip_address.get_ip_str(), snapshotted_proxy_ip.get_ip_str());
+    ASSERT_EQ(opened_socket.connected_proxy_ip_address.get_port(), snapshotted_proxy_ip.get_port());
+    ASSERT_NE(opened_socket.connected_proxy_ip_address.get_port(), target_dc_ip.get_port());
 
     ASSERT_TRUE(proxy_listener.ok().wait_and_accept(std::chrono::milliseconds(120)));
     ASSERT_FALSE(dc_listener.ok().accept_now());
 
     auto fd = std::move(opened_socket.socket_fd);
     fd.close();
+
+    // Wait until mutator restores an active proxy before the next snapshot.
+    std::unique_lock<std::mutex> lock(state.mutex);
+    auto restored = state.cv.wait_for(lock, std::chrono::milliseconds(200), [&] {
+      return state.mutation_epoch > snapshotted_epoch && state.active_proxy.use_proxy();
+    });
+    ASSERT_TRUE(restored);
   }
 
   stop.store(true, std::memory_order_relaxed);

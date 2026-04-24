@@ -21,18 +21,22 @@ Result<size_t> Socks5::parse_connect_response_packet_size(Slice data) {
   }
 
   if (data[0] != '\x05') {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse,
+                                  PSLICE() << "SOCKS5 connect response version="
+                                           << static_cast<int32>(static_cast<uint8>(data[0])) << " is unsupported");
   }
 
   auto reply_code = static_cast<uint8>(data[1]);
   if (reply_code != 0) {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksConnectRejected, PSLICE() << "Receive error code "
-                                                                                      << static_cast<int32>(reply_code)
-                                                                                      << " from server");
+    return make_proxy_setup_error(
+        ProxySetupErrorCode::SocksConnectRejected,
+        PSLICE() << "SOCKS5 connect reply code=" << static_cast<int32>(reply_code) << " rejected destination");
   }
 
   if (data[2] != '\0') {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Byte must be zero");
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse,
+                                  PSLICE() << "SOCKS5 connect response reserved byte must be zero, got "
+                                           << static_cast<int32>(static_cast<uint8>(data[2])));
   }
 
   size_t address_size = 0;
@@ -42,7 +46,10 @@ Result<size_t> Socks5::parse_connect_response_packet_size(Slice data) {
   } else if (address_type == '\x04') {
     address_size = 16;
   } else {
-    return make_proxy_setup_error(ProxySetupErrorCode::SocksInvalidResponse, "Invalid response");
+    return make_proxy_setup_error(
+        ProxySetupErrorCode::SocksInvalidResponse,
+        PSLICE() << "SOCKS5 connect response address type=" << static_cast<int32>(static_cast<uint8>(address_type))
+                 << " is unsupported");
   }
 
   size_t total_size = 4 + address_size + 2;
@@ -80,7 +87,8 @@ Status Socks5::wait_greeting_response() {
   auto slice = buffer_slice.as_slice();
   if (slice[0] != '\x05') {
     return make_proxy_setup_error(ProxySetupErrorCode::SocksUnsupportedVersion,
-                                  PSLICE() << "Unsupported socks protocol version " << static_cast<int>(slice[0]));
+                                  PSLICE() << "SOCKS5 greeting version="
+                                           << static_cast<int32>(static_cast<uint8>(slice[0])) << " is unsupported");
   }
   auto authentication_method = slice[1];
   if (authentication_method == '\0') {
@@ -90,8 +98,10 @@ Status Socks5::wait_greeting_response() {
   if (authentication_method == '\x02') {
     return send_username_password();
   }
-  return make_proxy_setup_error(ProxySetupErrorCode::SocksUnsupportedAuthenticationMode,
-                                "Unsupported authentication mode");
+  return make_proxy_setup_error(
+      ProxySetupErrorCode::SocksUnsupportedAuthenticationMode,
+      PSLICE() << "SOCKS5 greeting auth method=" << static_cast<int32>(static_cast<uint8>(authentication_method))
+               << " is unsupported");
 }
 
 Status Socks5::send_username_password() {
@@ -124,9 +134,9 @@ Status Socks5::wait_password_response() {
   auto buffer_slice = buf.read_as_buffer_slice(2);
   auto slice = buffer_slice.as_slice();
   if (slice[0] != '\x01') {
-    return make_proxy_setup_error(
-        ProxySetupErrorCode::SocksUnsupportedSubnegotiationVersion,
-        PSLICE() << "Unsupported socks subnegotiation protocol version " << static_cast<int>(slice[0]));
+    return make_proxy_setup_error(ProxySetupErrorCode::SocksUnsupportedSubnegotiationVersion,
+                                  PSLICE() << "SOCKS5 username/password version="
+                                           << static_cast<int32>(static_cast<uint8>(slice[0])) << " is unsupported");
   }
   if (slice[1] != '\x00') {
     return make_proxy_setup_error(ProxySetupErrorCode::SocksWrongUsernameOrPassword, "Wrong username or password");

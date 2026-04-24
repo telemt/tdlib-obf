@@ -177,6 +177,21 @@ inline StringBuilder &operator<<(StringBuilder &string_builder, const SessionCon
   return string_builder << "with " << info.message_id << " and seq_no " << info.seq_no;
 }
 
+Status make_parse_error_with_context(Slice parse_target, Slice parse_error, MessageId message_id,
+                                     MessageId container_message_id, MessageId main_message_id, size_t payload_bytes) {
+  return Status::Error(PSLICE() << "Failed to parse " << parse_target << ": " << parse_error
+                                << " [message_id=" << message_id << ", container_message_id=" << container_message_id
+                                << ", main_message_id=" << main_message_id << ", payload_bytes=" << payload_bytes
+                                << ']');
+}
+
+Status make_context_error(Slice message, MessageId message_id, MessageId container_message_id,
+                          MessageId main_message_id, size_t payload_bytes) {
+  return Status::Error(PSLICE() << message << " [message_id=" << message_id << ", container_message_id="
+                                << container_message_id << ", main_message_id=" << main_message_id
+                                << ", payload_bytes=" << payload_bytes << ']');
+}
+
 unique_ptr<RawConnection> SessionConnection::move_as_raw_connection() {
   was_moved_ = true;
   return std::move(raw_connection_);
@@ -216,11 +231,13 @@ BufferSlice SessionConnection::as_buffer_slice(Slice packet) {
   return current_buffer_slice_->from_slice(packet);
 }
 
-Status SessionConnection::parse_message(TlParser &parser, MsgInfo *info, Slice *packet, bool crypto_flag) {
+Status SessionConnection::parse_message(TlParser &parser, MsgInfo *info, Slice *packet, MessageId container_message_id,
+                                        MessageId main_message_id, size_t payload_bytes, bool crypto_flag) {
   // msg_id:long seqno:int bytes:int
   parser.check_len(sizeof(int64) + (crypto_flag ? sizeof(int32) : 0) + sizeof(int32));
   if (parser.get_error() != nullptr) {
-    return Status::Error(PSLICE() << "Failed to parse mtproto_api::message: " << parser.get_error());
+    return make_parse_error_with_context("mtproto_api::message", Slice(parser.get_error()), info->message_id,
+                                         container_message_id, main_message_id, payload_bytes);
   }
   info->message_id = MessageId(static_cast<uint64>(parser.fetch_long_unsafe()));
   if (crypto_flag) {
@@ -229,13 +246,15 @@ Status SessionConnection::parse_message(TlParser &parser, MsgInfo *info, Slice *
   uint32 bytes = parser.fetch_int_unsafe();
 
   if (bytes % sizeof(int32) != 0) {
-    return Status::Error(PSLICE() << "Failed to parse mtproto_api::message: size of message [" << bytes
-                                  << "] is not divisible by 4");
+    auto parse_error = PSTRING() << "size of message [" << bytes << "] is not divisible by 4";
+    return make_parse_error_with_context("mtproto_api::message", parse_error, info->message_id, container_message_id,
+                                         main_message_id, payload_bytes);
   }
 
   *packet = parser.template fetch_string_raw<Slice>(bytes);
   if (parser.get_error() != nullptr) {
-    return Status::Error(PSLICE() << "Failed to parse mtproto_api::message: " << parser.get_error());
+    return make_parse_error_with_context("mtproto_api::message", Slice(parser.get_error()), info->message_id,
+                                         container_message_id, main_message_id, payload_bytes);
   }
 
   info->size = bytes;
@@ -253,11 +272,17 @@ Status SessionConnection::on_packet_container(const MsgInfo &info, Slice packet)
   TlParser parser(packet);
   int32 size = parser.fetch_int();
   if (parser.get_error()) {
-    return Status::Error(PSLICE() << "Failed to parse mtproto_api::rpc_container: " << parser.get_error());
+    return make_parse_error_with_context("mtproto_api::rpc_container", Slice(parser.get_error()), info.message_id,
+                                         container_message_id_, main_message_id_, packet.size());
   }
   VLOG(mtproto) << "Receive container " << container_message_id_ << " of size " << size;
   for (int i = 0; i < size; i++) {
     TRY_STATUS(parse_packet(parser));
+  }
+  parser.fetch_end();
+  if (parser.get_error()) {
+    return make_parse_error_with_context("mtproto_api::rpc_container", Slice(parser.get_error()), info.message_id,
+                                         container_message_id_, main_message_id_, packet.size());
   }
   return Status::OK();
 }
@@ -272,11 +297,13 @@ Status SessionConnection::on_packet_rpc_result(const MsgInfo &info, Slice packet
   TlParser parser(packet);
   auto req_msg_id = static_cast<uint64>(parser.fetch_long());
   if (parser.get_error()) {
-    return Status::Error(PSLICE() << "Failed to parse mtproto_api::rpc_result: " << parser.get_error());
+    return make_parse_error_with_context("mtproto_api::rpc_result", Slice(parser.get_error()), info.message_id,
+                                         container_message_id_, main_message_id_, packet.size());
   }
   if (req_msg_id == 0) {
     LOG(ERROR) << "Receive an update in rpc_result " << info;
-    return Status::Error("Receive an update in rpc_result");
+    return make_context_error("Receive an update in rpc_result", info.message_id, container_message_id_,
+                              main_message_id_, packet.size());
   }
   VLOG(mtproto) << "Receive result for request with " << MessageId(req_msg_id) << ' ' << info;
 
@@ -288,7 +315,8 @@ Status SessionConnection::on_packet_rpc_result(const MsgInfo &info, Slice packet
     case mtproto_api::rpc_error::ID: {
       mtproto_api::rpc_error rpc_error(parser);
       if (parser.get_error()) {
-        return Status::Error(PSLICE() << "Failed to parse mtproto_api::rpc_error: " << parser.get_error());
+        return make_parse_error_with_context("mtproto_api::rpc_error", Slice(parser.get_error()), info.message_id,
+                                             container_message_id_, main_message_id_, packet.size());
       }
       callback_->on_message_result_error(MessageId(req_msg_id), rpc_error.error_code_, rpc_error.error_message_.str());
       return Status::OK();
@@ -296,7 +324,8 @@ Status SessionConnection::on_packet_rpc_result(const MsgInfo &info, Slice packet
     case mtproto_api::gzip_packed::ID: {
       mtproto_api::gzip_packed gzip(parser);
       if (parser.get_error()) {
-        return Status::Error(PSLICE() << "Failed to parse mtproto_api::gzip_packed: " << parser.get_error());
+        return make_parse_error_with_context("mtproto_api::gzip_packed", Slice(parser.get_error()), info.message_id,
+                                             container_message_id_, main_message_id_, packet.size());
       }
       // yep, gzip in rpc_result
       BufferSlice object = gzdecode(gzip.packed_data_);
@@ -605,7 +634,8 @@ Status SessionConnection::on_slice_packet(const MsgInfo &info, Slice packet) {
 Status SessionConnection::parse_packet(TlParser &parser) {
   MsgInfo info;
   Slice packet;
-  TRY_STATUS(parse_message(parser, &info, &packet, true));
+  auto payload_bytes = parser.get_left_len();
+  TRY_STATUS(parse_message(parser, &info, &packet, container_message_id_, main_message_id_, payload_bytes, true));
   return on_slice_packet(info, packet);
 }
 
@@ -631,7 +661,8 @@ Status SessionConnection::on_main_packet(const PacketInfo &packet_info, Slice pa
   TRY_STATUS(parse_packet(parser));
   parser.fetch_end();
   if (parser.get_error()) {
-    return Status::Error(PSLICE() << "Failed to parse packet: " << parser.get_error());
+    return make_parse_error_with_context("packet", Slice(parser.get_error()), packet_info.message_id,
+                                         container_message_id_, main_message_id_, packet.size());
   }
   return Status::OK();
 }

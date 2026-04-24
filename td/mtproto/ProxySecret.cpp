@@ -7,6 +7,7 @@
 #include "td/mtproto/ProxySecret.h"
 
 #include "td/utils/base64.h"
+#include "td/utils/format.h"
 #include "td/utils/misc.h"
 
 namespace td {
@@ -18,9 +19,9 @@ bool is_ascii_alnum(unsigned char c) {
   return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
-bool is_valid_tls_emulation_domain(Slice domain) {
+const char *get_tls_emulation_domain_error(Slice domain) {
   if (domain.empty() || domain.size() > ProxySecret::MAX_DOMAIN_LENGTH) {
-    return false;
+    return "length_out_of_bounds";
   }
 
   size_t label_size = 0;
@@ -30,7 +31,7 @@ bool is_valid_tls_emulation_domain(Slice domain) {
     auto byte = static_cast<unsigned char>(c);
     if (byte == '.') {
       if (label_size == 0 || label_ends_with_hyphen) {
-        return false;
+        return "empty_or_hyphen_terminated_label";
       }
       label_size = 0;
       label_starts = true;
@@ -39,20 +40,24 @@ bool is_valid_tls_emulation_domain(Slice domain) {
     }
 
     if (!(is_ascii_alnum(byte) || byte == '-')) {
-      return false;
+      return "non_ascii_alnum_or_hyphen";
     }
     if (label_starts && byte == '-') {
-      return false;
+      return "label_starts_with_hyphen";
     }
     label_starts = false;
     label_ends_with_hyphen = (byte == '-');
     label_size++;
     if (label_size > 63) {
-      return false;
+      return "label_too_long";
     }
   }
 
-  return label_size != 0 && !label_ends_with_hyphen;
+  if (label_size == 0 || label_ends_with_hyphen) {
+    return "empty_or_hyphen_terminated_label";
+  }
+
+  return nullptr;
 }
 
 }  // namespace
@@ -66,17 +71,21 @@ Result<ProxySecret> ProxySecret::from_link(Slice encoded_secret, bool truncate_i
     r_decoded = base64_decode(encoded_secret);
   }
   if (r_decoded.is_error()) {
-    return Status::Error(400, "Wrong proxy secret");
+    return Status::Error(400, PSLICE() << "Wrong proxy secret: decode=failed encoded_length=" << encoded_secret.size());
   }
   return from_binary(r_decoded.ok(), truncate_if_needed);
 }
 
 Result<ProxySecret> ProxySecret::from_binary(Slice raw_unchecked_secret, bool truncate_if_needed) {
-  if (raw_unchecked_secret.size() > 17 + MAX_DOMAIN_LENGTH) {
+  static constexpr size_t kMaxSecretSize = 17 + MAX_DOMAIN_LENGTH;
+  auto raw_length = raw_unchecked_secret.size();
+
+  if (raw_length > kMaxSecretSize) {
     if (truncate_if_needed) {
-      raw_unchecked_secret.truncate(17 + MAX_DOMAIN_LENGTH);
+      raw_unchecked_secret.truncate(kMaxSecretSize);
     } else {
-      return Status::Error(400, "Too long secret");
+      return Status::Error(
+          400, PSLICE() << "Too long secret: raw_length=" << raw_length << " max_length=" << kMaxSecretSize);
     }
   }
   if (raw_unchecked_secret.size() == 16 ||
@@ -84,15 +93,21 @@ Result<ProxySecret> ProxySecret::from_binary(Slice raw_unchecked_secret, bool tr
     return from_raw(raw_unchecked_secret);
   }
   if (raw_unchecked_secret.size() >= 18 && static_cast<unsigned char>(raw_unchecked_secret[0]) == 0xee) {
-    if (!is_valid_tls_emulation_domain(raw_unchecked_secret.substr(17))) {
-      return Status::Error(400, "Wrong proxy secret");
+    auto tls_domain = raw_unchecked_secret.substr(17);
+    auto *tls_domain_error = get_tls_emulation_domain_error(tls_domain);
+    if (tls_domain_error != nullptr) {
+      return Status::Error(400, PSLICE() << "Wrong proxy secret: tls_domain_error=" << tls_domain_error
+                                         << " domain_length=" << tls_domain.size());
     }
     return from_raw(raw_unchecked_secret);
   }
   if (raw_unchecked_secret.size() < 16) {
-    return Status::Error(400, "Wrong proxy secret");
+    return Status::Error(400,
+                         PSLICE() << "Wrong proxy secret: reason=too_short raw_length=" << raw_unchecked_secret.size());
   }
-  return Status::Error(400, "Unsupported proxy secret");
+  auto marker = static_cast<unsigned int>(static_cast<unsigned char>(raw_unchecked_secret[0]));
+  return Status::Error(400, PSLICE() << "Unsupported proxy secret: raw_length=" << raw_unchecked_secret.size()
+                                     << " marker=0x" << format::as_hex(marker));
 }
 
 string ProxySecret::get_encoded_secret() const {

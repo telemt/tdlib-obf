@@ -237,7 +237,8 @@ class SessionConnection final
 
   void reset_server_time_difference(MessageId message_id);
 
-  static Status parse_message(TlParser &parser, MsgInfo *info, Slice *packet,
+  static Status parse_message(TlParser &parser, MsgInfo *info, Slice *packet, MessageId container_message_id,
+                              MessageId main_message_id, size_t payload_bytes,
                               bool crypto_flag = true) TD_WARN_UNUSED_RESULT;
   Status parse_packet(TlParser &parser) TD_WARN_UNUSED_RESULT;
   Status on_packet_container(const MsgInfo &info, Slice packet) TD_WARN_UNUSED_RESULT;

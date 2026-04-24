@@ -1,0 +1,70 @@
+// SPDX-FileCopyrightText: Copyright 2026 telemt community
+// SPDX-License-Identifier: MIT
+// telemt: https://github.com/telemt
+// telemt: https://t.me/telemtrs
+//
+
+#include "td/utils/common.h"
+#include "td/utils/tests.h"
+
+#include "test/stealth/SourceContractFileReader.h"
+
+namespace {
+
+td::string normalize_for_contract(td::Slice source) {
+  td::string normalized;
+  normalized.reserve(source.size());
+  for (auto c : source) {
+    auto byte = static_cast<unsigned char>(c);
+    if (byte == ' ' || byte == '\t' || byte == '\r' || byte == '\n') {
+      continue;
+    }
+    normalized.push_back(c);
+  }
+  return normalized;
+}
+
+td::string extract_source_region(td::Slice source, td::Slice begin_marker, td::Slice end_marker) {
+  auto source_text = source.str();
+  auto begin = source_text.find(begin_marker.str());
+  CHECK(begin != td::string::npos);
+  auto end = source_text.find(end_marker.str(), begin);
+  CHECK(end != td::string::npos);
+  CHECK(begin < end);
+  return source_text.substr(begin, end - begin);
+}
+
+TEST(TlsRuntimeSelectionSourceContract, AllowedProfilesForPlatformRoutesDesktopMobileAndWindowsToDedicatedSets) {
+  auto source = td::mtproto::test::read_repo_text_file("td/mtproto/stealth/TlsHelloProfileRegistry.cpp");
+  auto region = extract_source_region(source, "Span<BrowserProfile> allowed_profiles_for_platform(",
+                                      "const ProfileSpec &profile_spec(BrowserProfile profile)");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("if(platform.device_class==DeviceClass::Mobile)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(platform.mobile_os==MobileOs::IOS)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(IOS_MOBILE_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(platform.mobile_os==MobileOs::Android)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(ANDROID_MOBILE_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(MOBILE_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(platform.desktop_os==DesktopOs::Darwin)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(DARWIN_DESKTOP_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(platform.desktop_os==DesktopOs::Windows)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(WINDOWS_DESKTOP_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(NON_DARWIN_DESKTOP_PROFILES);") != td::string::npos);
+}
+
+TEST(TlsRuntimeSelectionSourceContract, RuntimeProfileSelectionUsesPlatformAllowListAndStableHashRoll) {
+  auto source = td::mtproto::test::read_repo_text_file("td/mtproto/stealth/TlsHelloProfileRegistry.cpp");
+  auto region = extract_source_region(source, "BrowserProfile pick_runtime_profile(", "EchMode ech_mode_for_route(");
+  auto normalized = normalize_for_contract(region);
+
+  ASSERT_TRUE(normalized.find("autoallowed_profiles=allowed_profiles_for_platform(platform);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("autokey=make_profile_selection_key(destination,unix_time);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("autoweights=default_profile_weights();") != td::string::npos);
+  ASSERT_TRUE(normalized.find("CHECK(total_weight>0);") != td::string::npos);
+  ASSERT_TRUE(normalized.find("autoroll=stable_selection_hash(key,platform)%total_weight;") != td::string::npos);
+  ASSERT_TRUE(normalized.find("for(autoprofile:allowed_profiles)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("returnallowed_profiles.back();") != td::string::npos);
+}
+
+}  // namespace

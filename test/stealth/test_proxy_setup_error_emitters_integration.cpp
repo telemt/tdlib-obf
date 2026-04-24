@@ -152,6 +152,8 @@ TEST(ProxySetupErrorEmittersIntegration, HttpProxyRejectsNon2xxResponseWithTyped
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::HttpConnectRejected), observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("HTTP CONNECT") != td::string::npos);
+  ASSERT_TRUE(observation.error.message().str().find("149.154.167.50:443") != td::string::npos);
 }
 
 TEST(ProxySetupErrorEmittersIntegration, HttpProxyRejectsMalformedStatusLineWithBinaryTail) {
@@ -178,6 +180,8 @@ TEST(ProxySetupErrorEmittersIntegration, HttpProxyRejectsMalformedStatusLineWith
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::HttpConnectRejected), observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("HTTP CONNECT") != td::string::npos);
+  ASSERT_TRUE(observation.error.message().str().find("149.154.167.50:443") != td::string::npos);
 }
 
 TEST(ProxySetupErrorEmittersIntegration, HttpProxyWaitsForHeaderTerminatorBeforeSucceeding) {
@@ -276,6 +280,7 @@ TEST(ProxySetupErrorEmittersIntegration, Socks5RejectsUnsupportedGreetingVersion
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksUnsupportedVersion), observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("SOCKS5 greeting version") != td::string::npos);
   ASSERT_EQ(0, observation.connected_calls);
 }
 
@@ -297,6 +302,7 @@ TEST(ProxySetupErrorEmittersIntegration, Socks5RejectsUnsupportedAuthenticationM
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksUnsupportedAuthenticationMode),
             observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("SOCKS5 greeting auth method") != td::string::npos);
   ASSERT_EQ(0, observation.connected_calls);
 }
 
@@ -326,6 +332,7 @@ TEST(ProxySetupErrorEmittersIntegration, Socks5RejectsUnsupportedSubnegotiationV
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksUnsupportedSubnegotiationVersion),
             observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("SOCKS5 username/password version") != td::string::npos);
   ASSERT_EQ(0, observation.connected_calls);
 }
 
@@ -378,6 +385,7 @@ TEST(ProxySetupErrorEmittersIntegration, Socks5ConnectRejectReturnsTypedErrorAft
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksConnectRejected), observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("SOCKS5 connect reply code=5") != td::string::npos);
   ASSERT_EQ(1, observation.connected_calls);
 }
 
@@ -402,6 +410,7 @@ TEST(ProxySetupErrorEmittersIntegration, Socks5InvalidResponseReturnsTypedErrorA
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksInvalidResponse), observation.error.code());
+  ASSERT_TRUE(observation.error.message().str().find("SOCKS5 connect response") != td::string::npos);
   ASSERT_EQ(1, observation.connected_calls);
 }
 

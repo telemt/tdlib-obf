@@ -67,8 +67,8 @@ TEST(TlsInitResponseAdversarial, RejectsOversizedHandshakeRecordLengthWithoutWai
   auto tls_init = create_tls_init(std::move(socket_pair.client));
   TlsInitTestPeer::send_hello(tls_init);
 
-  auto response =
-      make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix, kSecondResponsePrefix);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix);
   overwrite_record_length(response, 3, kOversizedTlsRecordLength);
 
   ASSERT_TRUE(write_all(socket_pair.peer, response).is_ok());
@@ -83,8 +83,8 @@ TEST(TlsInitResponseAdversarial, RejectsOversizedApplicationDataRecordLengthAfte
   auto tls_init = create_tls_init(std::move(socket_pair.client));
   TlsInitTestPeer::send_hello(tls_init);
 
-  auto response =
-      make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix, kSecondResponsePrefix);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix);
   constexpr size_t kSecondRecordLengthOffset = 5 + 2 + 40 + 3;
   overwrite_record_length(response, kSecondRecordLengthOffset, kOversizedTlsRecordLength);
 
@@ -94,14 +94,36 @@ TEST(TlsInitResponseAdversarial, RejectsOversizedApplicationDataRecordLengthAfte
   ASSERT_TRUE(TlsInitTestPeer::wait_hello_response(tls_init).is_error());
 }
 
+TEST(TlsInitResponseAdversarial, OversizedRecordErrorIncludesLengthContext) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client));
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix);
+  overwrite_record_length(response, 3, kOversizedTlsRecordLength);
+
+  ASSERT_TRUE(write_all(socket_pair.peer, response).is_ok());
+  TlsInitTestPeer::fd(tls_init).get_poll_info().add_flags(td::PollFlags::Read());
+  ASSERT_TRUE(TlsInitTestPeer::fd(tls_init).flush_read().is_ok());
+
+  auto status = TlsInitTestPeer::wait_hello_response(tls_init);
+  ASSERT_TRUE(status.is_error());
+  auto message = status.message().str();
+  ASSERT_TRUE(message.find("record length exceeds TLS hello limit") != td::string::npos);
+  ASSERT_TRUE(message.find("record_length=") != td::string::npos);
+  ASSERT_TRUE(message.find("max_allowed=") != td::string::npos);
+}
+
 TEST(TlsInitResponseAdversarial, RejectsZeroLengthHandshakeRecordEvenWhenHashMatches) {
   SKIP_IF_NO_SOCKET_PAIR();
   auto socket_pair = create_socket_pair().move_as_ok();
   auto tls_init = create_tls_init(std::move(socket_pair.client));
   TlsInitTestPeer::send_hello(tls_init);
 
-  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix,
-                                         kSecondResponsePrefix, 0, 32);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix, 0, 32);
 
   ASSERT_TRUE(write_all(socket_pair.peer, response).is_ok());
   TlsInitTestPeer::fd(tls_init).get_poll_info().add_flags(td::PollFlags::Read());
@@ -115,8 +137,8 @@ TEST(TlsInitResponseAdversarial, RejectsZeroLengthApplicationDataRecordEvenWhenH
   auto tls_init = create_tls_init(std::move(socket_pair.client));
   TlsInitTestPeer::send_hello(tls_init);
 
-  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix,
-                                         kSecondResponsePrefix, 48, 0);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix, 48, 0);
 
   ASSERT_TRUE(write_all(socket_pair.peer, response).is_ok());
   TlsInitTestPeer::fd(tls_init).get_poll_info().add_flags(td::PollFlags::Read());

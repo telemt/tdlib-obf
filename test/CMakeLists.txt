@@ -73,6 +73,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_profile_runtime.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_diagnostics_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_log_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_fragmentation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_record_order_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_leftover_integration.cpp
@@ -81,6 +83,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profiles.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_coverage_gaps.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_ech_wire_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_darwin_ech_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry_provenance.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_platform_coherence.cpp
@@ -100,9 +104,12 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_proxy_route_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_tls_init_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_logging_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_transport_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_raw_ip_route_transport_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_light_fuzz.cpp
@@ -172,6 +179,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_route_failure_cache_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_route_failure_cache_expiry.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_builder_equivalence.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_real_fixture_alignment.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_hello_runtime_profile_coverage_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_params.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_params_platform_fail_closed.cpp
@@ -181,6 +189,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_case_alias_fixture_blackbox.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_selection_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_proxy_alpn_semantics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_plan.cpp
@@ -192,6 +201,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_seam.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_overdue_shaping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_flush_order.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_error_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_crypto_padding_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_shaping_wakeup_seam.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_hints.cpp
@@ -210,6 +220,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_wiring.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_control_mix_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_wiring_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_parse_error_diagnostics_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_service_ack_mix_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_phase_hint_drift_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_connection_hint_wiring.cpp
@@ -218,6 +229,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_classification_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_backoff_overflow_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_fallback_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_log_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp
@@ -226,6 +239,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_socket_routing_behavioral.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_truncation_boundary_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_mtproto_secret_roundtrip_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_serialized_secret_validation_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dc_option_secret_validation_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_recovery_proxy_secret_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_proxy_inheritance_integration.cpp

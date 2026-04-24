@@ -139,4 +139,38 @@ TEST(ProxySecretTlsDomainValidationContract, FromLinkAppliesSameTlsDomainValidat
   ASSERT_TRUE(r_secret.is_error());
 }
 
+TEST(ProxySecretTlsDomainValidationContract, TooLongSecretErrorsIncludeLengthContext) {
+  td::string overlong_domain(td::mtproto::ProxySecret::MAX_DOMAIN_LENGTH + 1, 'a');
+  auto r_secret = td::mtproto::ProxySecret::from_binary(make_tls_emulation_secret(overlong_domain), false);
+
+  ASSERT_TRUE(r_secret.is_error());
+  auto message = r_secret.error().message().str();
+  ASSERT_TRUE(message.find("Too long secret") != td::string::npos);
+  ASSERT_TRUE(message.find("raw_length=") != td::string::npos);
+  ASSERT_TRUE(message.find("max_length=") != td::string::npos);
+}
+
+TEST(ProxySecretTlsDomainValidationContract, UnsupportedMarkerErrorsIncludeMarkerContext) {
+  td::string malformed(17, 'x');
+  malformed[0] = static_cast<char>(0xab);
+
+  auto r_secret = td::mtproto::ProxySecret::from_binary(malformed);
+
+  ASSERT_TRUE(r_secret.is_error());
+  auto message = r_secret.error().message().str();
+  ASSERT_TRUE(message.find("Unsupported proxy secret") != td::string::npos);
+  ASSERT_TRUE(message.find("raw_length=") != td::string::npos);
+  ASSERT_TRUE(message.find("marker=0x") != td::string::npos);
+}
+
+TEST(ProxySecretTlsDomainValidationContract, InvalidTlsDomainErrorsIncludeValidationContext) {
+  auto r_secret = td::mtproto::ProxySecret::from_binary(make_tls_emulation_secret("bad..example.com"));
+
+  ASSERT_TRUE(r_secret.is_error());
+  auto message = r_secret.error().message().str();
+  ASSERT_TRUE(message.find("Wrong proxy secret") != td::string::npos);
+  ASSERT_TRUE(message.find("domain_length=") != td::string::npos);
+  ASSERT_TRUE(message.find("tls_domain_error=") != td::string::npos);
+}
+
 }  // namespace

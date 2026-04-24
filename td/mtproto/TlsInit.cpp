@@ -13,6 +13,9 @@
 
 #include "td/utils/common.h"
 #include "td/utils/crypto.h"
+#include "td/utils/format.h"
+#include "td/utils/logging.h"
+#include "td/utils/misc.h"
 #include "td/utils/Random.h"
 #include "td/utils/Time.h"
 
@@ -24,6 +27,20 @@ namespace mtproto {
 namespace {
 
 constexpr size_t kMaxTlsRecordBodyLength = (1u << 14) + 256u;
+constexpr size_t kTlsHelloMinEnvelopeLength = 43;
+constexpr size_t kTlsHelloResponseRandomOffset = 11;
+constexpr size_t kTlsHelloResponseRandomSize = 32;
+
+Slice ech_mode_name(stealth::EchMode mode) {
+  switch (mode) {
+    case stealth::EchMode::Disabled:
+      return Slice("disabled");
+    case stealth::EchMode::Rfc9180Outer:
+      return Slice("rfc9180_outer");
+    default:
+      return Slice("unknown");
+  }
+}
 
 bool looks_like_http_response_prefix(const uint8 header[5]) {
   return header[0] == 'H' && header[1] == 'T' && header[2] == 'T' && header[3] == 'P' && header[4] == '/';
@@ -33,18 +50,54 @@ bool is_valid_tls_record_type(uint8 record_type) {
   return record_type == 0x14 || record_type == 0x15 || record_type == 0x16 || record_type == 0x17;
 }
 
-Status tls_hello_wrong_regime_error() {
+Slice tls_record_type_name(uint8 record_type) {
+  switch (record_type) {
+    case 0x14:
+      return Slice("change_cipher_spec");
+    case 0x15:
+      return Slice("alert");
+    case 0x16:
+      return Slice("handshake");
+    case 0x17:
+      return Slice("application_data");
+    default:
+      return Slice("unknown");
+  }
+}
+
+string tls_record_header_context(uint8 record_type, uint8 record_version_major, uint8 record_version_minor,
+                                 size_t record_length) {
+  char version_bytes[2] = {static_cast<char>(record_version_major), static_cast<char>(record_version_minor)};
+  return PSTRING() << "record_type=" << tls_record_type_name(record_type)
+                   << " record_type_code=" << format::as_hex(record_type) << " record_version=0x"
+                   << hex_encode(Slice(version_bytes, 2)) << " record_length=" << record_length;
+}
+
+string tls_header_prefix_context(const uint8 header[5]) {
+  char ascii_header[5];
+  for (size_t i = 0; i < 5; i++) {
+    auto byte = header[i];
+    ascii_header[i] = byte >= 0x20 && byte <= 0x7e ? static_cast<char>(byte) : '.';
+  }
+  return PSTRING() << "header_ascii=" << Slice(ascii_header, 5)
+                   << " header_hex=" << hex_encode(Slice(reinterpret_cast<const char *>(header), 5));
+}
+
+Status tls_hello_wrong_regime_error(Slice details) {
   return make_proxy_setup_error(ProxySetupErrorCode::TlsHelloWrongRegime,
-                                "First part of response to hello is from the wrong protocol regime");
+                                PSLICE() << "TLS hello response is from a different protocol regime: " << details);
 }
 
-Status tls_hello_malformed_response_error() {
+Status tls_hello_malformed_response_error(Slice reason) {
   return make_proxy_setup_error(ProxySetupErrorCode::TlsHelloMalformedResponse,
-                                "First part of response to hello is invalid");
+                                PSLICE() << "TLS hello response malformed: " << reason);
 }
 
-Status tls_hello_hash_mismatch_error() {
-  return make_proxy_setup_error(ProxySetupErrorCode::TlsHelloResponseHashMismatch, "Response hash mismatch");
+Status tls_hello_hash_mismatch_error(size_t response_bytes) {
+  return make_proxy_setup_error(ProxySetupErrorCode::TlsHelloResponseHashMismatch,
+                                PSLICE() << "Response hash mismatch: response_bytes=" << response_bytes
+                                         << " random_offset=" << kTlsHelloResponseRandomOffset
+                                         << " random_size=" << kTlsHelloResponseRandomSize);
 }
 
 Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_complete) {
@@ -65,15 +118,22 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
     const size_t record_length = (static_cast<size_t>(header[3]) << 8) + static_cast<size_t>(header[4]);
 
     if (looks_like_http_response_prefix(header) || record_type == 0x05 || !is_valid_tls_record_type(record_type)) {
-      return tls_hello_wrong_regime_error();
+      return tls_hello_wrong_regime_error(tls_header_prefix_context(header));
     }
 
     if (record_version_major != 0x03 || record_version_minor != 0x03) {
-      return tls_hello_malformed_response_error();
+      return tls_hello_malformed_response_error(
+          PSLICE() << "record version must be 0x0303 ["
+                   << tls_record_header_context(record_type, record_version_major, record_version_minor, record_length)
+                   << ']');
     }
 
     if (record_length > kMaxTlsRecordBodyLength) {
-      return tls_hello_malformed_response_error();
+      return tls_hello_malformed_response_error(
+          PSLICE() << "record length exceeds TLS hello limit: record_length=" << record_length
+                   << " max_allowed=" << kMaxTlsRecordBodyLength << " ["
+                   << tls_record_header_context(record_type, record_version_major, record_version_minor, record_length)
+                   << ']');
     }
 
     if (it->size() < record_length) {
@@ -82,10 +142,18 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
 
     if (!seen_handshake) {
       if (record_type != 0x16) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "first record is not handshake ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << ']');
       }
       if (record_length == 0) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "handshake record has zero length ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << ']');
       }
       seen_handshake = true;
       it->advance(record_length);
@@ -94,15 +162,27 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
 
     if (record_type == 0x14) {
       if (seen_change_cipher_spec) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "duplicate change_cipher_spec record ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << ']');
       }
       if (record_length != 1) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "change_cipher_spec record length must be 1 ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << ']');
       }
       uint8 ccs_payload = 0;
       it->advance(1, MutableSlice(&ccs_payload, 1));
       if (ccs_payload != 0x01) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "change_cipher_spec payload must be 0x01 ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << " payload=" << format::as_hex(ccs_payload) << ']');
       }
       seen_change_cipher_spec = true;
       continue;
@@ -110,14 +190,21 @@ Status consume_tls_hello_response_records(ChainBufferReader *it, bool *is_comple
 
     if (record_type == 0x17) {
       if (record_length == 0) {
-        return tls_hello_malformed_response_error();
+        return tls_hello_malformed_response_error(PSLICE()
+                                                  << "application_data record has zero length ["
+                                                  << tls_record_header_context(record_type, record_version_major,
+                                                                               record_version_minor, record_length)
+                                                  << ']');
       }
       it->advance(record_length);
       *is_complete = true;
       return Status::OK();
     }
 
-    return tls_hello_malformed_response_error();
+    return tls_hello_malformed_response_error(
+        PSLICE() << "unexpected TLS record type after handshake ["
+                 << tls_record_header_context(record_type, record_version_major, record_version_minor, record_length)
+                 << ']');
   }
 }
 
@@ -138,31 +225,72 @@ void Grease::init(MutableSlice res) {
 void TlsInit::send_hello() {
   hello_unix_time_ = static_cast<int32>(Time::now() + server_time_difference_);
   auto decision = stealth::get_runtime_ech_decision(username_, hello_unix_time_, route_hints_);
+  hello_ech_mode_name_ = ech_mode_name(decision.ech_mode).str();
+  hello_ech_disabled_by_route_ = decision.disabled_by_route;
+  hello_ech_disabled_by_circuit_breaker_ = decision.disabled_by_circuit_breaker;
+  hello_ech_reenabled_after_ttl_ = decision.reenabled_after_ttl;
+
+  hello_profile_name_ = "chrome133";
+  hello_profile_allows_ech_ = stealth::profile_spec(stealth::BrowserProfile::Chrome133).allows_ech;
 #if TD_DARWIN
-  hello_uses_ech_ = decision.ech_mode == stealth::EchMode::Rfc9180Outer;
-  auto hello = stealth::build_proxy_tls_client_hello(username_, password_, hello_unix_time_, route_hints_);
+  hello_uses_ech_ = hello_profile_allows_ech_ && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
+  auto hello = stealth::build_proxy_tls_client_hello_for_profile(
+      username_, password_, hello_unix_time_, stealth::BrowserProfile::Chrome133,
+      hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
 #else
   auto platform = stealth::default_runtime_platform_hints();
   auto profile = stealth::pick_runtime_profile(username_, hello_unix_time_, platform);
-  hello_uses_ech_ = stealth::profile_spec(profile).allows_ech && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
+  hello_profile_name_ = stealth::profile_spec(profile).name.str();
+  hello_profile_allows_ech_ = stealth::profile_spec(profile).allows_ech;
+  hello_uses_ech_ = hello_profile_allows_ech_ && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
   auto hello = stealth::build_proxy_tls_client_hello_for_profile(
       username_, password_, hello_unix_time_, profile,
       hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
 #endif
+
+  LOG(DEBUG) << "TlsInit hello prepared " << tag("destination", username_) << tag("route_known", route_hints_.is_known)
+             << tag("route_ru", route_hints_.is_ru) << tag("ech_mode", hello_ech_mode_name_)
+             << tag("ech_enabled", hello_uses_ech_) << tag("profile", hello_profile_name_)
+             << tag("profile_allows_ech", hello_profile_allows_ech_)
+             << tag("ech_disabled_by_route", hello_ech_disabled_by_route_)
+             << tag("ech_disabled_by_circuit_breaker", hello_ech_disabled_by_circuit_breaker_)
+             << tag("ech_reenabled_after_ttl", hello_ech_reenabled_after_ttl_)
+             << tag("hello_unix_time", hello_unix_time_);
+
   stealth::note_runtime_ech_decision(decision, hello_uses_ech_);
-  hello_rand_ = hello.substr(11, 32);
+  hello_rand_ = hello.substr(kTlsHelloResponseRandomOffset, kTlsHelloResponseRandomSize);
   fd_.output_buffer().append(hello);
   state_ = State::WaitHelloResponse;
 }
 
 Status TlsInit::wait_hello_response() {
+  auto log_hello_rejection = [&](Slice failure_stage, const Status &status, bool recorded_ech_failure,
+                                 size_t buffered_bytes, size_t parsed_bytes, bool parse_complete) {
+    LOG(WARNING) << "TlsInit hello response rejected " << tag("destination", username_)
+                 << tag("route_known", route_hints_.is_known) << tag("route_ru", route_hints_.is_ru)
+                 << tag("ech_mode", hello_ech_mode_name_) << tag("ech_enabled", hello_uses_ech_)
+                 << tag("profile", hello_profile_name_) << tag("profile_allows_ech", hello_profile_allows_ech_)
+                 << tag("ech_disabled_by_route", hello_ech_disabled_by_route_)
+                 << tag("ech_disabled_by_circuit_breaker", hello_ech_disabled_by_circuit_breaker_)
+                 << tag("ech_reenabled_after_ttl", hello_ech_reenabled_after_ttl_)
+                 << tag("hello_unix_time", hello_unix_time_) << tag("failure_stage", failure_stage)
+                 << tag("status_code", status.code()) << tag("status_message", status.public_message())
+                 << tag("recorded_ech_failure", recorded_ech_failure) << tag("buffered_bytes", buffered_bytes)
+                 << tag("parsed_bytes", parsed_bytes) << tag("parse_complete", parse_complete);
+  };
+
+  auto buffered_bytes = fd_.input_buffer().size();
   auto it = fd_.input_buffer().clone();
   bool is_complete = false;
   auto status = consume_tls_hello_response_records(&it, &is_complete);
+  auto parsed_bytes = buffered_bytes - it.size();
   if (status.is_error()) {
+    bool recorded_ech_failure = false;
     if (hello_uses_ech_) {
       stealth::note_runtime_ech_failure(username_, hello_unix_time_);
+      recorded_ech_failure = true;
     }
+    log_hello_rejection("record_parse", status, recorded_ech_failure, buffered_bytes, parsed_bytes, false);
     return status;
   }
   if (!is_complete) {
@@ -170,27 +298,47 @@ Status TlsInit::wait_hello_response() {
   }
 
   auto response = fd_.input_buffer().cut_head(it.begin().clone()).move_as_buffer_slice();
-  if (response.size() < 43) {
+  if (response.size() < kTlsHelloMinEnvelopeLength) {
+    bool recorded_ech_failure = false;
     if (hello_uses_ech_) {
       stealth::note_runtime_ech_failure(username_, hello_unix_time_);
+      recorded_ech_failure = true;
     }
-    return tls_hello_malformed_response_error();
+    auto error = tls_hello_malformed_response_error(PSLICE() << "response is shorter than minimal TLS hello envelope: "
+                                                             << "response_bytes=" << response.size()
+                                                             << " min_expected=" << kTlsHelloMinEnvelopeLength);
+    log_hello_rejection("response_too_short", error, recorded_ech_failure, response.size(), response.size(), true);
+    return error;
   }
-  auto response_rand_slice = response.as_mutable_slice().substr(11, 32);
+  auto response_rand_slice =
+      response.as_mutable_slice().substr(kTlsHelloResponseRandomOffset, kTlsHelloResponseRandomSize);
   auto response_rand = response_rand_slice.str();
   std::fill(response_rand_slice.begin(), response_rand_slice.end(), '\0');
   string hash_dest(32, '\0');
   hmac_sha256(password_, PSLICE() << hello_rand_ << response.as_slice(), hash_dest);
   if (!constant_time_equals(hash_dest, response_rand)) {
+    bool recorded_ech_failure = false;
     if (hello_uses_ech_) {
       stealth::note_runtime_ech_failure(username_, hello_unix_time_);
+      recorded_ech_failure = true;
     }
-    return tls_hello_hash_mismatch_error();
+    auto error = tls_hello_hash_mismatch_error(response.size());
+    log_hello_rejection("response_hash", error, recorded_ech_failure, response.size(), response.size(), true);
+    return error;
   }
 
   if (hello_uses_ech_) {
     stealth::note_runtime_ech_success(username_, hello_unix_time_);
   }
+
+  LOG(DEBUG) << "TlsInit hello response accepted " << tag("destination", username_)
+             << tag("route_known", route_hints_.is_known) << tag("route_ru", route_hints_.is_ru)
+             << tag("ech_mode", hello_ech_mode_name_) << tag("ech_enabled", hello_uses_ech_)
+             << tag("profile", hello_profile_name_) << tag("profile_allows_ech", hello_profile_allows_ech_)
+             << tag("ech_disabled_by_route", hello_ech_disabled_by_route_)
+             << tag("ech_disabled_by_circuit_breaker", hello_ech_disabled_by_circuit_breaker_)
+             << tag("ech_reenabled_after_ttl", hello_ech_reenabled_after_ttl_)
+             << tag("hello_unix_time", hello_unix_time_) << tag("response_bytes", response.size());
 
   if (!empty()) {
     stop();

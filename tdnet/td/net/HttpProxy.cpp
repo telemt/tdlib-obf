@@ -58,9 +58,10 @@ Status HttpProxy::wait_connect_response() {
     // explicit and lets the static analyser see the contract.
     it.advance(len, MutableSlice{buf, len});
     VLOG(proxy) << "Failed to connect: " << format::escaped(begin) << format::escaped(Slice(buf, len));
-    return make_proxy_setup_error(ProxySetupErrorCode::HttpConnectRejected, PSLICE() << "Failed to connect to "
-                                                                                     << ip_address_.get_ip_host() << ':'
-                                                                                     << ip_address_.get_port());
+    return make_proxy_setup_error(ProxySetupErrorCode::HttpConnectRejected,
+                                  PSLICE()
+                                      << "HTTP CONNECT to " << ip_address_.get_ip_host() << ':'
+                                      << ip_address_.get_port() << " was rejected or returned a malformed status line");
   }
 
   size_t total_size = 12;

@@ -11,12 +11,9 @@
 
 #include "td/net/TransparentProxy.h"
 
-#include "td/actor/actor.h"
-
 #include "td/utils/common.h"
 #include "td/utils/port/IPAddress.h"
 #include "td/utils/port/SocketFd.h"
-#include "td/utils/Slice.h"
 #include "td/utils/Status.h"
 
 namespace td {
@@ -53,10 +50,16 @@ class TlsInit final : public TransparentProxy {
   stealth::NetworkRouteHints route_hints_;
   int32 hello_unix_time_{0};
   bool hello_uses_ech_{false};
+  bool hello_profile_allows_ech_{false};
+  bool hello_ech_disabled_by_route_{false};
+  bool hello_ech_disabled_by_circuit_breaker_{false};
+  bool hello_ech_reenabled_after_ttl_{false};
   enum class State {
     SendHello,
     WaitHelloResponse,
   } state_ = State::SendHello;
+  std::string hello_ech_mode_name_{"disabled"};
+  std::string hello_profile_name_;
   std::string hello_rand_;
 
   void send_hello();

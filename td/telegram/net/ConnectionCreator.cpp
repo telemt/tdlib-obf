@@ -73,6 +73,45 @@ string make_lifecycle_destination(const IPAddress &ip_address, Slice debug_str) 
   return PSTRING() << ip_address << '|' << sanitize_lifecycle_label(debug_str);
 }
 
+Slice proxy_mode_name(const Proxy &proxy) {
+  if (!proxy.use_proxy()) {
+    return Slice("direct");
+  }
+  if (proxy.use_mtproto_proxy()) {
+    return Slice("mtproto");
+  }
+  if (proxy.use_socks5_proxy()) {
+    return Slice("socks5");
+  }
+  if (proxy.use_http_tcp_proxy()) {
+    return Slice("http_tcp");
+  }
+  if (proxy.use_http_caching_proxy()) {
+    return Slice("http_caching");
+  }
+  return Slice("unknown");
+}
+
+Slice raw_ip_transport_name(const mtproto::TransportType &transport_type) {
+  switch (transport_type.type) {
+    case mtproto::TransportType::Tcp:
+      return Slice("tcp");
+    case mtproto::TransportType::ObfuscatedTcp:
+      return Slice("obfuscated_tcp");
+    case mtproto::TransportType::Http:
+      return Slice("http");
+    default:
+      return Slice("unknown");
+  }
+}
+
+string mtproto_tunneled_ip_for_log(const IPAddress &ip_address) {
+  if (!ip_address.is_valid()) {
+    return "none";
+  }
+  return ip_address.get_ip_str().str();
+}
+
 Slice active_policy_name(mtproto::stealth::RuntimeActivePolicy policy) {
   switch (policy) {
     case mtproto::stealth::RuntimeActivePolicy::RuEgress:
@@ -810,6 +849,10 @@ void ConnectionCreator::request_raw_connection(
 
 Result<ConnectionCreator::RawIpConnectionRoute> ConnectionCreator::resolve_raw_ip_connection_route(
     const Proxy &proxy, const IPAddress &proxy_ip_address, const IPAddress &target_ip_address) {
+  if (!target_ip_address.is_valid()) {
+    return Status::Error("Target IP address is invalid");
+  }
+
   if (proxy.use_proxy() && !proxy_ip_address.is_valid()) {
     return Status::Error("Proxy IP address is invalid");
   }
@@ -872,10 +915,11 @@ bool ConnectionCreator::should_prefer_ipv6_for_dc_options([[maybe_unused]] const
 Result<ConnectionCreator::ProxyAddressCandidates> ConnectionCreator::resolve_proxy_address_candidates(
     const Proxy &proxy, const IPAddress &resolved_proxy_ip_address) {
   if (!proxy.use_proxy()) {
-    return Status::Error("Proxy is disabled");
+    return Status::Error("Proxy socket resolution requested while proxy mode is disabled");
   }
   if (!resolved_proxy_ip_address.is_valid()) {
-    return Status::Error("Proxy IP address is invalid");
+    return Status::Error(PSLICE() << "Proxy IP address is invalid for " << proxy_mode_name(proxy) << " proxy "
+                                  << proxy.server() << ':' << proxy.port());
   }
 
   ProxyAddressCandidates candidates;
@@ -926,12 +970,26 @@ Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_s
   }
 
   if (!candidates.fallback_ip_address.is_valid()) {
-    return r_socket.move_as_error();
+    auto primary_error = r_socket.move_as_error();
+    return Status::Error(primary_error.code(), PSLICE()
+                                                   << "Failed to connect to " << proxy_mode_name(proxy) << " proxy "
+                                                   << proxy.server() << ':' << proxy.port() << " via "
+                                                   << candidates.primary_ip_address << ": " << primary_error.message());
   }
 
   VLOG(connections) << "Retry proxy connect via alternate family " << candidates.fallback_ip_address << " after "
                     << r_socket.error();
-  return try_open(candidates.fallback_ip_address);
+  auto r_fallback_socket = try_open(candidates.fallback_ip_address);
+  if (r_fallback_socket.is_ok()) {
+    return r_fallback_socket;
+  }
+
+  auto fallback_error = r_fallback_socket.move_as_error();
+  return Status::Error(fallback_error.code(), PSLICE() << "Failed to connect to " << proxy_mode_name(proxy) << " proxy "
+                                                       << proxy.server() << ':' << proxy.port() << " using primary "
+                                                       << candidates.primary_ip_address << " and fallback "
+                                                       << candidates.fallback_ip_address << ": "
+                                                       << fallback_error.message());
 }
 
 Status ConnectionCreator::verify_connection_peer(const Proxy &proxy, const IPAddress &expected_peer_address,
@@ -961,6 +1019,13 @@ void ConnectionCreator::request_raw_connection_by_ip(IPAddress ip_address, mtpro
   Proxy proxy = active_proxy_id_ == 0 ? Proxy() : proxies_[active_proxy_id_];
   TRY_RESULT_PROMISE(promise, route, resolve_raw_ip_connection_route(proxy, proxy_ip_address_, ip_address));
   TRY_RESULT_PROMISE(promise, effective_transport_type, resolve_raw_ip_transport_type(proxy, transport_type));
+
+  VLOG(connections) << "Resolved raw-IP route " << tag("proxy_mode", proxy_mode_name(proxy))
+                    << tag("socket_ip", route.socket_ip_address) << tag("target_ip", ip_address)
+                    << tag("tunneled_mtproto_ip", mtproto_tunneled_ip_for_log(route.mtproto_ip_address))
+                    << tag("transport", raw_ip_transport_name(effective_transport_type))
+                    << tag("transport_dc_id", effective_transport_type.dc_id)
+                    << tag("tls_emulation", effective_transport_type.secret.emulate_tls());
 
   SocketFd socket_fd;
   if (proxy.use_proxy()) {
@@ -1443,13 +1508,21 @@ void ConnectionCreator::client_add_connection(uint32 hash, Result<unique_ptr<mtp
     client.ready_connections.emplace_back(r_raw_connection.move_as_ok(), Time::now_cached());
   } else {
     auto proxy = active_proxy_id_ == 0 ? Proxy() : proxies_[active_proxy_id_];
+    const auto &failure_status = r_raw_connection.error();
     client.last_failure_classification =
-        classify_connection_failure(online_flag_ || is_logging_out_, proxy, r_raw_connection.error());
+        classify_connection_failure(online_flag_ || is_logging_out_, proxy, failure_status);
+    auto action_hint = connection_failure_action_hint(client.last_failure_classification.stage,
+                                                      client.last_failure_classification.reason);
     VLOG(connections) << "Classified connection failure " << tag("client", format::as_hex(hash))
                       << tag("deterministic", client.last_failure_classification.deterministic)
                       << tag("stage", static_cast<int32>(client.last_failure_classification.stage))
-                      << tag("reason", static_cast<int32>(client.last_failure_classification.reason)) << ' '
-                      << r_raw_connection.error();
+                      << tag("stage_name", proxy_failure_stage_name(client.last_failure_classification.stage))
+                      << tag("reason", static_cast<int32>(client.last_failure_classification.reason))
+                      << tag("reason_name", proxy_failure_reason_name(client.last_failure_classification.reason))
+                      << tag("status_code", failure_status.code())
+                      << tag("status_message", failure_status.public_message()) << tag("action_hint", action_hint)
+                      << ' '
+                      << summarize_connection_failure_for_log(client.last_failure_classification, failure_status);
     if (r_raw_connection.error().code() == -404 && client.auth_data &&
         client.auth_data_generation == auth_data_generation) {
       VLOG(connections) << "Drop auth data from " << tag("client", format::as_hex(hash));

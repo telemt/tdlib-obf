@@ -10,6 +10,12 @@
 
 namespace {
 
+td::IPAddress ipv4_address(td::CSlice ip, td::int32 port) {
+  td::IPAddress result;
+  result.init_ipv4_port(ip, port).ensure();
+  return result;
+}
+
 td::IPAddress ipv6_address(td::CSlice ip, td::int32 port) {
   td::IPAddress result;
   result.init_ipv6_port(ip, port).ensure();
@@ -30,12 +36,21 @@ TEST(ConnectionCreatorProxyDualStackAdversarial, InvalidResolvedProxyAddressFail
   auto candidates = td::ConnectionCreator::resolve_proxy_address_candidates(
       td::Proxy::socks5("localhost", 1080, "user", "password"), td::IPAddress());
   ASSERT_TRUE(candidates.is_error());
+  ASSERT_TRUE(candidates.error().message().str().find("invalid for socks5 proxy localhost:1080") != td::string::npos);
 }
 
 TEST(ConnectionCreatorProxyDualStackAdversarial, OpenProxySocketFailsClosedWithoutFallbackCandidate) {
-  auto socket = td::ConnectionCreator::open_proxy_socket(
-      td::Proxy::socks5("127.0.0.1", 1, "user", "password"), td::IPAddress());
+  auto socket =
+      td::ConnectionCreator::open_proxy_socket(td::Proxy::socks5("127.0.0.1", 1, "user", "password"), td::IPAddress());
   ASSERT_TRUE(socket.is_error());
+  ASSERT_TRUE(socket.error().message().str().find("invalid for socks5 proxy 127.0.0.1:1") != td::string::npos);
+}
+
+TEST(ConnectionCreatorProxyDualStackAdversarial, ResolvingProxyCandidatesWithoutProxyModeFailsWithActionableMessage) {
+  auto candidates =
+      td::ConnectionCreator::resolve_proxy_address_candidates(td::Proxy(), ipv4_address("127.0.0.1", 443));
+  ASSERT_TRUE(candidates.is_error());
+  ASSERT_TRUE(candidates.error().message().str().find("proxy mode is disabled") != td::string::npos);
 }
 
 }  // namespace

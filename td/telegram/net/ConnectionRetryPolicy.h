@@ -66,6 +66,12 @@ class ConnectionFailureBackoff final {
 ConnectionFailureClassification classify_connection_failure(bool act_as_if_online, const Proxy &proxy,
                                                             const Status &status);
 
+const char *proxy_failure_stage_name(ProxyFailureStage stage) noexcept;
+const char *proxy_failure_reason_name(ProxyFailureReason reason) noexcept;
+const char *connection_failure_action_hint(ProxyFailureStage stage, ProxyFailureReason reason) noexcept;
+string summarize_connection_failure_for_log(const ConnectionFailureClassification &classification,
+                                            const Status &status);
+
 bool should_apply_connection_failure_backoff(bool act_as_if_online, const Proxy &proxy);
 
 }  // namespace td

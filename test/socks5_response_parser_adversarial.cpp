@@ -87,6 +87,8 @@ TEST(Socks5ResponseParserAdversarial, rejects_invalid_protocol_fields_fail_close
   ASSERT_TRUE(invalid_version_result.is_error());
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksInvalidResponse),
             invalid_version_result.error().code());
+  ASSERT_TRUE(invalid_version_result.error().message().str().find("SOCKS5 connect response version") !=
+              td::string::npos);
 
   auto invalid_reserved = make_ipv4_connect_response();
   invalid_reserved[2] = '\x01';
@@ -94,12 +96,16 @@ TEST(Socks5ResponseParserAdversarial, rejects_invalid_protocol_fields_fail_close
   ASSERT_TRUE(invalid_reserved_result.is_error());
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksInvalidResponse),
             invalid_reserved_result.error().code());
+  ASSERT_TRUE(invalid_reserved_result.error().message().str().find("SOCKS5 connect response reserved") !=
+              td::string::npos);
 
   auto invalid_atyp = make_ipv4_connect_response();
   invalid_atyp[3] = '\x03';
   auto invalid_atyp_result = td::Socks5::parse_connect_response_packet_size(invalid_atyp);
   ASSERT_TRUE(invalid_atyp_result.is_error());
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksInvalidResponse), invalid_atyp_result.error().code());
+  ASSERT_TRUE(invalid_atyp_result.error().message().str().find("SOCKS5 connect response address type") !=
+              td::string::npos);
 }
 
 TEST(Socks5ResponseParserAdversarial, rejects_connect_rejected_status_with_proxy_error) {
@@ -107,4 +113,5 @@ TEST(Socks5ResponseParserAdversarial, rejects_connect_rejected_status_with_proxy
   auto result = td::Socks5::parse_connect_response_packet_size(rejected);
   ASSERT_TRUE(result.is_error());
   ASSERT_EQ(static_cast<td::int32>(td::ProxySetupErrorCode::SocksConnectRejected), result.error().code());
+  ASSERT_TRUE(result.error().message().str().find("SOCKS5 connect reply code=5") != td::string::npos);
 }

@@ -38,16 +38,20 @@ unique_ptr<IStreamTransport> create_transport(TransportType type) {
         auto rng = stealth::make_connection_rng();
         auto config = stealth::make_transport_stealth_config(secret_copy, *rng);
         if (config.is_error()) {
-          LOG(WARNING) << "Disable stealth shaping because runtime config is invalid: " << config.move_as_error();
+          auto error = config.move_as_error();
+          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport: reason=config_validation_failed dc_id="
+                       << type.dc_id << " error=" << error;
           return inner;
         }
         auto decorator = stealth::StealthTransportDecorator::create(std::move(inner), config.move_as_ok(),
                                                                     std::move(rng), stealth::make_clock());
         if (decorator.is_error()) {
-          LOG(WARNING) << "Disable stealth shaping because decorator construction failed: "
-                       << decorator.move_as_error();
+          auto error = decorator.move_as_error();
+          LOG(WARNING) << "Stealth shaping disabled for emulate_tls transport: reason=decorator_init_failed dc_id="
+                       << type.dc_id << " error=" << error;
           return td::make_unique<tcp::ObfuscatedTransport>(type.dc_id, std::move(secret_copy));
         }
+        LOG(INFO) << "Stealth shaping enabled for emulate_tls transport: dc_id=" << type.dc_id;
         return decorator.move_as_ok();
       }
 #else

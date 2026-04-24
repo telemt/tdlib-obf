@@ -145,7 +145,11 @@ class Proxy {
     } else if (type_ == Proxy::Type::Mtproto) {
       parse(server_, parser);
       parse(port_, parser);
-      secret_ = mtproto::ProxySecret::from_link(parser.template fetch_string<Slice>(), true).move_as_ok();
+      auto r_secret = mtproto::ProxySecret::from_link(parser.template fetch_string<Slice>(), true);
+      if (r_secret.is_error()) {
+        return parser.set_error("Invalid proxy secret");
+      }
+      secret_ = r_secret.move_as_ok();
     } else {
       CHECK(type_ == Proxy::Type::None);
     }

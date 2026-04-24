@@ -24,6 +24,7 @@ td::Proxy tls_proxy() {
 TEST(ProxyRejectionRetryHarnessIntegration, MalformedTlsScenarioProducesTypedDeterministicReject) {
   auto status = td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::MalformedTlsResponse);
   ASSERT_TRUE(status.is_error());
+  ASSERT_TRUE(status.message().str().find("TLS hello response malformed") != td::string::npos);
 
   auto classification = td::classify_connection_failure(true, tls_proxy(), status);
 
@@ -38,6 +39,7 @@ TEST(ProxyRejectionRetryHarnessIntegration,
   auto status =
       td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::TlsFatalUnrecognizedNameAlert);
   ASSERT_TRUE(status.is_error());
+  ASSERT_TRUE(status.message().str().find("TLS hello response malformed") != td::string::npos);
 
   auto classification = td::classify_connection_failure(true, tls_proxy(), status);
 
@@ -51,6 +53,7 @@ TEST(ProxyRejectionRetryHarnessIntegration,
 TEST(ProxyRejectionRetryHarnessIntegration, WrongRegimeScenarioProducesTypedDeterministicReject) {
   auto status = td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::WrongRegimeHttpResponse);
   ASSERT_TRUE(status.is_error());
+  ASSERT_TRUE(status.message().str().find("different protocol regime") != td::string::npos);
 
   auto classification = td::classify_connection_failure(true, tls_proxy(), status);
 
@@ -74,6 +77,7 @@ TEST(ProxyRejectionRetryHarnessIntegration, ImmediateCloseScenarioProducesTypedD
 TEST(ProxyRejectionRetryHarnessIntegration, WrongRegimeSocksScenarioProducesTypedDeterministicReject) {
   auto status = td::test::run_tls_proxy_rejection_scenario(td::test::ProxyRejectScenario::WrongRegimeSocksResponse);
   ASSERT_TRUE(status.is_error());
+  ASSERT_TRUE(status.message().str().find("different protocol regime") != td::string::npos);
 
   auto classification = td::classify_connection_failure(true, tls_proxy(), status);
 
