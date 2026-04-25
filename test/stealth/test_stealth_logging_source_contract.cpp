@@ -355,7 +355,7 @@ TEST(StealthLoggingSourceContract, ConnectionCreatorClientLoopSocketDiagnosticsA
   ASSERT_TRUE(normalized.find("LOG(ERROR)<<debug_ip_status") == td::string::npos);
 }
 
-TEST(StealthLoggingSourceContract, ConnectionCreatorProxySocketOpenErrorsUsePublicStatusMessages) {
+TEST(StealthLoggingSourceContract, ConnectionCreatorProxySocketOpenErrorsUseSanitizedRetryStatusTags) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/ConnectionCreator.cpp");
   auto region = extract_source_region(
       source, "Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_socket(",
@@ -365,7 +365,11 @@ TEST(StealthLoggingSourceContract, ConnectionCreatorProxySocketOpenErrorsUsePubl
   ASSERT_TRUE(normalized.find("primary_error.public_message()") != td::string::npos);
   ASSERT_TRUE(normalized.find("fallback_error.public_message()") != td::string::npos);
   ASSERT_TRUE(normalized.find("tag(\"status_code\",primary_error_for_retry.code())") != td::string::npos);
-  ASSERT_TRUE(normalized.find("tag(\"status_message\",primary_error_for_retry.public_message())") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find(
+          "tag(\"status_message\",sanitize_connection_failure_status_message_for_log(primary_error_for_retry))") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find("tag(\"status_message\",primary_error_for_retry.public_message())") == td::string::npos);
   ASSERT_TRUE(normalized.find("primary_error.message()") == td::string::npos);
   ASSERT_TRUE(normalized.find("fallback_error.message()") == td::string::npos);
   ASSERT_TRUE(normalized.find("<<r_socket.error()") == td::string::npos);

@@ -18,7 +18,9 @@
 namespace {
 
 td::string load_repo_text(td::Slice relative_path) {
-  const auto path = td::string(TELEMT_TEST_REPO_ROOT) + "/" + relative_path.str();
+  auto path = td::string(TELEMT_TEST_REPO_ROOT);
+  path += '/';
+  path += relative_path.str();
   std::ifstream in(path, std::ios::binary);
   CHECK(in.is_open());
   return td::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());

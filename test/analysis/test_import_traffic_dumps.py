@@ -6,8 +6,9 @@
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
-from import_traffic_dumps import CapturePlan, derive_capture_plan, move_capture
+from import_traffic_dumps import CapturePlan, derive_capture_plan, extract_serverhello, move_capture
 
 
 class ImportTrafficDumpsTest(unittest.TestCase):
@@ -123,6 +124,23 @@ class ImportTrafficDumpsTest(unittest.TestCase):
         self.assertNotEqual(original.profile_id, disambiguated.profile_id)
         self.assertEqual(original.browser_alias, disambiguated.browser_alias)
         self.assertEqual(original.platform_key, disambiguated.platform_key)
+
+    def test_extract_serverhello_forwards_client_profile_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = pathlib.Path(temp_dir)
+            capture_path = base_dir / "capture.pcapng"
+            capture_path.write_bytes(b"pcap")
+            plan = self.make_plan(capture_path, base_dir / "captures" / "capture.pcapng")
+
+            with mock.patch("import_traffic_dumps.run_command", return_value=(True, "ok")) as run_command:
+                ok, message = extract_serverhello(plan, capture_path, "non_ru_egress", dry_run=False)
+
+            self.assertTrue(ok)
+            self.assertEqual("ok", message)
+            argv = run_command.call_args.args[0]
+            self.assertIn("--client-profile-id", argv)
+            profile_index = argv.index("--client-profile-id") + 1
+            self.assertEqual(plan.profile_id, argv[profile_index])
 
 
 if __name__ == "__main__":

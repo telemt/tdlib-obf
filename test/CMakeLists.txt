@@ -75,6 +75,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_diagnostics_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_log_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_generation_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_fragmentation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_record_order_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_leftover_integration.cpp
@@ -85,6 +86,9 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_coverage_gaps.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_ech_wire_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_darwin_ech_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_darwin_profile_hardcoding_bug.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_imported_corpus_runtime_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry_provenance.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_platform_coherence.cpp
@@ -104,6 +108,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_route_integrity_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_proxy_route_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_ping_main_dc_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_tls_init_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_logging_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tdnet_logging_source_contract.cpp
@@ -185,12 +190,14 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_params.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_params_platform_fail_closed.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_active_policy.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_transition_timing_fingerprint_stability_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_sticky_rotation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_safety.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_case_alias_fixture_blackbox.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_selection_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_release_profile_gating_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_proxy_alpn_semantics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_plan.cpp
@@ -204,6 +211,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_overdue_shaping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_flush_order.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_error_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_quick_ack_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_crypto_padding_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_shaping_wakeup_seam.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_raw_connection_hints.cpp
@@ -235,6 +243,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_backoff_overflow_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_fallback_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_log_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_log_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_retry_failure_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp
@@ -486,6 +496,10 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_concurrency_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_serialization_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_anchor_overflow_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_cb_success_reset_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_ech_downstream_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_profile_sticky_rotation_reload_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_tls_init_profile_temporal_divergence.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_proxy_alpn_all_profiles_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ech_cb_temporal_adversarial.cpp

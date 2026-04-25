@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T14:38:55Z",
+  "generated_at_utc": "2026-04-25T16:19:45Z",
   "os_family": "android",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "chrome146_0_7680_177_android14_ada4e248",
@@ -282,7 +282,11 @@
         "0x0018"
       ],
       "random_sha256": "19c30ffd9a6ec8b1386df1c607f7262d40db9b307e7238cbce84aac27826fe85",
+      "record_count": 1,
       "record_length": 1978,
+      "record_lengths": [
+        1978
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -551,7 +555,11 @@
         "0x0018"
       ],
       "random_sha256": "578537df8eddb846e8ac5a8db2b582e779e6b50e3693f67a20b5dbd22465c37f",
+      "record_count": 1,
       "record_length": 1814,
+      "record_lengths": [
+        1814
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -839,7 +847,11 @@
         "0x0018"
       ],
       "random_sha256": "df541e3af913a9869fc617d28e6cb039109c4ec66a32399ad3ecd1a2090718f1",
+      "record_count": 1,
       "record_length": 1914,
+      "record_lengths": [
+        1914
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1117,7 +1129,11 @@
         "0x0018"
       ],
       "random_sha256": "82116736218771a8f64e38c52816f5aaf54f71f74eece72293ef766d3ef6b0c6",
+      "record_count": 1,
       "record_length": 1934,
+      "record_lengths": [
+        1934
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,

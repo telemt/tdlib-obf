@@ -77,4 +77,32 @@ TEST(ConnectionRetryPolicyLogContract, FailureSummaryRedactsOversizedStatusMessa
   ASSERT_TRUE(summary.find("status_message=status_message_redacted") != td::string::npos);
 }
 
+TEST(ConnectionRetryPolicyLogContract, FailureSummaryRedactsDeleteControlCharacterPayloads) {
+  td::string payload = "ok";
+  payload.push_back(static_cast<char>(0x7f));
+  payload += "tail";
+
+  auto status = td::Status::Error(payload);
+  auto classification = td::classify_connection_failure(
+      true, td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), status);
+
+  auto summary = td::summarize_connection_failure_for_log(classification, status);
+  ASSERT_TRUE(summary.find("status_message=status_message_redacted") != td::string::npos);
+  ASSERT_TRUE(summary.find("tail") == td::string::npos);
+}
+
+TEST(ConnectionRetryPolicyLogContract, FailureSummaryRedactsNonAsciiStatusPayloads) {
+  td::string payload = "prefix-";
+  payload.push_back(static_cast<char>(0xc3));
+  payload.push_back(static_cast<char>(0xa9));
+  payload += "-suffix";
+
+  auto status = td::Status::Error(payload);
+  auto classification = td::classify_connection_failure(
+      true, td::Proxy::mtproto("proxy.example", 443, td::mtproto::ProxySecret::from_raw("0123456789abcdef")), status);
+
+  auto summary = td::summarize_connection_failure_for_log(classification, status);
+  ASSERT_TRUE(summary.find("status_message=status_message_redacted") != td::string::npos);
+  ASSERT_TRUE(summary.find("suffix") == td::string::npos);
+}
 }  // namespace

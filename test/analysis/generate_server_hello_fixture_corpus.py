@@ -17,6 +17,17 @@ def load_json(path: pathlib.Path) -> dict:
 
 
 def authoritative_family_for_artifact(artifact: dict, registry: dict) -> str:
+    explicit_family = str(artifact.get("fixture_family_id", "")).strip()
+    if explicit_family:
+        return explicit_family
+    samples = artifact.get("samples")
+    if isinstance(samples, list):
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+            sample_family = str(sample.get("fixture_family_id", "")).strip()
+            if sample_family:
+                return sample_family
     fixture_id = str(artifact["samples"][0].get("fixture_id", ""))
     fixture = registry.get("fixtures", {}).get(fixture_id)
     if not isinstance(fixture, dict):

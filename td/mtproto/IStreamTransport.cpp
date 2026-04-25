@@ -35,7 +35,7 @@ string sanitize_stealth_activation_status_message(const Status &status, const Pr
 
   for (auto c : message) {
     auto byte = static_cast<unsigned char>(c);
-    if (byte < 0x20) {
+    if (byte < 0x20 || byte == 0x7f || byte > 0x7e) {
       return fallback_message.str();
     }
   }

@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T14:39:06Z",
+  "generated_at_utc": "2026-04-25T16:19:59Z",
   "os_family": "android",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "firefox_android16_build_bp2a_250605_015_3156bb61",
@@ -267,7 +267,11 @@
         "0x0101"
       ],
       "random_sha256": "477d80b74b67c85b6281205dbe01f0d3f4b23d7cb52017da369e36a28ae75f36",
+      "record_count": 1,
       "record_length": 2209,
+      "record_lengths": [
+        2209
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -542,7 +546,11 @@
         "0x0101"
       ],
       "random_sha256": "04eb96f1fba34bfc2dbdefa180cfaf108c1df4e05bbf43365c2bf2f7bd8e324b",
+      "record_count": 1,
       "record_length": 2209,
+      "record_lengths": [
+        2209
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -817,7 +825,11 @@
         "0x0101"
       ],
       "random_sha256": "b58f24915b7f11a85156102fc922707d14451ae2e109534ad71657b1c2ada77b",
+      "record_count": 1,
       "record_length": 2209,
+      "record_lengths": [
+        2209
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1092,7 +1104,11 @@
         "0x0101"
       ],
       "random_sha256": "4cd3fa3b9eecf166b0268eee7c7990654d13ff7a89b369a1416eec20a88bda8a",
+      "record_count": 1,
       "record_length": 2209,
+      "record_lengths": [
+        2209
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1367,7 +1383,11 @@
         "0x0101"
       ],
       "random_sha256": "7eb227dbab1bb1fbcb0813c60bf057d0c85ecf7a555d9a9d776a140eb9399974",
+      "record_count": 1,
       "record_length": 2209,
+      "record_lengths": [
+        2209
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,

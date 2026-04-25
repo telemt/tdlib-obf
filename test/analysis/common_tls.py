@@ -189,6 +189,85 @@ def _validate_sha256_hex(field_name: str, value: str) -> None:
         raise ValueError(f"{field_name} must be a 64-character lowercase hex digest")
 
 
+def _parse_bounded_positive_int(field_name: str, value: Any, *, max_value: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be int") from exc
+    if parsed <= 0:
+        raise ValueError(f"{field_name} must be positive")
+    if max_value is not None and parsed > max_value:
+        raise ValueError(f"{field_name} must be <= {max_value}")
+    return parsed
+
+
+def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_index: int) -> None:
+    raw_record_lengths = sample.get("record_lengths")
+    raw_record_count = sample.get("record_count")
+    raw_record_length = sample.get("record_length")
+    has_record_metadata = any(
+        field in sample for field in ("record_lengths", "record_count", "record_length")
+    )
+    if not has_record_metadata:
+        return
+
+    if raw_record_lengths is None:
+        raise ValueError(f"sample[{sample_index}].record_lengths must be present when record metadata is provided")
+    if not isinstance(raw_record_lengths, list) or not raw_record_lengths:
+        raise ValueError(f"sample[{sample_index}].record_lengths must be a non-empty list")
+
+    record_lengths = [
+        _parse_bounded_positive_int(
+            f"sample[{sample_index}].record_lengths[{index}]",
+            value,
+            max_value=65535,
+        )
+        for index, value in enumerate(raw_record_lengths)
+    ]
+
+    if raw_record_count is not None:
+        record_count = _parse_bounded_positive_int(f"sample[{sample_index}].record_count", raw_record_count)
+        if record_count != len(record_lengths):
+            raise ValueError(f"sample[{sample_index}].record_count must match record_lengths length")
+
+    if raw_record_length is not None:
+        record_length = _parse_bounded_positive_int(
+            f"sample[{sample_index}].record_length",
+            raw_record_length,
+            max_value=65535 * len(record_lengths),
+        )
+        if record_length != sum(record_lengths):
+            raise ValueError(f"sample[{sample_index}].record_length must equal the sum of record_lengths")
+
+
+def _parse_server_endpoint(field_name: str, value: Any) -> ServerEndpoint:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be an object")
+    ip = str(value.get("ip", "")).strip()
+    if not ip:
+        raise ValueError(f"{field_name}.ip must be non-empty")
+    port = _parse_bounded_positive_int(f"{field_name}.port", value.get("port", 0), max_value=65535)
+    return ServerEndpoint(ip=ip, port=port)
+
+
+def _parse_observed_server_endpoints(artifact: dict[str, Any]) -> set[tuple[str, int]] | None:
+    if "observed_server_endpoints" not in artifact:
+        return None
+
+    raw_endpoints = artifact.get("observed_server_endpoints")
+    if not isinstance(raw_endpoints, list) or not raw_endpoints:
+        raise ValueError("observed_server_endpoints must be a non-empty list when present")
+
+    parsed_endpoints: set[tuple[str, int]] = set()
+    for index, raw_endpoint in enumerate(raw_endpoints):
+        endpoint = _parse_server_endpoint(f"observed_server_endpoints[{index}]", raw_endpoint)
+        key = (endpoint.ip, endpoint.port)
+        if key in parsed_endpoints:
+            raise ValueError("observed_server_endpoints must not contain duplicates")
+        parsed_endpoints.add(key)
+    return parsed_endpoints
+
+
 def _require_string_field(artifact: dict[str, Any], field_name: str) -> str:
     value = str(artifact.get(field_name, "")).strip()
     if not value:
@@ -241,9 +320,10 @@ def load_clienthello_artifact(path: str | pathlib.Path) -> list[ClientHello]:
 
     samples: list[ClientHello] = []
     seen_fixture_ids: set[str] = set()
-    for sample in raw_samples:
+    for sample_index, sample in enumerate(raw_samples):
         if not isinstance(sample, dict):
             raise ValueError("sample entry must be an object")
+        _validate_clienthello_record_metadata(sample, sample_index=sample_index)
         ech = sample.get("ech") or {}
         fixture_id = str(sample.get("fixture_id", "")).strip()
         if not fixture_id:
@@ -303,9 +383,12 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
     transport = _require_string_field(artifact, "transport")
     source_kind = _require_string_field(artifact, "source_kind")
     capture_provenance = artifact.get("capture_provenance")
-    client_profile_id = ""
-    if isinstance(capture_provenance, dict):
-        client_profile_id = str(capture_provenance.get("client_profile_id", "")).strip()
+    if not isinstance(capture_provenance, dict):
+        raise ValueError("artifact must contain capture_provenance")
+    client_profile_id = str(capture_provenance.get("client_profile_id", "")).strip()
+    if not client_profile_id:
+        raise ValueError("capture_provenance.client_profile_id must be non-empty")
+    observed_server_endpoints = _parse_observed_server_endpoints(artifact)
 
     raw_samples = artifact.get("samples")
     if not isinstance(raw_samples, list):
@@ -315,19 +398,17 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
 
     samples: list[ServerHello] = []
     seen_fixture_ids: set[str] = set()
-    for sample in raw_samples:
+    seen_sample_endpoints: set[tuple[str, int]] = set()
+    for sample_index, sample in enumerate(raw_samples):
         if not isinstance(sample, dict):
             raise ValueError("sample entry must be an object")
         fixture_id = str(sample.get("fixture_id", "")).strip()
         fixture_family_id = str(sample.get("fixture_family_id", sample.get("family", artifact.get("family", ""))))
         raw_endpoint = sample.get("server_endpoint")
         server_endpoint: ServerEndpoint | None = None
-        if isinstance(raw_endpoint, dict):
-            endpoint_ip = str(raw_endpoint.get("ip", "")).strip()
-            endpoint_port_raw = raw_endpoint.get("port", 0)
-            endpoint_port = int(endpoint_port_raw)
-            if endpoint_ip and endpoint_port > 0:
-                server_endpoint = ServerEndpoint(ip=endpoint_ip, port=endpoint_port)
+        if raw_endpoint is not None:
+            server_endpoint = _parse_server_endpoint(f"samples[{sample_index}].server_endpoint", raw_endpoint)
+            seen_sample_endpoints.add((server_endpoint.ip, server_endpoint.port))
         if not fixture_id:
             raise ValueError("server hello sample must contain fixture_id")
         if fixture_id in seen_fixture_ids:
@@ -360,6 +441,8 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
                 server_endpoint=server_endpoint,
             )
         )
+    if observed_server_endpoints is not None and seen_sample_endpoints != observed_server_endpoints:
+        raise ValueError("observed_server_endpoints must exactly match the set of sample.server_endpoint values")
     return samples
 
 

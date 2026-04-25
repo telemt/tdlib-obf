@@ -551,7 +551,7 @@ void ConnectionCreator::ping_proxy(td_api::object_ptr<td_api::proxy> input_proxy
         auto error = r_transport_type.move_as_error();
         LOG(ERROR) << "Ping main DC transport resolution failed" << tag("dc_id", main_dc_id)
                    << tag("target_ip", info.option->get_ip_address()) << tag("status_code", error.code())
-                   << tag("status_message", error.public_message());
+                   << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
         on_ping_main_dc_result(token, std::move(error));
         continue;
       }
@@ -561,7 +561,8 @@ void ConnectionCreator::ping_proxy(td_api::object_ptr<td_api::proxy> input_proxy
       if (r_socket_fd.is_error()) {
         auto error = r_socket_fd.move_as_error();
         LOG(WARNING) << "Ping main DC socket open failed" << tag("dc_id", main_dc_id) << tag("target_ip", ip_address)
-                     << tag("status_code", error.code()) << tag("status_message", error.public_message());
+                     << tag("status_code", error.code())
+                     << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
         on_ping_main_dc_result(token, std::move(error));
         continue;
       }
@@ -991,7 +992,8 @@ Result<ConnectionCreator::ProxySocketOpenResult> ConnectionCreator::open_proxy_s
   const auto &primary_error_for_retry = r_socket.error();
   VLOG(connections) << "Retry proxy connect via alternate family " << candidates.fallback_ip_address
                     << tag("status_code", primary_error_for_retry.code())
-                    << tag("status_message", primary_error_for_retry.public_message());
+                    << tag("status_message",
+                           sanitize_connection_failure_status_message_for_log(primary_error_for_retry));
   auto r_fallback_socket = try_open(candidates.fallback_ip_address);
   if (r_fallback_socket.is_ok()) {
     return r_fallback_socket;
@@ -1362,7 +1364,7 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
       auto error = r_socket_fd.move_as_error();
       LOG(WARNING) << "Client loop socket open failed" << tag("dc_id", client.dc_id)
                    << tag("connection_context", extra.debug_str) << tag("status_code", error.code())
-                   << tag("status_message", error.public_message());
+                   << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
       if (extra.stat) {
         extra.stat->on_error();  // TODO: different kind of error
       }
@@ -1384,7 +1386,7 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
     } else {
       LOG(ERROR) << "Client loop local endpoint introspection failed" << tag("dc_id", client.dc_id)
                  << tag("connection_context", extra.debug_str) << tag("status_code", debug_ip_status.code())
-                 << tag("status_message", debug_ip_status.public_message());
+                 << tag("status_message", sanitize_connection_failure_status_message_for_log(debug_ip_status));
     }
 #endif
 
@@ -1538,8 +1540,8 @@ void ConnectionCreator::client_add_connection(uint32 hash, Result<unique_ptr<mtp
                       << tag("reason", static_cast<int32>(client.last_failure_classification.reason))
                       << tag("reason_name", proxy_failure_reason_name(client.last_failure_classification.reason))
                       << tag("status_code", failure_status.code())
-                      << tag("status_message", failure_status.public_message()) << tag("action_hint", action_hint)
-                      << ' '
+                      << tag("status_message", sanitize_connection_failure_status_message_for_log(failure_status))
+                      << tag("action_hint", action_hint) << ' '
                       << summarize_connection_failure_for_log(client.last_failure_classification, failure_status);
     if (r_raw_connection.error().code() == -404 && client.auth_data &&
         client.auth_data_generation == auth_data_generation) {

@@ -22,14 +22,11 @@
 // parser contract tests have a deterministic, repo-local input that
 // tracks the reviewed ground truth.
 
-#include "test/stealth/TlsHelloParsers.h"
-
-#include "td/utils/JsonBuilder.h"
-#include "td/utils/Slice.h"
-#include "td/utils/Status.h"
 #include "td/utils/common.h"
 #include "td/utils/filesystem.h"
+#include "td/utils/JsonBuilder.h"
 #include "td/utils/misc.h"
+#include "td/utils/Status.h"
 
 #ifndef TELEMT_TEST_REPO_ROOT
 #define TELEMT_TEST_REPO_ROOT ""
@@ -48,7 +45,9 @@ struct ServerHelloFixtureSample final {
 };
 
 inline string server_hello_fixture_root() {
-  return string(TELEMT_TEST_REPO_ROOT) + "/test/analysis/fixtures/serverhello";
+  auto path = string(TELEMT_TEST_REPO_ROOT);
+  path += "/test/analysis/fixtures/serverhello";
+  return path;
 }
 
 inline uint16 parse_hex_u16(Slice hex) {
@@ -197,8 +196,8 @@ inline string synthesize_server_hello_wire(const ServerHelloFixtureSample &sampl
 
   // Record header
   string wire;
-  append_u8(wire, 0x16);        // record_type = handshake
-  append_u16(wire, 0x0303);     // record_legacy_version
+  append_u8(wire, 0x16);     // record_type = handshake
+  append_u16(wire, 0x0303);  // record_legacy_version
   append_u16(wire, static_cast<uint16>(handshake.size()));
   wire.append(handshake);
 
@@ -238,7 +237,9 @@ inline Slice representative_server_hello_path_for_family(Slice family_hint) {
 // Loads a fixture given a path relative to the serverhello root
 // (e.g. "android/chrome143_0_7499_192_android15_1_2_bf770816.serverhello.json").
 inline Result<ServerHelloFixtureSample> load_server_hello_fixture_relative(CSlice relative_path) {
-  string full = server_hello_fixture_root() + "/" + relative_path.str();
+  string full = server_hello_fixture_root();
+  full += '/';
+  full += relative_path.str();
   return load_server_hello_fixture(full);
 }
 

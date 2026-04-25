@@ -133,6 +133,10 @@ struct RuntimeEchCounters final {
   uint64 reenabled_total{0};
 };
 
+struct RuntimeProfileSelectionCounters final {
+  uint64 advisory_blocked_total{0};
+};
+
 RuntimePlatformHints default_runtime_platform_hints() noexcept;
 SelectionKey make_profile_selection_key(Slice destination, int32 unix_time);
 void set_runtime_ech_failure_store(std::shared_ptr<KeyValueSyncInterface> store);
@@ -142,6 +146,8 @@ void note_runtime_ech_success(Slice destination, int32 unix_time);
 void reset_runtime_ech_failure_state_for_tests();
 RuntimeEchCounters get_runtime_ech_counters() noexcept;
 void reset_runtime_ech_counters_for_tests() noexcept;
+RuntimeProfileSelectionCounters get_runtime_profile_selection_counters() noexcept;
+void reset_runtime_profile_selection_counters_for_tests() noexcept;
 Span<BrowserProfile> all_profiles();
 Span<BrowserProfile> allowed_profiles_for_platform(const RuntimePlatformHints &platform);
 const ProfileSpec &profile_spec(BrowserProfile profile);

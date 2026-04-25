@@ -1,0 +1,28 @@
+{
+  "evidence_scope": {
+    "first_flight_record_lengths_available": true,
+    "first_flight_samples_observed": 540,
+    "fixtures_with_first_flight": 99,
+    "syn_phase_transport_available": false
+  },
+  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "method": "Observed first-flight record-length extraction from imported ClientHello fixtures; unavailable SYN-phase metrics are fail-closed to 0.0",
+  "metrics": {
+    "first_flight_segmentation_signature_match_rate": 1.0,
+    "mss_window_scale_bucket_match_rate": 0.0,
+    "syn_option_order_class_match_rate": 0.0,
+    "ttl_bucket_match_rate": 0.0
+  },
+  "notes": "Fail-closed extraction: imported fixtures do not carry SYN/TTL/MSS/window-scale evidence, so only first-flight record-length segmentation is scored from observed fixture samples.",
+  "power_policy": {
+    "tier2_min_samples": 3,
+    "tier3_min_samples": 15
+  },
+  "sample_count": 99,
+  "schema_version": 1,
+  "source": "test/analysis/fixtures/imported/import_manifest.json",
+  "thresholds": {
+    "tier2_min_match_rate": 0.85,
+    "tier3_min_match_rate": 0.95
+  }
+}

@@ -458,6 +458,8 @@ def extract_serverhello(plan: CapturePlan, capture_path: pathlib.Path, route_mod
         plan.profile_id,
         "--out",
         str(serverhello_out),
+        "--client-profile-id",
+        plan.profile_id,
         "--source-kind",
         "browser_capture",
     ]

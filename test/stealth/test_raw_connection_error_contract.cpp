@@ -98,9 +98,15 @@ class CapturingCallback final : public RawConnection::Callback {
     read_notifications.push_back(size);
   }
 
+  td::Status on_quick_ack(td::uint64 quick_ack_token) final {
+    quick_ack_tokens.push_back(quick_ack_token);
+    return td::Status::OK();
+  }
+
   int raw_packet_calls{0};
   int before_write_calls{0};
   td::vector<size_t> read_notifications;
+  td::vector<td::uint64> quick_ack_tokens;
 };
 
 class ErrorOnceTransport final : public IStreamTransport {
@@ -165,10 +171,76 @@ class ErrorOnceTransport final : public IStreamTransport {
   bool delivered_error_{false};
 };
 
+class QuickAckReadTransport final : public IStreamTransport {
+ public:
+  QuickAckReadTransport(TransportType transport_type, td::uint32 quick_ack)
+      : transport_type_(std::move(transport_type)), quick_ack_(quick_ack) {
+  }
+
+  td::Result<size_t> read_next(td::BufferSlice *message, td::uint32 *quick_ack) final {
+    (void)message;
+    if (delivered_) {
+      *quick_ack = 0;
+      return 0;
+    }
+    *quick_ack = quick_ack_;
+    delivered_ = true;
+    return 0;
+  }
+
+  bool support_quick_ack() const final {
+    return true;
+  }
+
+  void write(td::BufferWriter &&message, bool quick_ack) final {
+    (void)message;
+    (void)quick_ack;
+  }
+
+  bool can_read() const final {
+    return !delivered_;
+  }
+
+  bool can_write() const final {
+    return true;
+  }
+
+  void init(td::ChainBufferReader *input, td::ChainBufferWriter *output) final {
+    (void)input;
+    (void)output;
+  }
+
+  size_t max_prepend_size() const final {
+    return 0;
+  }
+
+  size_t max_append_size() const final {
+    return 0;
+  }
+
+  TransportType get_type() const final {
+    return transport_type_;
+  }
+
+  bool use_random_padding() const final {
+    return false;
+  }
+
+ private:
+  TransportType transport_type_;
+  td::uint32 quick_ack_{0};
+  bool delivered_{false};
+};
+
 td::int32 g_transport_error_code = 0;
+td::uint32 g_quick_ack_read_value = 0;
 
 td::unique_ptr<IStreamTransport> make_error_once_transport(TransportType type) {
   return td::make_unique<ErrorOnceTransport>(std::move(type), g_transport_error_code);
+}
+
+td::unique_ptr<IStreamTransport> make_quick_ack_read_transport(TransportType type) {
+  return td::make_unique<QuickAckReadTransport>(std::move(type), g_quick_ack_read_value);
 }
 
 TransportType make_transport_type() {
@@ -258,6 +330,75 @@ TEST(RawConnectionErrorContract, AuthKeyMissingMtprotoErrorPreservesStatusCodeWi
   ASSERT_EQ(0, stats_ptr->read_calls);
   ASSERT_EQ(0, callback.before_write_calls);
   ASSERT_EQ(0, callback.raw_packet_calls);
+}
+
+TEST(RawConnectionErrorContract, InvalidQuickAckLogsStructuredDiagnosticsAtRuntime) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  auto socket_pair = create_socket_pair().move_as_ok();
+  g_quick_ack_read_value = 0x10203040u;
+
+  auto previous_factory = set_transport_factory_for_tests(&make_quick_ack_read_transport);
+  SCOPE_EXIT {
+    set_transport_factory_for_tests(previous_factory);
+  };
+
+  auto raw_connection =
+      RawConnection::create(td::IPAddress(), td::BufferedFd<td::SocketFd>(std::move(socket_pair.client)),
+                            make_transport_type(), td::make_unique<CapturingStatsCallback>());
+
+  CapturingCallback callback;
+  CapturingLog capture;
+  auto *old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG));
+
+  auto status = raw_connection->flush(AuthKey(), callback);
+  auto captured = capture.joined();
+  td::log_interface = old_log_interface;
+  SET_VERBOSITY_LEVEL(old_verbosity);
+
+  ASSERT_TRUE(status.is_ok());
+  ASSERT_TRUE(captured.find("Receive invalid quick_ack") != td::string::npos);
+  ASSERT_TRUE(captured.find("[quick_ack:270544960]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[pending_quick_ack_entries:0]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[transport:obfuscated_tcp]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[dc_id:7]") != td::string::npos);
+}
+
+TEST(RawConnectionErrorContract, UnknownQuickAckLogsStructuredDiagnosticsAtRuntime) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  auto socket_pair = create_socket_pair().move_as_ok();
+  g_quick_ack_read_value = (1u << 31) | 42u;
+
+  auto previous_factory = set_transport_factory_for_tests(&make_quick_ack_read_transport);
+  SCOPE_EXIT {
+    set_transport_factory_for_tests(previous_factory);
+  };
+
+  auto raw_connection =
+      RawConnection::create(td::IPAddress(), td::BufferedFd<td::SocketFd>(std::move(socket_pair.client)),
+                            make_transport_type(), td::make_unique<CapturingStatsCallback>());
+
+  CapturingCallback callback;
+  CapturingLog capture;
+  auto *old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG));
+
+  auto status = raw_connection->flush(AuthKey(), callback);
+  auto captured = capture.joined();
+  td::log_interface = old_log_interface;
+  SET_VERBOSITY_LEVEL(old_verbosity);
+
+  ASSERT_TRUE(status.is_ok());
+  ASSERT_TRUE(captured.find("Receive unknown quick_ack") != td::string::npos);
+  ASSERT_TRUE(captured.find("[quick_ack:2147483690]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[pending_quick_ack_entries:0]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[transport:obfuscated_tcp]") != td::string::npos);
+  ASSERT_TRUE(captured.find("[dc_id:7]") != td::string::npos);
+  ASSERT_TRUE(callback.quick_ack_tokens.empty());
 }
 
 }  // namespace

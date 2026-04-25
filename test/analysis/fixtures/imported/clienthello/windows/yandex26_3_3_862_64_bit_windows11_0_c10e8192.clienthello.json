@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T14:39:25Z",
+  "generated_at_utc": "2026-04-25T16:20:19Z",
   "os_family": "windows",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "yandex26_3_3_862_64_bit_windows11_0_c10e8192",
@@ -263,7 +263,11 @@
         "0x0018"
       ],
       "random_sha256": "baf1cf9f22794ed39a80a3ad20489f89c236634b10ec0208234169435cae6466",
+      "record_count": 1,
       "record_length": 1782,
+      "record_lengths": [
+        1782
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -541,7 +545,11 @@
         "0x0018"
       ],
       "random_sha256": "6ef23c7f467e08e6db63637340de5bf93a26b247b4f7782f6ad8155c8bc56849",
+      "record_count": 1,
       "record_length": 1870,
+      "record_lengths": [
+        1870
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -819,7 +827,11 @@
         "0x0018"
       ],
       "random_sha256": "05d19866b163f7275af7c649d18b5f661921221b29011e8bf7ab34eb52f78130",
+      "record_count": 1,
       "record_length": 1966,
+      "record_lengths": [
+        1966
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1097,7 +1109,11 @@
         "0x0018"
       ],
       "random_sha256": "12c0ed5cbaf4cb53a078b515c1eb0c2c4bbd390e46737bfe6f80cea8180e2e83",
+      "record_count": 1,
       "record_length": 1934,
+      "record_lengths": [
+        1934
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1385,7 +1401,11 @@
         "0x0018"
       ],
       "random_sha256": "92c35709b63a18b77e4fca2490e297578eea89916f5506c70e3e003aa67b3042",
+      "record_count": 1,
       "record_length": 1946,
+      "record_lengths": [
+        1946
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1673,7 +1693,11 @@
         "0x0018"
       ],
       "random_sha256": "42e129b66cf168abab2dfee61f5ca590346416bc35c9716d6dfd9c504ad48122",
+      "record_count": 1,
       "record_length": 1946,
+      "record_lengths": [
+        1946
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -1961,7 +1985,11 @@
         "0x0018"
       ],
       "random_sha256": "503edebea77fe0746ae9f20816437bc15e608c236821d9e3f0c3c2a3a7f945ad",
+      "record_count": 1,
       "record_length": 1946,
+      "record_lengths": [
+        1946
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -2239,7 +2267,11 @@
         "0x0018"
       ],
       "random_sha256": "bc7350dbb36bd855a24e3fa4985899f8279f7859a546012fa4064cd02f2531c2",
+      "record_count": 1,
       "record_length": 1870,
+      "record_lengths": [
+        1870
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -2517,7 +2549,11 @@
         "0x0018"
       ],
       "random_sha256": "9f59a7cd7df1c027668f166b0ee0db2f1e00d2d3981f7a11866f6a75dab613fd",
+      "record_count": 1,
       "record_length": 1870,
+      "record_lengths": [
+        1870
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -2795,7 +2831,11 @@
         "0x0018"
       ],
       "random_sha256": "7135b39bcfdbf03f54ee85c17e06b01725977ba34b87353ea9c710b3e4257069",
+      "record_count": 1,
       "record_length": 1966,
+      "record_lengths": [
+        1966
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -3073,7 +3113,11 @@
         "0x0018"
       ],
       "random_sha256": "88571a9f29f08e0c30cc679ba599268d5c9ad3f248d361658fee2a478542e453",
+      "record_count": 1,
       "record_length": 1934,
+      "record_lengths": [
+        1934
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -3361,7 +3405,11 @@
         "0x0018"
       ],
       "random_sha256": "f8679de92bea96294e37787c2511e34378889e96efe948721fffe6ceee1a0ac4",
+      "record_count": 1,
       "record_length": 1914,
+      "record_lengths": [
+        1914
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -3649,7 +3697,11 @@
         "0x0018"
       ],
       "random_sha256": "759d894f041cced8b934ee3b77a789b1ac26ef9a138f58cb6fd900ede3609216",
+      "record_count": 1,
       "record_length": 1914,
+      "record_lengths": [
+        1914
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,

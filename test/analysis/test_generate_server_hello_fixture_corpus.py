@@ -11,6 +11,24 @@ from generate_server_hello_fixture_corpus import authoritative_family_for_artifa
 
 
 class GenerateServerHelloFixtureCorpusTest(unittest.TestCase):
+    def test_prefers_artifact_fixture_family_id_over_registry_family(self) -> None:
+        artifact = {
+            "profile_id": "chrome146_177_linux_desktop",
+            "fixture_family_id": "chrome146_177_linux_desktop",
+            "samples": [{"fixture_id": "chrome146_177_linux_desktop:frame5"}],
+        }
+        registry = {
+            "fixtures": {
+                "chrome146_177_linux_desktop:frame5": {
+                    "family": "chromium_44cd_mlkem_linux_desktop",
+                }
+            }
+        }
+
+        family = authoritative_family_for_artifact(artifact, registry)
+
+        self.assertEqual("chrome146_177_linux_desktop", family)
+
     def test_uses_registry_family_instead_of_profile_id(self) -> None:
         artifact = {
             "profile_id": "chrome146_177_linux_desktop",
@@ -27,6 +45,28 @@ class GenerateServerHelloFixtureCorpusTest(unittest.TestCase):
         family = authoritative_family_for_artifact(artifact, registry)
 
         self.assertEqual("chromium_44cd_mlkem_linux_desktop", family)
+
+    def test_uses_sample_fixture_family_id_when_present(self) -> None:
+        artifact = {
+            "profile_id": "chrome146_177_linux_desktop",
+            "samples": [
+                {
+                    "fixture_id": "chrome146_177_linux_desktop:frame5",
+                    "fixture_family_id": "chrome146_177_linux_desktop",
+                }
+            ],
+        }
+        registry = {
+            "fixtures": {
+                "chrome146_177_linux_desktop:frame5": {
+                    "family": "chromium_44cd_mlkem_linux_desktop",
+                }
+            }
+        }
+
+        family = authoritative_family_for_artifact(artifact, registry)
+
+        self.assertEqual("chrome146_177_linux_desktop", family)
 
     def test_mirrors_clienthello_tree_for_output_paths(self) -> None:
         input_root = pathlib.Path("test/analysis/fixtures/clienthello")

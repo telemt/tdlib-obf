@@ -820,10 +820,11 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
     return Status::Error("Stealth params root must be an object");
   }
   auto &object = json_value.get_object();
-  TRY_STATUS(ensure_exact_object_shape("root", object,
-                                       {Slice("version"), Slice("active_policy"), Slice("ipt"), Slice("drs"),
-                                        Slice("flow_behavior"), Slice("platform_hints"), Slice("profile_weights"),
-                                        Slice("route_policy"), Slice("route_failure"), Slice("bulk_threshold_bytes")}));
+  TRY_STATUS(ensure_exact_object_shape(
+      "root", object,
+      {Slice("version"), Slice("active_policy"), Slice("ipt"), Slice("drs"), Slice("flow_behavior"),
+       Slice("platform_hints"), Slice("profile_weights"), Slice("route_policy"), Slice("route_failure"),
+       Slice("release_mode_profile_gating"), Slice("bulk_threshold_bytes")}));
 
   TRY_RESULT(version, object.get_required_int_field("version"));
   if (version != 1) {
@@ -855,6 +856,10 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
     TRY_RESULT(platform_hints_value, object.extract_required_field("platform_hints", JsonValue::Type::Object));
     TRY_RESULT(platform_hints, parse_platform_hints(std::move(platform_hints_value)));
     params.platform_hints = platform_hints;
+  }
+  if (object.has_field("release_mode_profile_gating")) {
+    TRY_RESULT(release_mode_profile_gating, object.get_required_bool_field("release_mode_profile_gating"));
+    params.release_mode_profile_gating = release_mode_profile_gating;
   }
   TRY_RESULT(profile_weights_value, object.extract_required_field("profile_weights", JsonValue::Type::Object));
   TRY_RESULT(route_policy_value, object.extract_required_field("route_policy", JsonValue::Type::Object));

@@ -28,7 +28,7 @@ string sanitize_failure_status_message_for_log(Slice message) {
 
   for (auto c : message) {
     auto byte = static_cast<unsigned char>(c);
-    if (byte < 0x20) {
+    if (byte < 0x20 || byte == 0x7f || byte > 0x7e) {
       return "status_message_redacted";
     }
   }
@@ -42,6 +42,10 @@ string sanitize_failure_status_message_for_log(Slice message) {
 }
 
 }  // namespace
+
+string sanitize_connection_failure_status_message_for_log(const Status &status) {
+  return sanitize_failure_status_message_for_log(status.public_message());
+}
 
 void ConnectionFailureBackoff::add_event(int32 now) {
   auto wakeup_at = static_cast<int64>(now) + static_cast<int64>(next_delay_);
@@ -237,7 +241,7 @@ const char *connection_failure_action_hint(ProxyFailureStage stage, ProxyFailure
 
 string summarize_connection_failure_for_log(const ConnectionFailureClassification &classification,
                                             const Status &status) {
-  auto safe_status_message = sanitize_failure_status_message_for_log(status.public_message());
+  auto safe_status_message = sanitize_connection_failure_status_message_for_log(status);
   return PSTRING() << "proxy_backed=" << classification.proxy_backed
                    << " deterministic=" << classification.deterministic
                    << " apply_backoff=" << classification.apply_exponential_backoff

@@ -69,6 +69,7 @@ ConnectionFailureClassification classify_connection_failure(bool act_as_if_onlin
 const char *proxy_failure_stage_name(ProxyFailureStage stage) noexcept;
 const char *proxy_failure_reason_name(ProxyFailureReason reason) noexcept;
 const char *connection_failure_action_hint(ProxyFailureStage stage, ProxyFailureReason reason) noexcept;
+string sanitize_connection_failure_status_message_for_log(const Status &status);
 string summarize_connection_failure_for_log(const ConnectionFailureClassification &classification,
                                             const Status &status);
 

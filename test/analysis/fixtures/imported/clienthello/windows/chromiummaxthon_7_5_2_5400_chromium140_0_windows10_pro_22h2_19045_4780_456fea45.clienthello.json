@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T14:39:19Z",
+  "generated_at_utc": "2026-04-25T16:20:13Z",
   "os_family": "windows",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "chromiummaxthon_7_5_2_5400_chromium140_0_windows10_pro_22h2_19045_4780_456fea45",
@@ -215,7 +215,11 @@
         "0x0018"
       ],
       "random_sha256": "c3c50d630d0326b4132590da629cd7d81c1410b65b6a8efe6df04f33ba4e090b",
+      "record_count": 1,
       "record_length": 512,
+      "record_lengths": [
+        512
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -434,7 +438,11 @@
         "0x0018"
       ],
       "random_sha256": "8b1f34461a5d00a1860191507ca9fb0a729c766497f0ed8f212520bd808efebe",
+      "record_count": 1,
       "record_length": 512,
+      "record_lengths": [
+        512
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -710,7 +718,11 @@
         "0x0018"
       ],
       "random_sha256": "7bb736f67c5d4c8475f10398c3c4b3321ba767fe9fdc2e7563226d24d5c89c9c",
+      "record_count": 1,
       "record_length": 1870,
+      "record_lengths": [
+        1870
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,
@@ -988,7 +1000,11 @@
         "0x0018"
       ],
       "random_sha256": "97dbcd402e32d4af55ede234c5ca9ef33c5727a0b9bcea46af1b4ed5b9ef504a",
+      "record_count": 1,
       "record_length": 1870,
+      "record_lengths": [
+        1870
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,

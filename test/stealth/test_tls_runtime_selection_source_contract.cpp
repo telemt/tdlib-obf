@@ -58,13 +58,20 @@ TEST(TlsRuntimeSelectionSourceContract, RuntimeProfileSelectionUsesPlatformAllow
   auto region = extract_source_region(source, "BrowserProfile pick_runtime_profile(", "EchMode ech_mode_for_route(");
   auto normalized = normalize_for_contract(region);
 
+  ASSERT_TRUE(normalized.find("autoruntime_params=get_runtime_stealth_params_snapshot();") != td::string::npos);
   ASSERT_TRUE(normalized.find("autoallowed_profiles=allowed_profiles_for_platform(platform);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autokey=make_profile_selection_key(destination,unix_time);") != td::string::npos);
-  ASSERT_TRUE(normalized.find("autoweights=default_profile_weights();") != td::string::npos);
+  ASSERT_TRUE(normalized.find("autoweights=runtime_params.profile_weights;") != td::string::npos);
   ASSERT_TRUE(normalized.find("CHECK(total_weight>0);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autoroll=stable_selection_hash(key,platform)%total_weight;") != td::string::npos);
+  ASSERT_TRUE(normalized.find("BrowserProfilebaseline_profile=allowed_profiles.back();") != td::string::npos);
   ASSERT_TRUE(normalized.find("for(autoprofile:allowed_profiles)") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnallowed_profiles.back();") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(!runtime_params.release_mode_profile_gating){returnbaseline_profile;}") !=
+              td::string::npos);
+  ASSERT_TRUE(
+      normalized.find(
+          "runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1,std::memory_order_relaxed);") !=
+      td::string::npos);
 }
 
 }  // namespace

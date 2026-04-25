@@ -88,4 +88,32 @@ TEST(StealthParamsLoaderRuntime, ReloadPublishesLastKnownGoodSnapshotToRuntimeCo
   ASSERT_EQ(static_cast<size_t>(12288), get_runtime_stealth_params_snapshot().bulk_threshold_bytes);
 }
 
+TEST(StealthParamsLoaderRuntime, ReloadAppliesReleaseModeProfileGatingToggle) {
+  RuntimeParamsGuard guard;
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.json");
+
+  write_file(path,
+             "{"
+             "\"version\":1,"
+             "\"release_mode_profile_gating\":true,"
+             "\"profile_weights\":{"
+             "\"chrome133\":50,\"chrome131\":20,\"chrome120\":15,\"firefox148\":15,"
+             "\"safari26_3\":20,\"ios14\":70,\"android11_okhttp_advisory\":30},"
+             "\"route_policy\":{"
+             "\"unknown\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"ru\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"non_ru\":{\"ech_mode\":\"rfc9180_outer\",\"allow_quic\":false}},"
+             "\"route_failure\":{"
+             "\"ech_failure_threshold\":3,\"ech_disable_ttl_seconds\":300.0,\"persist_across_restart\":true},"
+             "\"bulk_threshold_bytes\":8192}");
+
+  ASSERT_FALSE(get_runtime_stealth_params_snapshot().release_mode_profile_gating);
+
+  StealthParamsLoader loader(path);
+  ASSERT_TRUE(loader.try_reload());
+
+  ASSERT_TRUE(get_runtime_stealth_params_snapshot().release_mode_profile_gating);
+}
+
 }  // namespace

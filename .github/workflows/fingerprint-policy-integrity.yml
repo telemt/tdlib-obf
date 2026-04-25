@@ -1,0 +1,309 @@
+name: Fingerprint Policy Integrity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+  push:
+    branches:
+      - master
+      - 'release/**'
+    paths:
+      - '.github/workflows/fingerprint-policy-integrity.yml'
+      - 'docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md'
+      - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
+      - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
+      - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
+      - 'docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
+      - 'docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
+      - 'docs/Documentation/FINGERPRINT_TRUST_TIERS.generated.md'
+      - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25.md'
+      - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25_AUDIT_COMPLETE.md'
+      - 'docs/Plans/FINGERPRINT_HARDENING_PLAN_FINAL_AUDIT_2026-04-25.md'
+      - 'test/analysis/fingerprint_trust_tiers.json'
+      - 'test/analysis/transport_coherence_observations.json'
+      - 'test/analysis/active_probing_nightly_observations.json'
+      - 'test/analysis/render_fingerprint_policy_artifacts.py'
+      - 'test/analysis/build_transport_coherence_status.py'
+      - 'test/analysis/build_active_probing_status.py'
+      - 'test/analysis/refresh_active_probing_nightly_observations.py'
+      - 'test/analysis/extract_tcp_transport_signatures.py'
+      - 'test/analysis/test_fingerprint_policy_generation*.py'
+      - 'test/analysis/test_fingerprint_policy_ci_contract.py'
+      - 'test/analysis/test_fingerprint_hardening_plan_contract.py'
+      - 'test/analysis/test_build_transport_and_active_probing_status_contract.py'
+      - 'test/analysis/test_transport_and_active_probing_status_contract.py'
+      - 'test/analysis/test_refresh_active_probing_nightly_observations_contract.py'
+      - 'test/analysis/test_tcp_transport_extraction_*.py'
+      - 'test/analysis/profiles_validation.json'
+      - 'test/analysis/profiles_imported.json'
+      - 'test/analysis/fixtures/clienthello/**'
+      - 'test/analysis/fixtures/serverhello/**'
+      - 'test/analysis/fixtures/imported/**'
+      - 'td/mtproto/stealth/**'
+      - 'test/stealth/**'
+      - 'test/CMakeLists.txt'
+      - 'CMakeLists.txt'
+  pull_request:
+    branches:
+      - master
+      - 'release/**'
+    paths:
+      - '.github/workflows/fingerprint-policy-integrity.yml'
+      - 'docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md'
+      - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
+      - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
+      - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
+      - 'docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
+      - 'docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
+      - 'docs/Documentation/FINGERPRINT_TRUST_TIERS.generated.md'
+      - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25.md'
+      - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25_AUDIT_COMPLETE.md'
+      - 'docs/Plans/FINGERPRINT_HARDENING_PLAN_FINAL_AUDIT_2026-04-25.md'
+      - 'test/analysis/fingerprint_trust_tiers.json'
+      - 'test/analysis/transport_coherence_observations.json'
+      - 'test/analysis/active_probing_nightly_observations.json'
+      - 'test/analysis/render_fingerprint_policy_artifacts.py'
+      - 'test/analysis/build_transport_coherence_status.py'
+      - 'test/analysis/build_active_probing_status.py'
+      - 'test/analysis/refresh_active_probing_nightly_observations.py'
+      - 'test/analysis/extract_tcp_transport_signatures.py'
+      - 'test/analysis/test_fingerprint_policy_generation*.py'
+      - 'test/analysis/test_fingerprint_policy_ci_contract.py'
+      - 'test/analysis/test_fingerprint_hardening_plan_contract.py'
+      - 'test/analysis/test_build_transport_and_active_probing_status_contract.py'
+      - 'test/analysis/test_transport_and_active_probing_status_contract.py'
+      - 'test/analysis/test_refresh_active_probing_nightly_observations_contract.py'
+      - 'test/analysis/test_tcp_transport_extraction_*.py'
+      - 'test/analysis/profiles_validation.json'
+      - 'test/analysis/profiles_imported.json'
+      - 'test/analysis/fixtures/clienthello/**'
+      - 'test/analysis/fixtures/serverhello/**'
+      - 'test/analysis/fixtures/imported/**'
+      - 'td/mtproto/stealth/**'
+      - 'test/stealth/**'
+      - 'test/CMakeLists.txt'
+      - 'CMakeLists.txt'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: fingerprint-policy-integrity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tier_semantics_drift_check:
+    name: tier_semantics_drift_check
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Regenerate fingerprint policy artifacts deterministically
+        run: |
+          set -euxo pipefail
+          python3 test/analysis/build_transport_coherence_status.py --repo-root . --now-utc 2026-04-25T00:00:00Z
+          python3 test/analysis/build_active_probing_status.py --repo-root . --now-utc 2026-04-25T00:00:00Z
+          python3 test/analysis/render_fingerprint_policy_artifacts.py --repo-root . --now-utc 2026-04-25T00:00:00Z
+
+      - name: Fail on trust-tier drift
+        run: |
+          set -euxo pipefail
+          git diff --exit-code -- \
+            docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md \
+            docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md \
+            docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md \
+            docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json \
+            docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json \
+            docs/Documentation/FINGERPRINT_TRUST_TIERS.generated.md \
+            docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json \
+            test/analysis/fingerprint_trust_tiers.json
+
+  reviewed_corpus_smoke:
+    name: reviewed_corpus_smoke
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: tier_semantics_drift_check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run reviewed corpus smoke
+        run: |
+          set -euxo pipefail
+          python3 test/analysis/run_corpus_smoke.py \
+            --registry test/analysis/profiles_validation.json \
+            --fixtures-root test/analysis/fixtures/clienthello \
+            --server-hello-fixtures-root test/analysis/fixtures/serverhello
+
+  imported_corpus_smoke:
+    name: imported_corpus_smoke
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    needs: tier_semantics_drift_check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run imported corpus smoke (informational)
+        run: |
+          set -euxo pipefail
+          python3 test/analysis/run_corpus_smoke.py \
+            --registry test/analysis/profiles_imported.json \
+            --fixtures-root test/analysis/fixtures/imported/clienthello \
+            --server-hello-fixtures-root test/analysis/fixtures/imported/serverhello
+
+  reviewed_vs_imported_lane_guardrail:
+    name: reviewed_vs_imported_lane_guardrail
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - tier_semantics_drift_check
+      - reviewed_corpus_smoke
+      - imported_corpus_smoke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run fingerprint policy generation and CI contract tests
+        run: |
+          set -euxo pipefail
+          python3 -m unittest discover -s test/analysis -p 'test_fingerprint_policy_generation*.py'
+          python3 -m unittest discover -s test/analysis -p 'test_fingerprint_policy_ci_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_fingerprint_hardening_plan_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_build_transport_and_active_probing_status_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_transport_and_active_probing_status_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_refresh_active_probing_nightly_observations_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_tcp_transport_extraction_*.py'
+
+  cxx_stealth_runtime_gate:
+    name: cxx_stealth_runtime_gate
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs:
+      - reviewed_vs_imported_lane_guardrail
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure CMake for stealth runtime contracts
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DTD_ENABLE_BENCHMARKS=OFF \
+            -DTDLIB_STEALTH_SHAPING=ON
+
+      - name: Build run_all_tests target
+        run: |
+          set -euxo pipefail
+          cmake --build build --target run_all_tests --parallel 4
+
+      - name: Run stealth/runtime release gate slices
+        run: |
+          set -euxo pipefail
+          ./build/test/run_all_tests --filter TlsHmacReplayAdversarial
+          ./build/test/run_all_tests --filter RouteEchQuic
+          ./build/test/run_all_tests --filter TlsRuntimeActivePolicy
+          ./build/test/run_all_tests --filter FirstFlightLayoutPairing
+
+  active_probing_nightly_refresh:
+    name: active_probing_nightly_refresh
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Configure CMake for active probing nightly refresh
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DTD_ENABLE_BENCHMARKS=OFF \
+            -DTDLIB_STEALTH_SHAPING=ON
+
+      - name: Build run_all_tests target
+        run: |
+          set -euxo pipefail
+          cmake --build build --target run_all_tests --parallel 4
+
+      - name: Refresh active probing nightly observations
+        run: |
+          set -euxo pipefail
+          NOW_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p artifacts
+          python3 test/analysis/refresh_active_probing_nightly_observations.py \
+            --run-all-tests-path ./build/test/run_all_tests \
+            --output-path artifacts/active_probing_nightly_observations.json \
+            --generated-at-utc "$NOW_UTC"
+          python3 test/analysis/build_active_probing_status.py \
+            --repo-root . \
+            --now-utc "$NOW_UTC" \
+            --observations-path artifacts/active_probing_nightly_observations.json
+
+      - name: Upload active probing nightly evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: active-probing-nightly-evidence
+          path: |
+            artifacts/active_probing_nightly_observations.json
+            docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json

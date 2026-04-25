@@ -33,6 +33,7 @@ if str(THIS_DIR) not in sys.path:
     sys.path.insert(0, str(THIS_DIR))
 
 from common_tls import (  # noqa: E402
+    load_profile_registry,
     load_clienthello_artifact,
     load_server_hello_artifact,
 )
@@ -41,9 +42,10 @@ from common_tls import (  # noqa: E402
 FIXTURES_ROOT = THIS_DIR / "fixtures"
 CLIENTHELLO_ROOT = FIXTURES_ROOT / "clienthello"
 SERVERHELLO_ROOT = FIXTURES_ROOT / "serverhello"
+REGISTRY_PATH = THIS_DIR / "profiles_validation.json"
 
 
-def _clienthello_family_key(sample) -> str:
+def _clienthello_family_key(sample, registry) -> str:
     """Return the canonical family key for a ClientHello sample.
 
     The reviewed CH artifacts set ``fixture_family_id`` when the extractor
@@ -54,10 +56,15 @@ def _clienthello_family_key(sample) -> str:
     family_id = sample.metadata.fixture_family_id
     if family_id:
         return family_id
+    fixture = registry.get("fixtures", {}).get(sample.metadata.fixture_id)
+    if isinstance(fixture, dict):
+        fixture_family = str(fixture.get("family", "")).strip()
+        if fixture_family:
+            return fixture_family
     return sample.profile
 
 
-def _collect_pairs_from_clienthellos() -> dict[tuple[str, str], list[pathlib.Path]]:
+def _collect_pairs_from_clienthellos(registry: dict) -> dict[tuple[str, str], list[pathlib.Path]]:
     """Return every reviewed CH artifact keyed by ``(family_id, route_lane)``."""
     index: dict[tuple[str, str], list[pathlib.Path]] = {}
     for path in sorted(CLIENTHELLO_ROOT.rglob("*.clienthello.json")):
@@ -65,7 +72,7 @@ def _collect_pairs_from_clienthellos() -> dict[tuple[str, str], list[pathlib.Pat
         if not samples:
             continue
         for sample in samples:
-            key = (_clienthello_family_key(sample), sample.metadata.route_mode)
+            key = (_clienthello_family_key(sample, registry), sample.metadata.route_mode)
             index.setdefault(key, []).append(path)
     return index
 
@@ -92,7 +99,8 @@ class ServerHelloFamilyPairingContractTest(unittest.TestCase):
             raise unittest.SkipTest(f"ClientHello fixtures root missing: {CLIENTHELLO_ROOT}")
         if not SERVERHELLO_ROOT.is_dir():
             raise unittest.SkipTest(f"ServerHello fixtures root missing: {SERVERHELLO_ROOT}")
-        cls._ch_index = _collect_pairs_from_clienthellos()
+        registry = load_profile_registry(REGISTRY_PATH)
+        cls._ch_index = _collect_pairs_from_clienthellos(registry)
         cls._sh_index = _collect_pairs_from_serverhellos()
 
     def test_every_clienthello_family_has_a_serverhello_peer(self) -> None:

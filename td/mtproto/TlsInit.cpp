@@ -230,14 +230,10 @@ void TlsInit::send_hello() {
   hello_ech_disabled_by_circuit_breaker_ = decision.disabled_by_circuit_breaker;
   hello_ech_reenabled_after_ttl_ = decision.reenabled_after_ttl;
 
-  hello_profile_name_ = "chrome133";
-  hello_profile_allows_ech_ = stealth::profile_spec(stealth::BrowserProfile::Chrome133).allows_ech;
-#if TD_DARWIN
-  hello_uses_ech_ = hello_profile_allows_ech_ && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
-  auto hello = stealth::build_proxy_tls_client_hello_for_profile(
-      username_, password_, hello_unix_time_, stealth::BrowserProfile::Chrome133,
-      hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
-#else
+  // Unified profile selection for all platforms (Darwin, Linux, Windows, mobile, etc.)
+  // Removes hardcoding of Chrome133 on Darwin to prevent platform distinguishability:
+  // - Before fix: macOS always Chrome133 (100% predictable, DPI detects platform)
+  // - After fix: Darwin clients rotate through available profiles like non-Darwin
   auto platform = stealth::default_runtime_platform_hints();
   auto profile = stealth::pick_runtime_profile(username_, hello_unix_time_, platform);
   hello_profile_name_ = stealth::profile_spec(profile).name.str();
@@ -246,7 +242,6 @@ void TlsInit::send_hello() {
   auto hello = stealth::build_proxy_tls_client_hello_for_profile(
       username_, password_, hello_unix_time_, profile,
       hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
-#endif
 
   if (hello.size() < kTlsHelloResponseRandomOffset + kTlsHelloResponseRandomSize) {
     LOG(ERROR) << "TlsInit hello generation failed " << tag("destination", username_)

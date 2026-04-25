@@ -18,17 +18,25 @@ from generate_imported_fixture_registry import refresh_imported_candidate_corpus
 
 
 def write_clienthello_artifact(path: pathlib.Path, *, profile_id: str, source_path: pathlib.Path, route_mode: str, samples: list[dict]) -> None:
+    normalized_samples = []
+    for index, sample in enumerate(samples, start=1):
+        normalized_sample = dict(sample)
+        normalized_sample.setdefault("fixture_id", f"{profile_id}:frame{index}")
+        normalized_samples.append(normalized_sample)
     payload = {
+        "artifact_type": "tls_clienthello_fixtures",
+        "parser_version": "tls-clienthello-parser-v1",
         "profile_id": profile_id,
         "route_mode": route_mode,
         "scenario_id": f"{profile_id}-scenario",
         "source_path": str(source_path.resolve()),
-        "source_sha256": "capture-sha256",
+        "source_sha256": "a" * 64,
         "source_kind": "browser_capture",
         "device_class": "desktop",
         "os_family": "windows",
         "transport": "tcp",
-        "samples": samples,
+        "fixture_family_id": profile_id,
+        "samples": normalized_samples,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -36,11 +44,17 @@ def write_clienthello_artifact(path: pathlib.Path, *, profile_id: str, source_pa
 
 def write_serverhello_artifact(path: pathlib.Path, *, family: str, source_path: pathlib.Path, route_mode: str) -> None:
     payload = {
+        "artifact_type": "tls_serverhello_fixtures",
         "route_mode": route_mode,
         "scenario_id": f"{family}-serverhello",
         "source_path": str(source_path.resolve()),
-        "source_sha256": "capture-sha256",
+        "source_sha256": "b" * 64,
         "parser_version": "tls-serverhello-parser-v1",
+        "source_kind": "browser_capture",
+        "transport": "tcp",
+        "capture_provenance": {
+            "client_profile_id": family,
+        },
         "samples": [
             {
                 "fixture_id": f"{family}:frame8",
@@ -49,6 +63,7 @@ def write_serverhello_artifact(path: pathlib.Path, *, family: str, source_path: 
                 "cipher_suite": "0x1301",
                 "extensions": ["0x002b", "0x0033"],
                 "record_layout_signature": [22, 20],
+                "server_endpoint": {"ip": "142.250.186.46", "port": 443},
             }
         ],
     }

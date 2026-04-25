@@ -286,6 +286,15 @@ class CheckServerHelloMatrixTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_server_hello_artifact(artifact_path)
 
+    def test_rejects_blank_client_profile_id_in_capture_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = pathlib.Path(temp_dir) / "serverhello-missing-client-profile-id.json"
+            artifact = make_server_hello_artifact()
+            artifact["capture_provenance"]["client_profile_id"] = ""
+            artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_server_hello_artifact(artifact_path)
+
     def test_rejects_mixed_fixture_family_batch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             first_path = pathlib.Path(temp_dir) / "serverhello-family-a.json"

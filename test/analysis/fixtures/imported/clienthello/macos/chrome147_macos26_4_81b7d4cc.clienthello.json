@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T14:39:53Z",
+  "generated_at_utc": "2026-04-25T16:20:51Z",
   "os_family": "macos",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "chrome147_macos26_4_81b7d4cc",
@@ -282,7 +282,11 @@
         "0x0018"
       ],
       "random_sha256": "3a8e510b764b7c3df10955817fca1ca3b10888a702a58fc92a7f7ec281308f08",
+      "record_count": 1,
       "record_length": 1978,
+      "record_lengths": [
+        1978
+      ],
       "record_type": "0x16",
       "record_version": "0x0301",
       "session_id_length": 32,

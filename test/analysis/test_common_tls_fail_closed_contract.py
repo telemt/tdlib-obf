@@ -67,6 +67,9 @@ def minimal_serverhello_artifact() -> dict:
         "source_kind": "browser_capture",
         "transport": "tcp",
         "family": "family_alpha",
+        "capture_provenance": {
+            "client_profile_id": "test_profile",
+        },
         "samples": [
             {
                 "fixture_id": "test_profile:frame1",

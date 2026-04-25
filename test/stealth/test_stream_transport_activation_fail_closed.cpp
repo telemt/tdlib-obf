@@ -82,6 +82,16 @@ td::Result<StealthConfig> invalid_stealth_config_factory_with_multiline_message(
   return td::Status::Error("line1\nline2");
 }
 
+td::Result<StealthConfig> invalid_stealth_config_factory_with_non_ascii_message(const ProxySecret &secret, IRng &rng) {
+  (void)secret;
+  (void)rng;
+  g_config_factory_calls++;
+  td::string message = "prefix-";
+  message.push_back(static_cast<char>(0xc3));
+  message.push_back(static_cast<char>(0xa9));
+  message += "-suffix";
+  return td::Status::Error(message);
+}
 class MarkerTransport final : public IStreamTransport {
  public:
   td::Result<size_t> read_next(td::BufferSlice *message, td::uint32 *quick_ack) final {
@@ -311,6 +321,35 @@ TEST(StreamTransportActivationFailClosed, InvalidRuntimeConfigLogRejectsMultilin
   ASSERT_FALSE(capture.contains("line2"));
 }
 
+TEST(StreamTransportActivationFailClosed, InvalidRuntimeConfigLogRejectsNonAsciiStatusPayloads) {
+#if !TDLIB_STEALTH_SHAPING
+  ASSERT_TRUE(true);
+  return;
+#endif
+
+  g_config_factory_calls = 0;
+  auto previous_config_factory =
+      set_stealth_config_factory_for_tests(&invalid_stealth_config_factory_with_non_ascii_message);
+  CapturingLog capture;
+  auto old_log_interface = td::log_interface;
+  auto old_verbosity = GET_VERBOSITY_LEVEL();
+  td::log_interface = &capture;
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(INFO));
+  SCOPE_EXIT {
+    SET_VERBOSITY_LEVEL(old_verbosity);
+    td::log_interface = old_log_interface;
+    set_stealth_config_factory_for_tests(previous_config_factory);
+  };
+
+  auto transport =
+      create_transport(TransportType{TransportType::ObfuscatedTcp, 2, ProxySecret::from_raw(make_tls_secret())});
+
+  ASSERT_EQ(1, g_config_factory_calls);
+  ASSERT_EQ(TransportType::ObfuscatedTcp, transport->get_type().type);
+  ASSERT_TRUE(capture.contains("Stealth shaping disabled for emulate_tls transport"));
+  ASSERT_TRUE(capture.contains("stealth runtime config rejected; review stealth params and proxy setup"));
+  ASSERT_FALSE(capture.contains("suffix"));
+}
 TEST(StreamTransportActivationFailClosed, SuccessfulActivationLogsEnableDecision) {
 #if !TDLIB_STEALTH_SHAPING
   ASSERT_TRUE(true);

@@ -7,7 +7,7 @@
     "name": "extract_client_hello_fixtures.py",
     "tshark_version": "TShark (Wireshark) 4.2.2 (Git v4.2.2 packaged as 4.2.2-1.1build3)."
   },
-  "generated_at_utc": "2026-04-11T16:14:30Z",
+  "generated_at_utc": "2026-04-25T16:20:20Z",
   "os_family": "windows",
   "parser_version": "tls-clienthello-parser-v1",
   "profile_id": "chromewindows_11_222_22621_4317_146_0_7680_178_win_windows11_222_22621_4317_google_chrome_146_0_7680_178_win_9a383694",

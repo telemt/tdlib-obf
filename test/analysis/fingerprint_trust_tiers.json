@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "tiers": [
+    {
+      "tier": "Tier0",
+      "label": "Advisory-only",
+      "release_gating": false,
+      "min_authoritative_captures": 0,
+      "min_independent_sources": 0,
+      "min_independent_sessions": 0,
+      "description": "No authoritative network-derived evidence; advisory diagnostics only."
+    },
+    {
+      "tier": "Tier1",
+      "label": "Anchored",
+      "release_gating": true,
+      "min_authoritative_captures": 1,
+      "min_independent_sources": 1,
+      "min_independent_sessions": 1,
+      "description": "Initial authoritative anchoring with structural gates."
+    },
+    {
+      "tier": "Tier2",
+      "label": "Corroborated",
+      "release_gating": true,
+      "min_authoritative_captures": 3,
+      "min_independent_sources": 2,
+      "min_independent_sessions": 2,
+      "description": "Corroborated release evidence with structural and set-membership gates."
+    },
+    {
+      "tier": "Tier3",
+      "label": "Distributional",
+      "release_gating": true,
+      "min_authoritative_captures": 15,
+      "min_independent_sources": 3,
+      "min_independent_sessions": 2,
+      "description": "Distributional and classifier-style evidence enabled when sample power qualifies."
+    },
+    {
+      "tier": "Tier4",
+      "label": "High-confidence",
+      "release_gating": true,
+      "min_authoritative_captures": 200,
+      "min_independent_sources": 3,
+      "min_independent_sessions": 2,
+      "description": "High-confidence long-horizon equivalence tier."
+    }
+  ]
+}

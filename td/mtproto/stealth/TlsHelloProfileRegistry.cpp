@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace td {
 namespace mtproto {
@@ -158,6 +159,10 @@ struct RuntimeEchCounterStorage final {
   std::atomic<uint64> reenabled_total{0};
 };
 
+struct RuntimeProfileSelectionCounterStorage final {
+  std::atomic<uint64> advisory_blocked_total{0};
+};
+
 std::mutex &route_failure_cache_mutex() {
   static std::mutex mutex;
   return mutex;
@@ -196,6 +201,11 @@ std::shared_ptr<KeyValueSyncInterface> &route_failure_store() {
 
 RuntimeEchCounterStorage &runtime_ech_counters() {
   static RuntimeEchCounterStorage counters;
+  return counters;
+}
+
+RuntimeProfileSelectionCounterStorage &runtime_profile_selection_counters() {
+  static RuntimeProfileSelectionCounterStorage counters;
   return counters;
 }
 
@@ -531,6 +541,18 @@ void reset_runtime_ech_counters_for_tests() noexcept {
   counters.reenabled_total.store(0, std::memory_order_relaxed);
 }
 
+RuntimeProfileSelectionCounters get_runtime_profile_selection_counters() noexcept {
+  auto &counters = runtime_profile_selection_counters();
+  RuntimeProfileSelectionCounters result;
+  result.advisory_blocked_total = counters.advisory_blocked_total.load(std::memory_order_relaxed);
+  return result;
+}
+
+void reset_runtime_profile_selection_counters_for_tests() noexcept {
+  auto &counters = runtime_profile_selection_counters();
+  counters.advisory_blocked_total.store(0, std::memory_order_relaxed);
+}
+
 Span<BrowserProfile> all_profiles() {
   return Span<BrowserProfile>(ALL_PROFILES);
 }
@@ -591,9 +613,10 @@ BrowserProfile pick_profile_sticky(const ProfileWeights &weights, const Selectio
 }
 
 BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const RuntimePlatformHints &platform) {
+  auto runtime_params = get_runtime_stealth_params_snapshot();
   auto allowed_profiles = allowed_profiles_for_platform(platform);
   auto key = make_profile_selection_key(destination, unix_time);
-  auto weights = default_profile_weights();
+  auto weights = runtime_params.profile_weights;
 
   uint32 total_weight = 0;
   for (auto profile : allowed_profiles) {
@@ -603,14 +626,59 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
 
   auto roll = stable_selection_hash(key, platform) % total_weight;
   uint32 cumulative_weight = 0;
+  BrowserProfile baseline_profile = allowed_profiles.back();
   for (auto profile : allowed_profiles) {
     cumulative_weight += profile_weight(weights, profile);
     if (roll < cumulative_weight) {
+      baseline_profile = profile;
+      break;
+    }
+  }
+
+  if (!runtime_params.release_mode_profile_gating) {
+    return baseline_profile;
+  }
+
+  bool blocked_advisory = !profile_fixture_metadata(baseline_profile).release_gating;
+  uint32 release_weight_total = 0;
+  std::vector<BrowserProfile> release_profiles;
+  release_profiles.reserve(allowed_profiles.size());
+  for (auto profile : allowed_profiles) {
+    if (!profile_fixture_metadata(profile).release_gating) {
+      continue;
+    }
+    auto weight = profile_weight(weights, profile);
+    if (weight == 0) {
+      continue;
+    }
+    release_weight_total += weight;
+    release_profiles.push_back(profile);
+  }
+
+  if (release_weight_total == 0 || release_profiles.empty()) {
+    runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1, std::memory_order_relaxed);
+    for (auto profile : allowed_profiles) {
+      if (profile_fixture_metadata(profile).release_gating) {
+        return profile;
+      }
+    }
+    return baseline_profile;
+  }
+
+  if (blocked_advisory) {
+    runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  auto release_roll = stable_selection_hash(key, platform) % release_weight_total;
+  uint32 release_cumulative = 0;
+  for (auto profile : release_profiles) {
+    release_cumulative += profile_weight(weights, profile);
+    if (release_roll < release_cumulative) {
       return profile;
     }
   }
 
-  return allowed_profiles.back();
+  return release_profiles.back();
 }
 
 EchMode ech_mode_for_route(const NetworkRouteHints &route, const RouteFailureState &state) noexcept {

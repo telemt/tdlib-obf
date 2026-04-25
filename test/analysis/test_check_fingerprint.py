@@ -95,11 +95,15 @@ class NormalizeRouteModeTest(unittest.TestCase):
 class LoadClientHelloArtifactTest(unittest.TestCase):
     def test_rejects_missing_samples_list(self) -> None:
         artifact = {
+            "artifact_type": "tls_clienthello_fixtures",
+            "parser_version": "tls-clienthello-parser-v1",
             "profile_id": "Chrome133",
             "route_mode": "non_ru_egress",
             "scenario_id": "chrome133_missing_samples",
+            "transport": "tcp",
+            "source_kind": "browser_capture",
             "source_path": "/captures/chrome133.pcapng",
-            "source_sha256": "artifact-sha256",
+            "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -111,11 +115,15 @@ class LoadClientHelloArtifactTest(unittest.TestCase):
 
     def test_rejects_empty_samples_list(self) -> None:
         artifact = {
+            "artifact_type": "tls_clienthello_fixtures",
+            "parser_version": "tls-clienthello-parser-v1",
             "profile_id": "Chrome133",
             "route_mode": "non_ru_egress",
             "scenario_id": "chrome133_empty_samples",
+            "transport": "tcp",
+            "source_kind": "browser_capture",
             "source_path": "/captures/chrome133.pcapng",
-            "source_sha256": "artifact-sha256",
+            "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "samples": [],
         }
 
@@ -128,11 +136,13 @@ class LoadClientHelloArtifactTest(unittest.TestCase):
 
     def test_preserves_platform_metadata_from_artifact(self) -> None:
         artifact = {
+            "artifact_type": "tls_clienthello_fixtures",
+            "parser_version": "tls-clienthello-parser-v1",
             "profile_id": "AndroidChrome146",
             "route_mode": "non_ru_egress",
             "scenario_id": "android_pixel9_clienthello",
             "source_path": "/captures/android_pixel9.pcapng",
-            "source_sha256": "artifact-sha256",
+            "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "source_kind": "browser_capture",
             "fixture_family_id": "android_okhttp_like",
             "tls_gen": "tls13",
@@ -141,6 +151,7 @@ class LoadClientHelloArtifactTest(unittest.TestCase):
             "transport": "tcp",
             "samples": [
                 {
+                    "fixture_id": "android_pixel9_sample_1",
                     "cipher_suites": ["0x1301"],
                     "supported_groups": ["0x001D"],
                     "key_share_entries": [{"group": "0x001D"}],
@@ -166,7 +177,10 @@ class LoadClientHelloArtifactTest(unittest.TestCase):
         self.assertEqual("android_okhttp_like", samples[0].metadata.fixture_family_id)
         self.assertEqual("tls13", samples[0].metadata.tls_gen)
         self.assertEqual("/captures/android_pixel9.pcapng", samples[0].metadata.source_path)
-        self.assertEqual("artifact-sha256", samples[0].metadata.source_sha256)
+        self.assertEqual(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            samples[0].metadata.source_sha256,
+        )
         self.assertEqual([0x000A, 0xFE0D], samples[0].non_grease_extensions_without_padding)
         self.assertEqual(["h2", "http/1.1"], samples[0].alpn_protocols)
         self.assertEqual("android_pixel9_clienthello", samples[0].metadata.scenario_id)

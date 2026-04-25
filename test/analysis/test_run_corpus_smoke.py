@@ -30,6 +30,8 @@ def write_clienthello_artifact(
     alpn_protocols=None,
 ):
     artifact = {
+        "artifact_type": "tls_clienthello_fixtures",
+        "parser_version": "tls-clienthello-parser-v1",
         "profile_id": profile_id,
         "route_mode": route_mode,
         "scenario_id": f"{profile_id}-scenario",
@@ -43,6 +45,7 @@ def write_clienthello_artifact(
         "transport": "tcp",
         "samples": [
             {
+                "fixture_id": f"{profile_id}:frame1",
                 "cipher_suites": ["0x1301"] if cipher_suites is None else list(cipher_suites),
                 "supported_groups": ["0x001d"],
                 "key_share_entries": [{"group": "0x001d"}],
@@ -63,7 +66,7 @@ def write_serverhello_artifact(
     cipher_suite: str = "0x1301",
     layout_signature=None,
     source_path: str = "/captures/serverhello.pcapng",
-    source_sha256: str = "serverhello-sha256",
+    source_sha256: str = "b" * 64,
 ):
     artifact = {
         "route_mode": route_mode,
@@ -71,6 +74,12 @@ def write_serverhello_artifact(
         "source_path": source_path,
         "source_sha256": source_sha256,
         "parser_version": "tls-serverhello-parser-v1",
+        "artifact_type": "tls_serverhello_fixtures",
+        "source_kind": "browser_capture",
+        "transport": "tcp",
+        "capture_provenance": {
+            "client_profile_id": family,
+        },
         "samples": [
             {
                 "fixture_id": f"{family}:frame8",
@@ -79,6 +88,7 @@ def write_serverhello_artifact(
                 "cipher_suite": cipher_suite,
                 "extensions": ["0x002b", "0x0033"],
                 "record_layout_signature": [22, 20] if layout_signature is None else list(layout_signature),
+                "server_endpoint": {"ip": "142.250.186.46", "port": 443},
             }
         ],
     }
@@ -393,6 +403,8 @@ class RunCorpusSmokeTest(unittest.TestCase):
 
         artifact_path = self.fixtures_root / "linux_desktop" / "chrome_good_empty.clienthello.json"
         artifact = {
+            "artifact_type": "tls_clienthello_fixtures",
+            "parser_version": "tls-clienthello-parser-v1",
             "profile_id": "ChromeGood",
             "route_mode": "non_ru_egress",
             "scenario_id": "ChromeGood-empty-scenario",
@@ -499,11 +511,17 @@ class RunCorpusSmokeTest(unittest.TestCase):
         )
         serverhello_artifact_path = self.serverhello_root / "chrome_good_duplicate.serverhello.json"
         duplicate_artifact = {
+            "artifact_type": "tls_serverhello_fixtures",
             "route_mode": "non_ru_egress",
             "scenario_id": "ChromeGood_family-serverhello-scenario",
             "source_path": str(self.capture_path),
             "source_sha256": read_sha256(self.capture_path),
             "parser_version": "tls-serverhello-parser-v1",
+            "source_kind": "browser_capture",
+            "transport": "tcp",
+            "capture_provenance": {
+                "client_profile_id": "ChromeGood_family",
+            },
             "samples": [
                 {
                     "fixture_id": "ChromeGood_family:frame8",
@@ -512,6 +530,7 @@ class RunCorpusSmokeTest(unittest.TestCase):
                     "cipher_suite": "0x1301",
                     "extensions": ["0x002b", "0x0033"],
                     "record_layout_signature": [22, 20],
+                    "server_endpoint": {"ip": "142.250.186.46", "port": 443},
                 },
                 {
                     "fixture_id": "ChromeGood_family:frame8",
@@ -520,6 +539,7 @@ class RunCorpusSmokeTest(unittest.TestCase):
                     "cipher_suite": "0x1301",
                     "extensions": ["0x002b", "0x0033"],
                     "record_layout_signature": [22, 20],
+                    "server_endpoint": {"ip": "142.250.186.46", "port": 443},
                 },
             ],
         }
@@ -533,13 +553,13 @@ class RunCorpusSmokeTest(unittest.TestCase):
 
         self.assertFalse(report["ok"])
         self.assertEqual(1, report["server_hello_artifact_count"])
-        self.assertEqual(2, report["server_hello_sample_count"])
+        self.assertEqual(0, report["server_hello_sample_count"])
         self.assertEqual(
-            ["sample[1]: duplicate fixture_id ChromeGood_family:frame8"],
+            ["artifact-load: duplicate fixture_id in artifact: ChromeGood_family:frame8"],
             report["server_hello_artifacts"][0]["failures"],
         )
         self.assertIn(
-            f"serverhello[{serverhello_artifact_path}]: sample[1]: duplicate fixture_id ChromeGood_family:frame8",
+            f"serverhello[{serverhello_artifact_path}]: artifact-load: duplicate fixture_id in artifact: ChromeGood_family:frame8",
             report["failures"],
         )
 
@@ -605,11 +625,17 @@ class RunCorpusSmokeTest(unittest.TestCase):
         )
         serverhello_artifact_path = self.serverhello_root / "chrome_missing_clienthello.serverhello.json"
         artifact = {
+            "artifact_type": "tls_serverhello_fixtures",
             "route_mode": "non_ru_egress",
             "scenario_id": "ChromeGood_family-serverhello-scenario",
             "source_path": "/captures/other-serverhello.pcapng",
-            "source_sha256": "other-serverhello-sha256",
+            "source_sha256": "d" * 64,
             "parser_version": "tls-serverhello-parser-v1",
+            "source_kind": "browser_capture",
+            "transport": "tcp",
+            "capture_provenance": {
+                "client_profile_id": "ChromeGood_family",
+            },
             "samples": [
                 {
                     "fixture_id": "ChromeGood_family:frame8",
@@ -618,6 +644,7 @@ class RunCorpusSmokeTest(unittest.TestCase):
                     "cipher_suite": "0x1301",
                     "extensions": ["0x002b", "0x0033"],
                     "record_layout_signature": [22, 20],
+                    "server_endpoint": {"ip": "142.250.186.46", "port": 443},
                 }
             ],
         }
@@ -657,7 +684,7 @@ class RunCorpusSmokeTest(unittest.TestCase):
             family="ChromeGood_family",
             route_mode="non_ru_egress",
             source_path=str(self.capture_path),
-            source_sha256="different-serverhello-sha256",
+            source_sha256="c" * 64,
         )
 
         report = run_corpus_smoke(
@@ -669,12 +696,12 @@ class RunCorpusSmokeTest(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertEqual(
             [
-                f"batch: ServerHello source_sha256 different-serverhello-sha256 does not match ClientHello capture metadata for source_path {self.capture_path}; expected one of [{expected_sha256}]"
+                f"batch: ServerHello source_sha256 {'c' * 64} does not match ClientHello capture metadata for source_path {self.capture_path}; expected one of [{expected_sha256}]"
             ],
             report["server_hello_artifacts"][0]["failures"],
         )
         self.assertIn(
-            f"serverhello[{serverhello_artifact_path}]: batch: ServerHello source_sha256 different-serverhello-sha256 does not match ClientHello capture metadata for source_path {self.capture_path}; expected one of [{expected_sha256}]",
+            f"serverhello[{serverhello_artifact_path}]: batch: ServerHello source_sha256 {'c' * 64} does not match ClientHello capture metadata for source_path {self.capture_path}; expected one of [{expected_sha256}]",
             report["failures"],
         )
 

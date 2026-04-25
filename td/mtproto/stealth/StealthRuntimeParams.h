@@ -77,6 +77,7 @@ struct StealthRuntimeParams final {
   RuntimePlatformHints platform_hints;
   RuntimeFlowBehaviorPolicy flow_behavior;
   RuntimeProfileSelectionPolicy profile_selection;
+  bool release_mode_profile_gating{false};
   RuntimeRoutePolicy route_policy;
   RuntimeRouteFailurePolicy route_failure;
   size_t bulk_threshold_bytes{8192};

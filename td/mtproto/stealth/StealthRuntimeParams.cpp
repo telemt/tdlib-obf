@@ -223,6 +223,55 @@ Status validate_allowed_profile_weights_for_platform(const ProfileWeights &weigh
   return Status::OK();
 }
 
+uint8 profile_weight_for_runtime_validation(const ProfileWeights &weights, BrowserProfile profile) {
+  switch (profile) {
+    case BrowserProfile::Chrome133:
+      return weights.chrome133;
+    case BrowserProfile::Chrome131:
+      return weights.chrome131;
+    case BrowserProfile::Chrome120:
+      return weights.chrome120;
+    case BrowserProfile::Chrome147_Windows:
+      return weights.chrome147_windows;
+    case BrowserProfile::Chrome147_IOSChromium:
+      return weights.chrome147_ios_chromium;
+    case BrowserProfile::Firefox148:
+    case BrowserProfile::Firefox149_MacOS26_3:
+      return weights.firefox148;
+    case BrowserProfile::Firefox149_Windows:
+      return weights.firefox149_windows;
+    case BrowserProfile::Safari26_3:
+      return weights.safari26_3;
+    case BrowserProfile::IOS14:
+      return weights.ios14;
+    case BrowserProfile::Android11_OkHttp_Advisory:
+      return weights.android11_okhttp_advisory;
+    default:
+      UNREACHABLE();
+      return 0;
+  }
+}
+
+Status validate_release_mode_profile_gating(const StealthRuntimeParams &params) {
+  if (!params.release_mode_profile_gating) {
+    return Status::OK();
+  }
+
+  uint32 release_weight_total = 0;
+  auto allowed_profiles = allowed_profiles_for_platform(params.platform_hints);
+  for (auto profile : allowed_profiles) {
+    if (!profile_fixture_metadata(profile).release_gating) {
+      continue;
+    }
+    release_weight_total += profile_weight_for_runtime_validation(params.profile_weights, profile);
+  }
+  if (release_weight_total == 0) {
+    return Status::Error(
+        "release_mode_profile_gating requires at least one release_gating profile weight for platform_hints");
+  }
+  return Status::OK();
+}
+
 }  // namespace
 
 StealthRuntimeParams::StealthRuntimeParams() noexcept {
@@ -247,6 +296,7 @@ Status validate_runtime_stealth_params(const StealthRuntimeParams &params) noexc
   TRY_STATUS(validate_runtime_profile_selection_policy(params.profile_selection));
   TRY_STATUS(validate_profile_weights(params.profile_weights));
   TRY_STATUS(validate_allowed_profile_weights_for_platform(params.profile_weights, params.platform_hints));
+  TRY_STATUS(validate_release_mode_profile_gating(params));
   TRY_STATUS(validate_route_entry("route_policy.unknown", params.route_policy.unknown, true));
   TRY_STATUS(validate_route_entry("route_policy.ru", params.route_policy.ru, true));
   TRY_STATUS(validate_route_entry("route_policy.non_ru", params.route_policy.non_ru, false));
