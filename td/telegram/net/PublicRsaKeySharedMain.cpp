@@ -8,18 +8,17 @@
 
 #include "td/telegram/net/NetReliabilityMonitor.h"
 
-#include "td/mtproto/PacketAlignmentSeeds.h"
 #include "td/mtproto/BlobStore.h"
+#include "td/mtproto/PacketAlignmentSeeds.h"
 
 #include "td/net/SessionTicketSeeds.h"
 
 #include "td/telegram/net/ConfigCacheSeeds.h"
 
+#include "td/utils/CatalogWeightTable.h"
 #include "td/utils/crypto.h"
 #include "td/utils/format.h"
 #include "td/utils/HashIndexSeeds.h"
-#include "td/utils/CatalogWeightTable.h"
-#include "td/utils/Slice.h"
 #include "td/utils/SliceBuilder.h"
 #include "td/utils/UInt.h"
 
@@ -77,15 +76,26 @@ size_t PublicRsaKeySharedMain::expected_entry_count(bool is_test) {
   return 1;
 }
 
+size_t PublicRsaKeySharedMain::minimum_entry_count(bool is_test) {
+  static_cast<void>(is_test);
+  return 1;
+}
+
+size_t PublicRsaKeySharedMain::maximum_entry_count(bool is_test) {
+  static_cast<void>(is_test);
+  return 2;
+}
+
 Status PublicRsaKeySharedMain::validate_entry_count(size_t observed_entry_count, bool is_test) {
-  auto expected_count = expected_entry_count(is_test);
-  if (observed_entry_count == expected_count) {
+  auto minimum_count = minimum_entry_count(is_test);
+  auto maximum_count = maximum_entry_count(is_test);
+  if (minimum_count <= observed_entry_count && observed_entry_count <= maximum_count) {
     return Status::OK();
   }
 
-  net_health::note_main_key_set_cardinality_failure(is_test, observed_entry_count, expected_count);
-  return Status::Error(PSLICE() << "Unexpected entry count " << observed_entry_count << ", expected "
-                                << expected_count);
+  net_health::note_main_key_set_cardinality_failure(is_test, observed_entry_count, maximum_count);
+  return Status::Error(PSLICE() << "Unexpected entry count " << observed_entry_count << ", expected within ["
+                                << minimum_count << ", " << maximum_count << "]");
 }
 
 Status PublicRsaKeySharedMain::check_catalog_entry(int64 fingerprint, bool is_test) {
@@ -151,6 +161,7 @@ Result<mtproto::PublicRsaKeyInterface::RsaKey> PublicRsaKeySharedMain::get_rsa_k
       }
     }
   }
+  net_health::note_entry_lookup_miss(fingerprints.size());
   return Status::Error(PSLICE() << "Unknown entry set " << fingerprints);
 }
 

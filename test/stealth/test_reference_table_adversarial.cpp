@@ -28,4 +28,15 @@ TEST(ReferenceTableAdversarial, HostRejectsWhitespaceAndTrailingDotVariants) {
   ASSERT_FALSE(td::ReferenceTable::contains_host("dns.google."));
 }
 
+TEST(ReferenceTableAdversarial, ClassCatalogFailsClosedOutsideBounds) {
+  ASSERT_TRUE(td::ReferenceTable::class_tag(99).empty());
+  ASSERT_EQ(0u, td::ReferenceTable::class_token_count(99));
+  ASSERT_TRUE(td::ReferenceTable::class_token(99, 0).empty());
+}
+
+TEST(ReferenceTableAdversarial, ClassTokenLookupRejectsOutOfRangeIndexes) {
+  ASSERT_TRUE(td::ReferenceTable::class_token(4, 4).empty());
+  ASSERT_TRUE(td::ReferenceTable::class_token(0, 1).empty());
+}
+
 }  // namespace

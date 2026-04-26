@@ -156,6 +156,14 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_reauth_delay_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_ingestion_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_first_seen_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_ingestion_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_encapsulated_key_validity_invariants.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_firefox_macos_psk_extension_invariants.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_grease_key_share_entry_invariants.cpp
@@ -527,6 +535,12 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_apple_trust_store_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_apple_trust_store_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_apple_trust_store_edge_cases.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_unit.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_host_latch_stress.cpp
 
   ${CMAKE_CURRENT_SOURCE_DIR}/data.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/data.h

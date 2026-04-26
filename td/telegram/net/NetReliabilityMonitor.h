@@ -29,7 +29,13 @@ struct NetMonitorCounters final {
   uint64 bind_encrypted_message_invalid_total{0};    // bind responses that were structurally unexpected
   uint64 bind_retry_budget_exhausted_total{0};       // sessions that exhausted the bind retry allowance
   uint64 main_key_set_cardinality_failure_total{0};  // observed server key set differed from expected
+  uint64 entry_lookup_miss_total{0};                 // static main keyset lookup failed for all advertised values
   uint64 low_server_fingerprint_count_total{0};      // server identity set smaller than expected baseline
+  uint64 route_bundle_parse_failure_total{0};        // malformed control-path key material
+  uint64 route_bundle_entry_overflow_total{0};       // per-route keyset exceeded reviewed bounds
+  uint64 route_bundle_route_overflow_total{0};       // control payload announced too many routes
+  uint64 route_bundle_change_total{0};               // route keyset changed across refreshes
+  uint64 route_entry_first_seen_total{0};            // persistent route entry observed for the first time
   uint64 main_dc_migration_accept_total{0};          // accepted main-route change commands
   uint64 main_dc_migration_reject_total{0};          // rejected main-route change commands
   uint64 main_dc_migration_rate_limit_total{0};      // rejected route changes due to cooldown
@@ -46,7 +52,13 @@ void note_session_param_coerce_attempt() noexcept;
 void note_bind_encrypted_message_invalid(int32 dc_id, bool has_immunity) noexcept;
 void note_bind_retry_budget_exhausted(int32 dc_id) noexcept;
 void note_main_key_set_cardinality_failure(bool is_test, size_t observed_count, size_t expected_count) noexcept;
+void note_entry_lookup_miss(size_t observed_count) noexcept;
 void note_low_server_fingerprint_count(size_t observed_count) noexcept;
+void note_route_bundle_parse_failure() noexcept;
+void note_route_bundle_entry_overflow() noexcept;
+void note_route_bundle_route_overflow() noexcept;
+void note_route_bundle_change() noexcept;
+void note_route_entry_first_seen() noexcept;
 void note_main_dc_migration(bool accepted, bool rate_limited) noexcept;
 void note_auth_key_destroy(int32 dc_id, AuthKeyDestroyReason reason, double now) noexcept;
 

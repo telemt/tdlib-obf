@@ -7,6 +7,8 @@
 #include "td/net/SslStream.h"
 
 #if !TD_EMSCRIPTEN
+#include "td/net/HostLatchTable.h"
+
 #include "td/utils/common.h"
 #include "td/utils/crypto.h"
 #include "td/utils/logging.h"
@@ -19,9 +21,11 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
 
 #include <cstring>
 #include <memory>
+#include <mutex>
 
 namespace td {
 
@@ -135,6 +139,72 @@ struct SslHandleDeleter {
 
 using SslHandle = std::unique_ptr<SSL, SslHandleDeleter>;
 
+// ── SPKI anchor verify callback ──────────────────────────────────────────────
+//
+// This callback is installed per-connection (via SSL_set_verify) for any host
+// that falls within the routing anchor window. It fires during certificate chain
+// verification in the TLS handshake (before any application data is accepted).
+//
+// At depth 0 (leaf certificate), the SPKI SHA-256 is extracted and checked
+// against the static anchor table. Mismatch → return 0 (handshake fails closed).
+// At depth > 0 (intermediates/root), the standard chain validation result is
+// forwarded as-is without modification.
+
+static int g_spki_host_ex_idx = -1;
+static std::once_flag g_spki_ex_once;
+
+static int get_spki_host_ex_idx() {
+  std::call_once(g_spki_ex_once,
+                 [] { g_spki_host_ex_idx = SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr); });
+  return g_spki_host_ex_idx;
+}
+
+static int spki_anchor_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
+  // If the chain already failed standard validation, propagate the failure.
+  if (!preverify_ok) {
+    return 0;
+  }
+
+  int depth = X509_STORE_CTX_get_error_depth(ctx);
+  if (depth != 0) {
+    // Not the leaf certificate — nothing to check at this level.
+    return 1;
+  }
+
+  // Retrieve the SSL handle to access per-connection ex_data.
+  int ssl_idx = SSL_get_ex_data_X509_STORE_CTX_idx();
+  SSL *ssl = static_cast<SSL *>(X509_STORE_CTX_get_ex_data(ctx, ssl_idx));
+  if (ssl == nullptr) {
+    // Cannot retrieve SSL handle — fail closed for safety.
+    LOG(ERROR) << "SPKI anchor callback: failed to retrieve SSL handle from store ctx";
+    return 0;
+  }
+
+  int host_idx = get_spki_host_ex_idx();
+  if (host_idx < 0) {
+    // ex_data index allocation failed during init — fail closed.
+    LOG(ERROR) << "SPKI anchor callback: ex_data index not initialized";
+    return 0;
+  }
+
+  const char *host_ptr = static_cast<const char *>(SSL_get_ex_data(ssl, host_idx));
+  if (host_ptr == nullptr) {
+    // No hostname stored — this connection was not set up with a latch host.
+    // This should not happen if the callback was only installed for latched hosts.
+    LOG(ERROR) << "SPKI anchor callback: no host stored in ex_data";
+    return 0;
+  }
+
+  X509 *leaf_cert = X509_STORE_CTX_get_current_cert(ctx);
+  td::Status status = td::verify_host_latch(td::CSlice(host_ptr), leaf_cert);
+  if (status.is_error()) {
+    LOG(WARNING) << "SPKI anchor mismatch for host " << host_ptr << ": " << status;
+    X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_REJECTED);
+    return 0;
+  }
+  return 1;
+}
+
 }  // namespace
 
 class SslStreamImpl {
@@ -142,6 +212,9 @@ class SslStreamImpl {
   Status init(CSlice host, SslCtx ssl_ctx, bool check_ip_address_as_host) {
     if (!ssl_ctx) {
       return Status::Error("Invalid SSL context provided");
+    }
+    if (std::memchr(host.begin(), '\0', host.size()) != nullptr) {
+      return Status::Error("TLS host contains embedded NUL byte");
     }
 
     clear_openssl_errors("Before SslFd::init");
@@ -180,6 +253,27 @@ class SslStreamImpl {
 #endif
     SSL_set_connect_state(ssl_handle.get());
 
+    // ── SPKI anchor callback installation ──────────────────────────────────
+    // For hosts that fall within a tracked routing anchor window, install the
+    // SPKI anchor verify callback. The callback fires at depth 0 during the
+    // TLS handshake, before any application data can flow. Mismatch → failure.
+    host_ = host.str();
+    if (is_latched_host(CSlice(host_))) {
+      int host_idx = get_spki_host_ex_idx();
+      if (host_idx < 0) {
+        return Status::Error("Failed to initialize SPKI anchor slot");
+      }
+      // Store a pointer to the host string in per-connection ex_data.
+      // The host_ string outlives the SSL handle (both owned by this SslStreamImpl).
+      if (SSL_set_ex_data(ssl_handle.get(), host_idx, static_cast<void *>(const_cast<char *>(host_.c_str()))) != 1) {
+        return Status::Error("Failed to attach host to SSL handle for SPKI anchor check");
+      }
+      // Force peer verification for pinned host families so SPKI checks are
+      // always evaluated even if the base context was created as VerifyPeer::Off.
+      SSL_set_verify(ssl_handle.get(), SSL_VERIFY_PEER, spki_anchor_verify_callback);
+      LOG(DEBUG) << "Installed SPKI anchor callback for host " << host_;
+    }
+
     ssl_handle_ = std::move(ssl_handle);
 
     return Status::OK();
@@ -200,6 +294,7 @@ class SslStreamImpl {
 
  private:
   SslHandle ssl_handle_;
+  string host_;  // stored for SPKI anchor callback lifetime
 
   friend class SslReadByteFlow;
   friend class SslWriteByteFlow;

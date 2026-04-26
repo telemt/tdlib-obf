@@ -35,7 +35,10 @@ bool is_tracked_dc_id(int32 dc_id) {
 
 NetMonitorState resolve_health_state(const NetMonitorCounters &counters) {
   if (counters.session_param_coerce_attempt_total != 0 || counters.bind_encrypted_message_invalid_total != 0 ||
-      counters.main_key_set_cardinality_failure_total != 0 || counters.low_server_fingerprint_count_total != 0 ||
+      counters.main_key_set_cardinality_failure_total != 0 || counters.entry_lookup_miss_total != 0 ||
+      counters.low_server_fingerprint_count_total != 0 || counters.route_bundle_parse_failure_total != 0 ||
+      counters.route_bundle_entry_overflow_total != 0 || counters.route_bundle_route_overflow_total != 0 ||
+      counters.route_bundle_change_total != 0 || counters.route_entry_first_seen_total != 0 ||
       counters.main_dc_migration_reject_total != 0 || counters.main_dc_migration_rate_limit_total != 0 ||
       counters.auth_key_destroy_burst_total != 0) {
     return NetMonitorState::Suspicious;
@@ -78,11 +81,48 @@ void note_main_key_set_cardinality_failure(bool is_test, size_t observed_count, 
   state.counters.main_key_set_cardinality_failure_total++;
 }
 
+void note_entry_lookup_miss(size_t observed_count) noexcept {
+  static_cast<void>(observed_count);
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.entry_lookup_miss_total++;
+}
+
 void note_low_server_fingerprint_count(size_t observed_count) noexcept {
   static_cast<void>(observed_count);
   auto &state = storage();
   std::lock_guard<std::mutex> guard(state.mutex);
   state.counters.low_server_fingerprint_count_total++;
+}
+
+void note_route_bundle_parse_failure() noexcept {
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.route_bundle_parse_failure_total++;
+}
+
+void note_route_bundle_entry_overflow() noexcept {
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.route_bundle_entry_overflow_total++;
+}
+
+void note_route_bundle_route_overflow() noexcept {
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.route_bundle_route_overflow_total++;
+}
+
+void note_route_bundle_change() noexcept {
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.route_bundle_change_total++;
+}
+
+void note_route_entry_first_seen() noexcept {
+  auto &state = storage();
+  std::lock_guard<std::mutex> guard(state.mutex);
+  state.counters.route_entry_first_seen_total++;
 }
 
 void note_main_dc_migration(bool accepted, bool rate_limited) noexcept {

@@ -22,6 +22,8 @@ class PublicRsaKeySharedMain final : public mtproto::PublicRsaKeyInterface {
 
   static std::shared_ptr<PublicRsaKeySharedMain> create(bool is_test);
   static size_t expected_entry_count(bool is_test);
+  static size_t minimum_entry_count(bool is_test);
+  static size_t maximum_entry_count(bool is_test);
   static Status validate_entry_count(size_t observed_entry_count, bool is_test);
   static Status check_catalog_entry(int64 fingerprint, bool is_test);
 

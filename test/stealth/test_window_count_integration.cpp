@@ -9,6 +9,7 @@
 #include "td/mtproto/utils.h"
 
 #include "td/telegram/net/NetReliabilityMonitor.h"
+#include "td/telegram/net/PublicRsaKeySharedMain.h"
 
 #include "td/utils/tests.h"
 #include "td/utils/tl_parsers.h"
@@ -64,6 +65,24 @@ class CountingHandshakeContext final : public AuthKeyHandshakeContext {
 
  private:
   PublicRsaKeyInterface *public_rsa_key_;
+};
+
+class StaticKeysetHandshakeContext final : public AuthKeyHandshakeContext {
+ public:
+  explicit StaticKeysetHandshakeContext(std::shared_ptr<PublicRsaKeyInterface> public_rsa_key)
+      : public_rsa_key_(std::move(public_rsa_key)) {
+  }
+
+  DhCallback *get_dh_callback() final {
+    return nullptr;
+  }
+
+  PublicRsaKeyInterface *get_public_rsa_key_interface() final {
+    return public_rsa_key_.get();
+  }
+
+ private:
+  std::shared_ptr<PublicRsaKeyInterface> public_rsa_key_;
 };
 
 template <class T>
@@ -146,6 +165,27 @@ TEST(WindowCountIntegration, MinimumEntrySetStillUsesPinnedLookup) {
   ASSERT_EQ(1, public_rsa_key.drop_keys_calls);
   ASSERT_EQ(2u, public_rsa_key.last_fingerprints.size());
   ASSERT_EQ(1u, callback.sent_messages.size());
+  ASSERT_EQ(0u, snapshot.counters.low_server_fingerprint_count_total);
+}
+
+TEST(WindowCountIntegration, StaticKeysetLookupMissIncrementsCounter) {
+  td::net_health::reset_net_monitor_for_tests();
+
+  AuthKeyHandshake handshake(2, 0);
+  CapturingHandshakeCallback callback;
+  auto static_keyset = td::PublicRsaKeySharedMain::create(false);
+  StaticKeysetHandshakeContext context(static_keyset);
+
+  handshake.resume(static_cast<AuthKeyHandshake::Callback *>(&callback));
+  ASSERT_EQ(1u, callback.sent_messages.size());
+
+  auto nonce = extract_req_pq_nonce(callback.sent_messages[0]);
+  auto res_pq = make_res_pq_message(nonce, {0x3a3a3a3a3a3a3a3aLL, 0x7b7b7b7b7b7b7b7bLL});
+  auto status = handshake.on_message(res_pq, static_cast<AuthKeyHandshake::Callback *>(&callback), &context);
+
+  auto snapshot = td::net_health::get_net_monitor_snapshot();
+  ASSERT_TRUE(status.is_error());
+  ASSERT_EQ(1u, snapshot.counters.entry_lookup_miss_total);
   ASSERT_EQ(0u, snapshot.counters.low_server_fingerprint_count_total);
 }
 

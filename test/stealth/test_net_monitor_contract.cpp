@@ -29,6 +29,16 @@ TEST(NetMonitorContract, CoerceAttemptEscalatesMonitorState) {
   ASSERT_EQ(1u, snapshot.counters.session_param_coerce_attempt_total);
 }
 
+TEST(NetMonitorContract, EntryLookupMissEscalatesMonitorState) {
+  td::net_health::reset_net_monitor_for_tests();
+
+  td::net_health::note_entry_lookup_miss(2);
+
+  auto snapshot = td::net_health::get_net_monitor_snapshot();
+  ASSERT_TRUE(snapshot.state == td::net_health::NetMonitorState::Suspicious);
+  ASSERT_EQ(1u, snapshot.counters.entry_lookup_miss_total);
+}
+
 TEST(NetMonitorContract, SingleDestroyDefersReauthenticationForSameDc) {
   td::net_health::reset_net_monitor_for_tests();
 

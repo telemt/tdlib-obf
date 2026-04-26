@@ -8,6 +8,8 @@
 
 #include "td/telegram/Global.h"
 #include "td/telegram/net/NetQueryCreator.h"
+#include "td/telegram/net/NetQueryDispatcher.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/TdDb.h"
 #include "td/telegram/telegram_api.h"
 #include "td/telegram/Version.h"
@@ -15,11 +17,43 @@
 #include "td/mtproto/RSA.h"
 
 #include "td/utils/logging.h"
+#include "td/utils/SliceBuilder.h"
 #include "td/utils/Time.h"
+
+#include <unordered_set>
 
 namespace td {
 
+namespace {
+
+bool persist_route_entry_metadata(int32 dc_id, int64 fingerprint, int64 now) {
+  auto *pmc = G()->td_db()->get_binlog_pmc();
+  auto prefix = PSTRING() << "cdn_route_bundle_v1_dc_" << dc_id << "_entry_" << static_cast<uint64>(fingerprint);
+  auto first_seen_key = prefix + "_first_seen";
+  auto last_seen_key = prefix + "_last_seen";
+  bool is_new = pmc->get(first_seen_key).empty();
+  if (is_new) {
+    pmc->set(first_seen_key, to_string(now));
+  }
+  pmc->set(last_seen_key, to_string(now));
+  return is_new;
+}
+
+}  // namespace
+
 PublicRsaKeyWatchdog::PublicRsaKeyWatchdog(ActorShared<> parent) : parent_(std::move(parent)) {
+}
+
+size_t PublicRsaKeyWatchdog::maximum_route_count() {
+  return 8;
+}
+
+Status PublicRsaKeyWatchdog::validate_route_count(size_t observed_route_count) {
+  if (observed_route_count >= 1 && observed_route_count <= maximum_route_count()) {
+    return Status::OK();
+  }
+  return Status::Error(PSLICE() << "Unexpected route count " << observed_route_count << ", expected within [1, "
+                                << maximum_route_count() << "]");
 }
 
 void PublicRsaKeyWatchdog::add_public_rsa_key(std::shared_ptr<PublicRsaKeySharedCdn> key) {
@@ -104,11 +138,29 @@ void PublicRsaKeyWatchdog::sync(BufferSlice cdn_config_serialized) {
   }
   auto r_keys = fetch_result<telegram_api::help_getCdnConfig>(cdn_config_serialized);
   if (r_keys.is_error()) {
+    net_health::note_route_bundle_parse_failure();
     LOG(WARNING) << "Failed to deserialize help_getCdnConfig (probably not a problem) " << r_keys.error();
     loop();
     return;
   }
-  cdn_config_ = r_keys.move_as_ok();
+  auto next_config = r_keys.move_as_ok();
+  std::unordered_set<int32> route_set;
+  route_set.reserve(next_config->public_keys_.size());
+  for (const auto &config_key : next_config->public_keys_) {
+    route_set.insert(config_key->dc_id_);
+  }
+  auto route_status = validate_route_count(route_set.size());
+  if (route_status.is_error()) {
+    net_health::note_route_bundle_route_overflow();
+    LOG(WARNING) << "Reject route bundle: " << route_status;
+    for (auto &key : keys_) {
+      key->drop_keys();
+    }
+    loop();
+    return;
+  }
+
+  cdn_config_ = std::move(next_config);
   if (keys_.empty()) {
     LOG(INFO) << "Load " << to_string(cdn_config_);
   } else {
@@ -123,15 +175,42 @@ void PublicRsaKeyWatchdog::sync_key(std::shared_ptr<PublicRsaKeySharedCdn> &key)
   if (!cdn_config_) {
     return;
   }
+  vector<mtproto::RSA> entries;
   for (auto &config_key : cdn_config_->public_keys_) {
     if (key->dc_id().get_raw_id() == config_key->dc_id_) {
       auto r_rsa = mtproto::RSA::from_pem_public_key(config_key->public_key_);
       if (r_rsa.is_error()) {
+        net_health::note_route_bundle_parse_failure();
+        key->drop_keys();
         LOG(ERROR) << r_rsa.error();
-        continue;
+        return;
       }
-      LOG(INFO) << "Add CDN " << key->dc_id() << " key with fingerprint " << r_rsa.ok().get_fingerprint();
-      key->add_rsa(r_rsa.move_as_ok());
+      entries.push_back(r_rsa.move_as_ok());
+    }
+  }
+
+  bool set_changed = false;
+  auto status = key->sync_entries_allow_empty(std::move(entries), &set_changed);
+  if (status.is_error()) {
+    auto error_message = status.message().str();
+    if (error_message.rfind("Unexpected entry count", 0) == 0) {
+      net_health::note_route_bundle_entry_overflow();
+    } else {
+      net_health::note_route_bundle_parse_failure();
+    }
+    LOG(WARNING) << "Reject route bundle for " << key->dc_id() << ": " << status;
+    return;
+  }
+
+  if (set_changed) {
+    net_health::note_route_bundle_change();
+    LOG(WARNING) << "Route bundle changed for " << key->dc_id();
+  }
+
+  auto now = static_cast<int64>(Time::now());
+  for (auto fingerprint : key->get_fingerprints()) {
+    if (persist_route_entry_metadata(key->dc_id().get_raw_id(), fingerprint, now)) {
+      net_health::note_route_entry_first_seen();
     }
   }
 }

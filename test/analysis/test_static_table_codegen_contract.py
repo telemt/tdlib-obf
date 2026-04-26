@@ -16,6 +16,26 @@ if str(TOOLS_CATALOG_SYNC_DIR) not in sys.path:
 import refresh_static_tables
 
 
+def _load_requirement_entries(requirements_path: pathlib.Path) -> list[str]:
+    entries = []
+    current_parts = []
+    for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.endswith("\\"):
+            current_parts.append(stripped[:-1].strip())
+            continue
+
+        current_parts.append(stripped)
+        entries.append(" ".join(part for part in current_parts if part))
+        current_parts.clear()
+
+    if current_parts:
+        entries.append(" ".join(part for part in current_parts if part))
+    return entries
+
+
 class StaticTableCodegenContractTest(unittest.TestCase):
     def test_tool_scaffold_exists(self) -> None:
         self.assertTrue(
@@ -26,6 +46,37 @@ class StaticTableCodegenContractTest(unittest.TestCase):
             (TOOLS_CATALOG_SYNC_DIR / "requirements.txt").exists(),
             msg="static table refresh tool must declare its Python dependencies",
         )
+
+    def test_catalog_dependency_rows_include_digest_guards(self) -> None:
+        requirements_path = TOOLS_CATALOG_SYNC_DIR / "requirements.txt"
+        requirements_lines = _load_requirement_entries(requirements_path)
+
+        self.assertGreater(
+            len(requirements_lines),
+            0,
+            msg="catalog sync requirements must not be empty",
+        )
+        for requirement_line in requirements_lines:
+            self.assertIn(
+                "--hash=sha256:",
+                requirement_line,
+                msg="every catalog sync dependency must be hash-pinned",
+            )
+
+    def test_catalog_dependency_lock_covers_runtime_rows(self) -> None:
+        requirements_path = TOOLS_CATALOG_SYNC_DIR / "requirements.txt"
+        requirements_lines = _load_requirement_entries(requirements_path)
+
+        normalized_lines = [line.lower() for line in requirements_lines]
+        expected_packages = ["cryptography", "cffi", "pycparser"]
+        for package_name in expected_packages:
+            self.assertTrue(
+                any(line.startswith(f"{package_name}==") for line in normalized_lines),
+                msg=(
+                    "catalog sync dependency lock must explicitly pin transitive dependencies; "
+                    f"missing {package_name}"
+                ),
+            )
 
     def test_manifest_path_is_gitignored(self) -> None:
         gitignore_text = GITIGNORE_PATH.read_text(encoding="utf-8")

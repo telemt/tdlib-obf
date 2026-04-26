@@ -8,16 +8,13 @@
 
 #include "td/telegram/net/NetActor.h"
 #include "td/telegram/net/NetQuery.h"
-#include "td/telegram/net/NetQueryCreator.h"
-#include "td/telegram/net/NetQueryDispatcher.h"
 #include "td/telegram/net/PublicRsaKeySharedCdn.h"
 #include "td/telegram/telegram_api.h"
-
-#include "td/actor/actor.h"
 
 #include "td/utils/buffer.h"
 #include "td/utils/common.h"
 #include "td/utils/FloodControlStrict.h"
+#include "td/utils/Status.h"
 
 #include <memory>
 
@@ -26,6 +23,9 @@ namespace td {
 class PublicRsaKeyWatchdog final : public NetActor {
  public:
   explicit PublicRsaKeyWatchdog(ActorShared<> parent);
+
+  static size_t maximum_route_count();
+  static Status validate_route_count(size_t observed_route_count);
 
   void add_public_rsa_key(std::shared_ptr<PublicRsaKeySharedCdn> key);
 

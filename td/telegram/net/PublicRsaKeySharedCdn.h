@@ -32,6 +32,12 @@ class PublicRsaKeySharedCdn final : public mtproto::PublicRsaKeyInterface {
   };
 
   void add_rsa(mtproto::RSA rsa);
+  Status replace_entries(vector<mtproto::RSA> entries, bool *set_changed = nullptr);
+  Status sync_entries_allow_empty(vector<mtproto::RSA> entries, bool *set_changed = nullptr);
+  vector<int64> get_fingerprints();
+
+  static size_t maximum_entry_count();
+  static Status validate_entry_count(size_t observed_entry_count);
 
   Result<RsaKey> get_rsa_key(const vector<int64> &fingerprints) final;
 
@@ -48,6 +54,7 @@ class PublicRsaKeySharedCdn final : public mtproto::PublicRsaKeyInterface {
  private:
   DcId dc_id_;
   vector<RsaKey> keys_;
+  bool has_initialized_keyset_{false};
   vector<unique_ptr<Listener>> listeners_;
   RwMutex rw_mutex_;
 
