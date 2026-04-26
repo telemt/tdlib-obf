@@ -13,7 +13,9 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "environment": {
-        "CMAKE_BUILD_PARALLEL_LEVEL": "14"
+        "CMAKE_BUILD_PARALLEL_LEVEL": "14",
+        "CC": "gcc-15",
+        "CXX": "g++-15"
       },
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "ON",

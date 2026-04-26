@@ -252,6 +252,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_service_ack_mix_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_phase_hint_drift_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_connection_hint_wiring.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_connection_parse_error_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_proxy_route_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_ping_proxy_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_security.cpp
@@ -261,6 +262,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_log_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_retry_policy_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_retry_failure_log_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_ping_proxy_log_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp

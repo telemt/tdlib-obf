@@ -210,7 +210,15 @@ function(td_set_up_compiler)
       add_cxx_compiler_flag("-Werror=implicit-fallthrough")
     endif()
 
-    add_cxx_compiler_flag("-flto-odr-type-merging")
+    # GCC 13.x has reproducible internal compiler errors (Bus error in cc1plus)
+    # in this codebase when -flto-odr-type-merging is enabled during heavy test
+    # target compilation. Keep the optimization for non-GCC compilers and for
+    # GCC 15.2+, but fail-closed to stability for older GCC toolchains.
+    if (NOT GCC OR NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.2))
+      add_cxx_compiler_flag("-flto-odr-type-merging")
+    else()
+      message(WARNING "Disabling -flto-odr-type-merging for GCC ${CMAKE_CXX_COMPILER_VERSION} to avoid known ICE crashes; GCC 15.2+ re-enables it.")
+    endif()
     add_cxx_compiler_flag("-Qunused-arguments")
     add_cxx_compiler_flag("-Walloc-zero")
     add_cxx_compiler_flag("-Wc++20-compat-pedantic")

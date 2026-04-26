@@ -50,6 +50,12 @@
                 "-DTD_ENABLE_LLD=ON",
                 "-DTD_ENABLE_NATIVE_ARCH=ON"
             ],
+            "options": {
+                "env": {
+                    "CC": "gcc-15",
+                    "CXX": "g++-15"
+                }
+            },
             "group": "build",
             "dependsOn": [
                 "cmake build tests preset"
@@ -76,6 +82,12 @@
                 "-DTD_ENABLE_LLD=ON",
                 "-DTD_ENABLE_NATIVE_ARCH=ON"
             ],
+            "options": {
+                "env": {
+                    "CC": "gcc-15",
+                    "CXX": "g++-15"
+                }
+            },
             "problemMatcher": [
                 "$gcc"
             ]
@@ -98,6 +110,12 @@
                 "-DTD_ENABLE_LLD=ON",
                 "-DTD_ENABLE_NATIVE_ARCH=ON"
             ],
+            "options": {
+                "env": {
+                    "CC": "gcc-15",
+                    "CXX": "g++-15"
+                }
+            },
             "problemMatcher": [
                 "$gcc"
             ]

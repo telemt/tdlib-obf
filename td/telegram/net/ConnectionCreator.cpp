@@ -568,7 +568,7 @@ void ConnectionCreator::ping_proxy(td_api::object_ptr<td_api::proxy> input_proxy
       }
 
       ping_proxy_buffered_socket_fd(std::move(ip_address), BufferedFd<SocketFd>(r_socket_fd.move_as_ok()),
-                                    r_transport_type.move_as_ok(), PSTRING() << info.option->get_ip_address(),
+                                    r_transport_type.move_as_ok(), PSTRING() << info.option->get_ip_address(), Proxy(),
                                     PromiseCreator::lambda([actor_id = actor_id(this), token](Result<double> result) {
                                       send_closure(actor_id, &ConnectionCreator::on_ping_main_dc_result, token,
                                                    std::move(result));
@@ -582,7 +582,12 @@ void ConnectionCreator::ping_proxy(td_api::object_ptr<td_api::proxy> input_proxy
                PromiseCreator::lambda(
                    [actor_id = actor_id(this), promise = std::move(promise), proxy](Result<IPAddress> result) mutable {
                      if (result.is_error()) {
-                       return promise.set_error(400, result.error().public_message());
+                       auto error = result.move_as_error();
+                       LOG(WARNING) << "Ping proxy DNS resolve failed" << tag("proxy_mode", proxy_mode_name(proxy))
+                                    << tag("proxy_server", proxy.server()) << tag("proxy_port", proxy.port())
+                                    << tag("status_code", error.code())
+                                    << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
+                       return promise.set_error(400, error.public_message());
                      }
                      send_closure(actor_id, &ConnectionCreator::ping_proxy_resolved, std::move(proxy),
                                   result.move_as_ok(), std::move(promise));
@@ -594,21 +599,34 @@ void ConnectionCreator::ping_proxy_resolved(Proxy &&proxy, IPAddress ip_address,
   FindConnectionExtra extra;
   auto r_socket_fd = find_connection(proxy, ip_address, main_dc_id, false, extra);
   if (r_socket_fd.is_error()) {
-    return promise.set_error(400, r_socket_fd.error().public_message());
+    auto error = r_socket_fd.move_as_error();
+    LOG(WARNING) << "Ping proxy route resolution failed" << tag("proxy_mode", proxy_mode_name(proxy))
+                 << tag("proxy_server", proxy.server()) << tag("proxy_port", proxy.port())
+                 << tag("resolved_proxy_ip", ip_address) << tag("status_code", error.code())
+                 << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
+    return promise.set_error(400, error.public_message());
   }
   auto socket_fd = r_socket_fd.move_as_ok();
 
-  auto connection_promise = PromiseCreator::lambda(
-      [actor_id = actor_id(this), ip_address, promise = std::move(promise), transport_type = extra.transport_type,
-       debug_str = extra.debug_str](Result<ConnectionData> r_connection_data) mutable {
-        if (r_connection_data.is_error()) {
-          return promise.set_error(400, r_connection_data.error().public_message());
-        }
-        auto connection_data = r_connection_data.move_as_ok();
-        send_closure(actor_id, &ConnectionCreator::ping_proxy_buffered_socket_fd, ip_address,
-                     std::move(connection_data.buffered_socket_fd), std::move(transport_type), std::move(debug_str),
-                     std::move(promise));
-      });
+  auto connection_promise = PromiseCreator::lambda([actor_id = actor_id(this), ip_address, promise = std::move(promise),
+                                                    transport_type = extra.transport_type, debug_str = extra.debug_str,
+                                                    proxy](Result<ConnectionData> r_connection_data) mutable {
+    if (r_connection_data.is_error()) {
+      auto error = r_connection_data.move_as_error();
+      LOG(WARNING) << "Ping proxy transport setup failed" << tag("proxy_mode", proxy_mode_name(proxy))
+                   << tag("proxy_server", proxy.server()) << tag("proxy_port", proxy.port())
+                   << tag("transport", raw_ip_transport_name(transport_type))
+                   << tag("transport_dc_id", transport_type.dc_id)
+                   << tag("tls_emulation", transport_type.secret.emulate_tls()) << tag("target_ip", ip_address)
+                   << tag("debug_route", debug_str) << tag("status_code", error.code())
+                   << tag("status_message", sanitize_connection_failure_status_message_for_log(error));
+      return promise.set_error(400, error.public_message());
+    }
+    auto connection_data = r_connection_data.move_as_ok();
+    send_closure(actor_id, &ConnectionCreator::ping_proxy_buffered_socket_fd, ip_address,
+                 std::move(connection_data.buffered_socket_fd), std::move(transport_type), std::move(debug_str),
+                 std::move(proxy), std::move(promise));
+  });
   CHECK(proxy.use_proxy());
   auto token = next_token();
   auto ref = prepare_connection(extra.ip_address, std::move(socket_fd), proxy, extra.mtproto_ip_address,
@@ -621,21 +639,33 @@ void ConnectionCreator::ping_proxy_resolved(Proxy &&proxy, IPAddress ip_address,
 
 void ConnectionCreator::ping_proxy_buffered_socket_fd(IPAddress ip_address, BufferedFd<SocketFd> buffered_socket_fd,
                                                       mtproto::TransportType transport_type, string debug_str,
-                                                      Promise<double> promise) {
+                                                      Proxy proxy_context, Promise<double> promise) {
   auto token = next_token();
   auto raw_connection =
       mtproto::RawConnection::create(ip_address, std::move(buffered_socket_fd), std::move(transport_type), nullptr);
   children_[token] = {
-      false, create_ping_actor(debug_str, std::move(raw_connection), nullptr,
-                               PromiseCreator::lambda([promise = std::move(promise)](
-                                                          Result<unique_ptr<mtproto::RawConnection>> result) mutable {
-                                 if (result.is_error()) {
-                                   return promise.set_error(400, result.error().public_message());
-                                 }
-                                 auto ping_time = result.ok()->extra().rtt;
-                                 promise.set_value(std::move(ping_time));
-                               }),
-                               create_reference(token))};
+      false,
+      create_ping_actor(
+          debug_str, std::move(raw_connection), nullptr,
+          PromiseCreator::lambda([promise = std::move(promise), ip_address, transport_type,
+                                  debug_str = std::move(debug_str), proxy_context = std::move(proxy_context)](
+                                     Result<unique_ptr<mtproto::RawConnection>> result) mutable {
+            if (result.is_error()) {
+              auto error = result.move_as_error();
+              auto classification = classify_connection_failure(true, proxy_context, error);
+              LOG(WARNING) << "Ping probe handshake failed" << tag("proxy_mode", proxy_mode_name(proxy_context))
+                           << tag("transport", raw_ip_transport_name(transport_type))
+                           << tag("transport_dc_id", transport_type.dc_id)
+                           << tag("tls_emulation", transport_type.secret.emulate_tls()) << tag("target_ip", ip_address)
+                           << tag("debug_route", debug_str) << tag("status_code", error.code())
+                           << tag("status_message", sanitize_connection_failure_status_message_for_log(error))
+                           << tag("failure_summary", summarize_connection_failure_for_log(classification, error));
+              return promise.set_error(400, error.public_message());
+            }
+            auto ping_time = result.ok()->extra().rtt;
+            promise.set_value(std::move(ping_time));
+          }),
+          create_reference(token))};
 }
 
 void ConnectionCreator::set_active_proxy_id(int32 proxy_id, bool from_binlog) {
