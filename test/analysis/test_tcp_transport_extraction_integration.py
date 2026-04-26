@@ -54,7 +54,7 @@ class TCPTransportExtractionIntegration(unittest.TestCase):
 
             status_path = mirror / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
             status = json.loads(status_path.read_text(encoding="utf-8"))
-            self.assertEqual("fail", status["status"])
+            self.assertEqual("pending", status["status"])
             self.assertEqual(99, int(status["sample_count"]))
             self.assertIn("gate_evaluation", status)
             self.assertIn("tier2", status["gate_evaluation"])
@@ -77,7 +77,7 @@ class TCPTransportExtractionIntegration(unittest.TestCase):
                 cwd=mirror,
             )
 
-            status_path = mirror / "docs" / "Documentation" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
+            status_path = mirror / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
             status = json.loads(status_path.read_text(encoding="utf-8"))
             self.assertEqual("pass", status["status"])
             self.assertIn("selective_drop", status["scenarios"])

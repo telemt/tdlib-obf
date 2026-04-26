@@ -65,7 +65,7 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertIn("python3 test/analysis/render_fingerprint_policy_artifacts.py --repo-root . --now-utc 2026-04-25T00:00:00Z", workflow_text)
         self.assertIn("git diff --exit-code", workflow_text)
         self.assertIn("docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", workflow_text)
-        self.assertIn("docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", workflow_text)
+        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", workflow_text)
         self.assertIn("docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json", workflow_text)
 
     def test_workflow_trigger_paths_cover_generated_status_artifacts(self) -> None:
@@ -74,9 +74,9 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         pull_request_section = workflow_text[workflow_text.index("  pull_request:\n") :]
 
         self.assertIn("docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", push_section)
-        self.assertIn("docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", push_section)
+        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", push_section)
         self.assertIn("docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", pull_request_section)
-        self.assertIn("docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", pull_request_section)
+        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", pull_request_section)
 
     def test_workflow_has_scheduled_active_probing_refresh_wrapper(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")

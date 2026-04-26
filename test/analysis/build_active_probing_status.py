@@ -101,7 +101,7 @@ def main() -> int:
     if not observation_input_path.is_absolute():
         observation_input_path = (repo_root / observation_input_path).resolve()
     observations = load_observations(observation_input_path)
-    out_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
+    out_path = repo_root / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
     payload = build_payload(args.now_utc, observations, observation_input_path.relative_to(repo_root))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

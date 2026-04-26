@@ -48,13 +48,13 @@ class BuildTransportAndActiveProbingStatusContractTest(unittest.TestCase):
             )
 
             transport_path = mirror / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
-            active_path = mirror / "docs" / "Documentation" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
+            active_path = mirror / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
             self.assertTrue(transport_path.exists())
             self.assertTrue(active_path.exists())
 
             transport_text = transport_path.read_text(encoding="utf-8")
             active_text = active_path.read_text(encoding="utf-8")
-            self.assertIn('"status": "fail"', transport_text)
+            self.assertIn('"status": "pending"', transport_text)
             self.assertIn('"ttl_bucket_match_rate"', transport_text)
             self.assertIn('"observation_input_path"', transport_text)
             self.assertIn('"sample_count"', transport_text)

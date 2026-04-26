@@ -14,7 +14,7 @@ on:
       - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
       - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
       - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
-      - 'docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
+      - 'docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
       - 'docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md'
       - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25.md'
@@ -54,7 +54,7 @@ on:
       - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
       - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
       - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
-      - 'docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
+      - 'docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
       - 'docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md'
       - 'docs/Plans/FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25.md'
@@ -128,7 +128,7 @@ jobs:
             docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md \
             docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md \
             docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json \
-            docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json \
+            docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json \
             docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md \
             docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json \
             test/analysis/fingerprint_trust_tiers.json
@@ -306,4 +306,4 @@ jobs:
           name: active-probing-nightly-evidence
           path: |
             artifacts/active_probing_nightly_observations.json
-            docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json
+            docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json

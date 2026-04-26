@@ -266,15 +266,15 @@ def render_release_evidence_summary(
         "status": "pending",
         "artifact_path": None,
         "last_observed_at_utc": None,
-        "source_of_truth": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+        "source_of_truth": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
         "notes": "Generate active probing status artifact via build_active_probing_status.py.",
     }
     if active_probing_status is not None:
         resolved_active_probing_status = {
             "status": str(active_probing_status["status"]),
-            "artifact_path": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+            "artifact_path": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
             "last_observed_at_utc": str(active_probing_status["generated_at_utc"]),
-            "source_of_truth": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+            "source_of_truth": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
             "notes": str(active_probing_status.get("notes", "")),
             "scenarios": active_probing_status.get("scenarios", {}),
         }
@@ -333,7 +333,7 @@ def generate_artifacts(repo_root: pathlib.Path, now_utc: str | None = None) -> d
     ]
     summary_path = repo_root / "docs" / "Generated" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
     transport_status_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
-    active_probing_status_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
+    active_probing_status_path = repo_root / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
     markdown_summary_path = repo_root / "docs" / "Generated" / "FINGERPRINT_TRUST_TIERS.generated.md"
 
     spec = load_tier_spec(spec_path)

@@ -52,7 +52,7 @@ This index reflects the current implementation, not historical intent.
 6. Transport coherence observations: `test/analysis/transport_coherence_observations.json`
 7. Transport coherence status (generated): `docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json`
 8. Active probing nightly observations: `test/analysis/active_probing_nightly_observations.json`
-9. Active probing nightly status (generated): `docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json`
+9. Active probing nightly status (generated): `docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json`
 
 ### Imported candidate lane (non-release)
 

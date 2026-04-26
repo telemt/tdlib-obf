@@ -74,7 +74,7 @@ From `docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json`:
 
 ### 3.2 Active probing
 
-From `docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json`:
+From `docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json`:
 
 ```json
 {

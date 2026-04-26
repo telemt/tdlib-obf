@@ -1,6 +1,6 @@
 {
   "active_probing_nightly": {
-    "artifact_path": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+    "artifact_path": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
     "last_observed_at_utc": "2026-04-25T00:00:00Z",
     "notes": "Scenario counts are produced from compiled stealth tests that exercise adversarial replay/probing, route fallback indistinguishability, and runtime active policy route transitions.",
     "scenarios": {
@@ -17,7 +17,7 @@
         "passed": 11
       }
     },
-    "source_of_truth": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+    "source_of_truth": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
     "status": "pass"
   },
   "advisory_profiles_count_as_tier2_or_higher": false,

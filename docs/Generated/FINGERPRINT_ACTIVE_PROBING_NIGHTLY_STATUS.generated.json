@@ -1,0 +1,27 @@
+{
+  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "notes": "Scenario counts are produced from compiled stealth tests that exercise adversarial replay/probing, route fallback indistinguishability, and runtime active policy route transitions.",
+  "observation_generated_at_utc": "2026-04-25T13:31:00Z",
+  "observation_input_path": "test/analysis/active_probing_nightly_observations.json",
+  "scenarios": {
+    "fallback_route_transition": {
+      "failed": 0,
+      "passed": 3
+    },
+    "reorder_challenge": {
+      "failed": 0,
+      "passed": 7
+    },
+    "selective_drop": {
+      "failed": 0,
+      "passed": 11
+    }
+  },
+  "source_evidence": [
+    "./build/test/run_all_tests --filter TlsHmacReplayAdversarial",
+    "./build/test/run_all_tests --filter RouteEchQuic",
+    "./build/test/run_all_tests --filter TlsRuntimeActivePolicy"
+  ],
+  "source_lane": "active_probing_nightly",
+  "status": "pass"
+}
