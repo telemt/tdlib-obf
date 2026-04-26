@@ -120,7 +120,7 @@ This memo documents the final audit of the Fingerprint Hardening Plan as it stan
 **Status:** ✅ **COMPLETE**
 - Single machine-readable tier spec: `test/analysis/fingerprint_trust_tiers.json` ✓
 - CI drift check: `/.github/workflows/fingerprint-policy-integrity.yml` ✓
-- Generated tier artifacts: `docs/Documentation/FINGERPRINT_TRUST_TIERS.generated.md` ✓
+- Generated tier artifacts: `docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md` ✓
 - All tier sections in docs generated, no manual tier blocks remain ✓
 
 ### Workstream B: Runtime Profile Evidence Clarity
