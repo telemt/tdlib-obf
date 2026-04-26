@@ -233,7 +233,7 @@ def main() -> int:
         observation_payload_path = observation_input_path.relative_to(repo_root)
     except ValueError:
         observation_payload_path = observation_input_path
-    out_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+    out_path = repo_root / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
     payload = build_payload(args.now_utc, observations, observation_payload_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

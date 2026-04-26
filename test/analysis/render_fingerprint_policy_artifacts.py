@@ -244,7 +244,7 @@ def render_release_evidence_summary(
     validate_tier_spec(spec)
     resolved_transport_status = {
         "status": "pending",
-        "source_of_truth": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+        "source_of_truth": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
         "artifact_path": None,
         "last_observed_at_utc": None,
         "required_metrics": list(REQUIRED_TRANSPORT_METRICS),
@@ -254,8 +254,8 @@ def render_release_evidence_summary(
     if transport_status is not None:
         resolved_transport_status = {
             "status": str(transport_status["status"]),
-            "source_of_truth": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
-            "artifact_path": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            "source_of_truth": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            "artifact_path": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
             "last_observed_at_utc": str(transport_status["generated_at_utc"]),
             "required_metrics": list(REQUIRED_TRANSPORT_METRICS),
             "metrics": dict(transport_status["metrics"]),
@@ -332,7 +332,7 @@ def generate_artifacts(repo_root: pathlib.Path, now_utc: str | None = None) -> d
         repo_root / "docs" / "Documentation" / "FINGERPRINT_OPERATIONS_GUIDE.md",
     ]
     summary_path = repo_root / "docs" / "Generated" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
-    transport_status_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+    transport_status_path = repo_root / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
     active_probing_status_path = repo_root / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
     markdown_summary_path = repo_root / "docs" / "Generated" / "FINGERPRINT_TRUST_TIERS.generated.md"
 

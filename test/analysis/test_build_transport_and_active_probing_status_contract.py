@@ -47,7 +47,7 @@ class BuildTransportAndActiveProbingStatusContractTest(unittest.TestCase):
                 cwd=mirror,
             )
 
-            transport_path = mirror / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+            transport_path = mirror / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
             active_path = mirror / "docs" / "Generated" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
             self.assertTrue(transport_path.exists())
             self.assertTrue(active_path.exists())

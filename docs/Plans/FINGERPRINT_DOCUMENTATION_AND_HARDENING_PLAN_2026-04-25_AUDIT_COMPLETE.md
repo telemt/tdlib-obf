@@ -53,7 +53,7 @@ telemt: https://t.me/telemtrs
 
 ### 3.1 Transport coherence
 
-From `docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json`:
+From `docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json`:
 
 ```json
 {

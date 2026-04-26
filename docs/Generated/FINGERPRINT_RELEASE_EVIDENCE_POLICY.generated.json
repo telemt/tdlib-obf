@@ -89,7 +89,7 @@
     "version": 1
   },
   "transport_coherence_status": {
-    "artifact_path": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+    "artifact_path": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
     "last_observed_at_utc": "2026-04-25T00:00:00Z",
     "metrics": {
       "first_flight_segmentation_signature_match_rate": 1.0,
@@ -104,7 +104,7 @@
       "mss_window_scale_bucket_match_rate",
       "first_flight_segmentation_signature_match_rate"
     ],
-    "source_of_truth": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+    "source_of_truth": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
     "status": "pending"
   },
   "transport_layer_coverage_complete": false,

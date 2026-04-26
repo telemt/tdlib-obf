@@ -199,7 +199,7 @@ Reviewed generated artifacts:
 
 Release-status artifact builders:
 
-1. test/analysis/build_transport_coherence_status.py -> docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json
+1. test/analysis/build_transport_coherence_status.py -> docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json
 2. test/analysis/build_active_probing_status.py -> docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json
 
 Observation sources:

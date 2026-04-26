@@ -52,7 +52,7 @@ class TCPTransportExtractionIntegration(unittest.TestCase):
                 cwd=mirror,
             )
 
-            status_path = mirror / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+            status_path = mirror / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
             status = json.loads(status_path.read_text(encoding="utf-8"))
             self.assertEqual("pending", status["status"])
             self.assertEqual(99, int(status["sample_count"]))

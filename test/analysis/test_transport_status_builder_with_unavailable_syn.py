@@ -68,7 +68,7 @@ class TransportStatusBuilderWithUnavailableSyn(unittest.TestCase):
                 cwd=REPO_ROOT,
             )
 
-            status_path = REPO_ROOT / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+            status_path = REPO_ROOT / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
             payload = json.loads(status_path.read_text(encoding="utf-8"))
 
         self.assertEqual("pending", payload["status"])

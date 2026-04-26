@@ -13,7 +13,7 @@ on:
       - 'docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md'
       - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
       - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
-      - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
+      - 'docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
       - 'docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md'
@@ -53,7 +53,7 @@ on:
       - 'docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md'
       - 'docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md'
       - 'docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md'
-      - 'docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
+      - 'docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json'
       - 'docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json'
       - 'docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md'
@@ -127,7 +127,7 @@ jobs:
             docs/Documentation/FINGERPRINT_DOCUMENTATION_INDEX.md \
             docs/Documentation/FINGERPRINT_GENERATION_PIPELINE.md \
             docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md \
-            docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json \
+            docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json \
             docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json \
             docs/Generated/FINGERPRINT_TRUST_TIERS.generated.md \
             docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json \

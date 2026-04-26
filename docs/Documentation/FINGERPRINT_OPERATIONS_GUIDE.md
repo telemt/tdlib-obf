@@ -440,7 +440,7 @@ Fix:
 4. Confirm imported lane remains non-release informational only.
 5. Run nightly corpus mode with TD_NIGHTLY_CORPUS=1.
 6. Confirm advisory-profile runtime exclusion telemetry (`advisory_blocked_total`) is enabled in release-mode builds.
-7. Confirm docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json is regenerated and included in release evidence.
+7. Confirm docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json is regenerated and included in release evidence.
 8. Confirm docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json is regenerated and included in release evidence.
 
 <!-- BEGIN GENERATED TRUST TIER BLOCK -->

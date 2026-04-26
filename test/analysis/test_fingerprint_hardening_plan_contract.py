@@ -15,7 +15,7 @@ REPO_ROOT = THIS_DIR.parents[1]
 PLAN_PATH = REPO_ROOT / "docs" / "Plans" / "FINGERPRINT_DOCUMENTATION_AND_HARDENING_PLAN_2026-04-25.md"
 FINAL_AUDIT_PATH = REPO_ROOT / "docs" / "Plans" / "FINGERPRINT_HARDENING_PLAN_FINAL_AUDIT_2026-04-25.md"
 OPS_GUIDE_PATH = REPO_ROOT / "docs" / "Documentation" / "FINGERPRINT_OPERATIONS_GUIDE.md"
-TRANSPORT_STATUS_PATH = REPO_ROOT / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
+TRANSPORT_STATUS_PATH = REPO_ROOT / "docs" / "Generated" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
 
 
 class FingerprintHardeningPlanContractTest(unittest.TestCase):
@@ -69,8 +69,9 @@ class FingerprintHardeningPlanContractTest(unittest.TestCase):
         transport_status_text = TRANSPORT_STATUS_PATH.read_text(encoding="utf-8")
         final_audit_text = FINAL_AUDIT_PATH.read_text(encoding="utf-8")
 
-        self.assertIn('"ttl_bucket_match_rate": 0.0', transport_status_text)
-        self.assertIn('"syn_option_order_class_match_rate": 0.0', transport_status_text)
+        self.assertIn('"ttl_bucket_match_rate": null', transport_status_text)
+        self.assertIn('"syn_option_order_class_match_rate": null', transport_status_text)
+        self.assertIn('"availability": "unavailable"', transport_status_text)
         self.assertIn('"first_flight_segmentation_signature_match_rate": 1.0', transport_status_text)
 
         self.assertNotIn("0.39 vs required 0.85+", final_audit_text)
