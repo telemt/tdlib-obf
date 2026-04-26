@@ -1,7 +1,7 @@
 {
   "active_probing_nightly": {
     "artifact_path": "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
-    "last_observed_at_utc": "2026-04-25T00:00:00Z",
+    "last_observed_at_utc": "2026-04-26T00:00:00Z",
     "notes": "Scenario counts are produced from compiled stealth tests that exercise adversarial replay/probing, route fallback indistinguishability, and runtime active policy route transitions.",
     "scenarios": {
       "fallback_route_transition": {
@@ -21,7 +21,7 @@
     "status": "pass"
   },
   "advisory_profiles_count_as_tier2_or_higher": false,
-  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "generated_at_utc": "2026-04-26T00:00:00Z",
   "imported_lane_release_blocking": false,
   "informational_checks": [
     "imported_corpus_smoke",
@@ -90,7 +90,7 @@
   },
   "transport_coherence_status": {
     "artifact_path": "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
-    "last_observed_at_utc": "2026-04-25T00:00:00Z",
+    "last_observed_at_utc": "2026-04-26T00:00:00Z",
     "metrics": {
       "first_flight_segmentation_signature_match_rate": 1.0,
       "mss_window_scale_bucket_match_rate": null,

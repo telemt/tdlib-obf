@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "generated_at_utc": "2026-04-26T00:00:00Z",
   "notes": "Scenario counts are produced from compiled stealth tests that exercise adversarial replay/probing, route fallback indistinguishability, and runtime active policy route transitions.",
   "observation_generated_at_utc": "2026-04-25T13:31:00Z",
   "observation_input_path": "test/analysis/active_probing_nightly_observations.json",
