@@ -66,7 +66,7 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertIn("git diff --exit-code", workflow_text)
         self.assertIn("docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", workflow_text)
         self.assertIn("docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", workflow_text)
-        self.assertIn("docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json", workflow_text)
+        self.assertIn("docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json", workflow_text)
 
     def test_workflow_trigger_paths_cover_generated_status_artifacts(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")

@@ -355,7 +355,7 @@ Do not edit this block manually; regenerate via render_fingerprint_policy_artifa
 
 Do not use historical 10+/50+ shortcuts from older drafts in release decisions.
 
-Release evidence policy summary is generated at docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
+Release evidence policy summary is generated at docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
 
 ---
 

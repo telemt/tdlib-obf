@@ -1,0 +1,122 @@
+{
+  "active_probing_nightly": {
+    "artifact_path": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+    "last_observed_at_utc": "2026-04-25T00:00:00Z",
+    "notes": "Scenario counts are produced from compiled stealth tests that exercise adversarial replay/probing, route fallback indistinguishability, and runtime active policy route transitions.",
+    "scenarios": {
+      "fallback_route_transition": {
+        "failed": 0,
+        "passed": 3
+      },
+      "reorder_challenge": {
+        "failed": 0,
+        "passed": 7
+      },
+      "selective_drop": {
+        "failed": 0,
+        "passed": 11
+      }
+    },
+    "source_of_truth": "docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+    "status": "pass"
+  },
+  "advisory_profiles_count_as_tier2_or_higher": false,
+  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "imported_lane_release_blocking": false,
+  "informational_checks": [
+    "imported_corpus_smoke",
+    "active_probing_nightly",
+    "transport_coherence_status"
+  ],
+  "release_gating_lane": "reviewed",
+  "required_release_checks": [
+    "reviewed_corpus_smoke",
+    "tier_semantics_drift_check",
+    "reviewed_vs_imported_lane_guardrail",
+    "cxx_stealth_runtime_gate"
+  ],
+  "reviewed_smoke_mandatory": true,
+  "ru_to_non_ru_quic_blocked": true,
+  "ru_unknown_ech_fail_closed": true,
+  "tier_policy": {
+    "tiers": [
+      {
+        "description": "No authoritative network-derived evidence; advisory diagnostics only.",
+        "label": "Advisory-only",
+        "min_authoritative_captures": 0,
+        "min_independent_sessions": 0,
+        "min_independent_sources": 0,
+        "release_gating": false,
+        "tier": "Tier0"
+      },
+      {
+        "description": "Initial authoritative anchoring with structural gates.",
+        "label": "Anchored",
+        "min_authoritative_captures": 1,
+        "min_independent_sessions": 1,
+        "min_independent_sources": 1,
+        "release_gating": true,
+        "tier": "Tier1"
+      },
+      {
+        "description": "Corroborated release evidence with structural and set-membership gates.",
+        "label": "Corroborated",
+        "min_authoritative_captures": 3,
+        "min_independent_sessions": 2,
+        "min_independent_sources": 2,
+        "release_gating": true,
+        "tier": "Tier2"
+      },
+      {
+        "description": "Distributional and classifier-style evidence enabled when sample power qualifies.",
+        "label": "Distributional",
+        "min_authoritative_captures": 15,
+        "min_independent_sessions": 2,
+        "min_independent_sources": 3,
+        "release_gating": true,
+        "tier": "Tier3"
+      },
+      {
+        "description": "High-confidence long-horizon equivalence tier.",
+        "label": "High-confidence",
+        "min_authoritative_captures": 200,
+        "min_independent_sessions": 2,
+        "min_independent_sources": 3,
+        "release_gating": true,
+        "tier": "Tier4"
+      }
+    ],
+    "version": 1
+  },
+  "transport_coherence_status": {
+    "artifact_path": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+    "last_observed_at_utc": "2026-04-25T00:00:00Z",
+    "metrics": {
+      "first_flight_segmentation_signature_match_rate": 1.0,
+      "mss_window_scale_bucket_match_rate": null,
+      "syn_option_order_class_match_rate": null,
+      "ttl_bucket_match_rate": null
+    },
+    "notes": "Fail-closed extraction: imported fixtures do not carry SYN/TTL/MSS/window-scale evidence, so only first-flight record-length segmentation is scored. SYN-phase metrics remain explicitly unavailable.",
+    "required_metrics": [
+      "ttl_bucket_match_rate",
+      "syn_option_order_class_match_rate",
+      "mss_window_scale_bucket_match_rate",
+      "first_flight_segmentation_signature_match_rate"
+    ],
+    "source_of_truth": "docs/Documentation/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+    "status": "pending"
+  },
+  "transport_layer_coverage_complete": false,
+  "transport_layer_limitations": [
+    "TLS corpus fidelity does not imply full TCP/IP fingerprint coherence",
+    "Transport coherence metrics are tracked separately and must be attached in release evidence"
+  ],
+  "workflow_contract": {
+    "imported_job_name": "imported_corpus_smoke",
+    "reviewed_job_name": "reviewed_corpus_smoke",
+    "runtime_gate_job_name": "cxx_stealth_runtime_gate",
+    "tier_drift_job_name": "tier_semantics_drift_check",
+    "workflow_path": ".github/workflows/fingerprint-policy-integrity.yml"
+  }
+}

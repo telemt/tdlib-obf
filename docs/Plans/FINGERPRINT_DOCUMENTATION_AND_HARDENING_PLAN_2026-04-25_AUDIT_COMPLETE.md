@@ -89,7 +89,7 @@ From `docs/Documentation/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.jso
 
 ### 3.3 Release evidence policy
 
-From `docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json`:
+From `docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json`:
 
 1. `transport_coherence_status.status = fail`
 2. `active_probing_nightly.status = pass`

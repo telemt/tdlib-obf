@@ -52,7 +52,7 @@ class FingerprintPolicyGenerationContractTest(unittest.TestCase):
 
     def test_release_evidence_summary_is_generated_and_fail_closed(self) -> None:
         summary = policy_artifacts.load_release_evidence_summary(
-            REPO_ROOT / "docs" / "Documentation" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
+            REPO_ROOT / "docs" / "Generated" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
         )
         self.assertEqual("reviewed", summary["release_gating_lane"])
         self.assertIn("reviewed_corpus_smoke", summary["required_release_checks"])

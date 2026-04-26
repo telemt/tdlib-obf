@@ -126,7 +126,7 @@ This memo documents the final audit of the Fingerprint Hardening Plan as it stan
 ### Workstream B: Runtime Profile Evidence Clarity
 **Status:** ✅ **COMPLETE**
 - Advisory profile documentation: `docs/Documentation/FINGERPRINT_OPERATIONS_GUIDE.md` (Section 4.2) ✓
-- Release checklist advisory exclusion: `FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json` (Section 3.1) ✓
+- Release checklist advisory exclusion: `docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json` (Section 3.1) ✓
 - RU/unknown fail-closed policy: Documented and tested (RouteEchQuic, 7/7 passing) ✓
 - Advisory-profile telemetry matrix: Tracked in StealthRuntimeParams.cpp ✓
 

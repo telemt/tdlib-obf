@@ -331,7 +331,7 @@ def generate_artifacts(repo_root: pathlib.Path, now_utc: str | None = None) -> d
         repo_root / "docs" / "Documentation" / "FINGERPRINT_GENERATION_PIPELINE.md",
         repo_root / "docs" / "Documentation" / "FINGERPRINT_OPERATIONS_GUIDE.md",
     ]
-    summary_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
+    summary_path = repo_root / "docs" / "Generated" / "FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json"
     transport_status_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
     active_probing_status_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json"
     markdown_summary_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRUST_TIERS.generated.md"

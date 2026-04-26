@@ -313,7 +313,7 @@ This section finalizes plan state using repository evidence and executed test ga
 ### 12.2 Workstream Closure Status
 
 1. Workstream A (canonical trust-tier source + generated artifacts): completed.
-2. Workstream B (runtime profile evidence clarity in docs/policy): completed — advisory profile ops guidance, release checklist advisory exclusion, and RU/unknown ECH policy text are all in FINGERPRINT_OPERATIONS_GUIDE.md and FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
+2. Workstream B (runtime profile evidence clarity in docs/policy): completed — advisory profile ops guidance, release checklist advisory exclusion, and RU/unknown ECH policy text are all in FINGERPRINT_OPERATIONS_GUIDE.md and docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
 3. Workstream C (reviewed/imported lane guardrails in CI/docs): **completed, reviewed lane green** (as of 2026-04-25); refresh_reviewed_profiles.py maintenance tool added; imported serverhello corpus regenerated with full metadata.
 4. Workstream D (transport-boundary documentation): completed for documentation scope.
 5. Workstream E (transport-coherence engineering gates/extractor/schema): **partially completed** — evidence-backed status generation now reads measured observations from `test/analysis/transport_coherence_observations.json`; current extractor is fail-closed for unavailable SYN-phase transport metadata in imported fixtures and enforces Tier2/Tier3 threshold evaluation. The current measured lane remains **fail** and therefore release-blocking.

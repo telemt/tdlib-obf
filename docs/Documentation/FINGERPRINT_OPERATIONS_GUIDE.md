@@ -454,7 +454,7 @@ Do not edit this block manually; regenerate via render_fingerprint_policy_artifa
 - Tier4 (High-confidence): captures >= 200, independent sources >= 3, independent sessions >= 2, release_gating=true. High-confidence long-horizon equivalence tier.
 <!-- END GENERATED TRUST TIER BLOCK -->
 
-Release checklist automation consumes docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
+Release checklist automation consumes docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json.
 
 ---
 

@@ -78,7 +78,7 @@ Do not edit this block manually; regenerate via render_fingerprint_policy_artifa
 
 Release evidence policy summary is generated at:
 
-1. docs/Documentation/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json
+1. docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json
 
 ---
 
