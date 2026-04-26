@@ -130,7 +130,12 @@ TEST(TLS_MultiDumpMacosFirefoxStats, MacosFirefoxWithShortestValidSniDoesNotPani
 }
 
 TEST(TLS_MultiDumpMacosFirefoxStats, MacosFirefoxWithLongSniDoesNotPanic) {
-  const td::string long_sni = td::string(63, 'm') + "." + td::string(63, 'n') + "." + td::string(63, 'p') + ".net";
+  td::string long_sni(63, 'm');
+  long_sni.push_back('.');
+  long_sni.append(63, 'n');
+  long_sni.push_back('.');
+  long_sni.append(63, 'p');
+  long_sni += ".net";
   MockRng rng(0xD00D);
   auto wire = build_tls_client_hello_for_profile(long_sni, "0123456789secret", kUnixTime,
                                                  BrowserProfile::Firefox149_MacOS26_3, EchMode::Rfc9180Outer, rng);

@@ -118,6 +118,7 @@ static ProxySecret make_tls_secret(const td::string &domain) {
 TEST(StealthConfigTlsInitProfileTemporalDivergence, DifferentBucketsProduceDifferentProfilesOverTimeRange) {
   Guard guard;
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_linux_platform();
   params.flow_behavior.sticky_domain_rotation_window_sec = 60;
   ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
@@ -154,6 +155,7 @@ TEST(StealthConfigTlsInitProfileTemporalDivergence,
      StealthConfigAndTlsInitCanSelectDifferentProfilesAcrossBucketBoundary) {
   Guard guard;
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_linux_platform();
   params.flow_behavior.sticky_domain_rotation_window_sec = 60;
   ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
@@ -215,6 +217,7 @@ TEST(StealthConfigTlsInitProfileTemporalDivergence, AllCurrentProfileRecordSizeL
 TEST(StealthConfigTlsInitProfileTemporalDivergence, Default900sBucketBoundaryCausesProfileDivergenceForSomeDomain) {
   Guard guard;
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_linux_platform();
   ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
 
@@ -240,6 +243,7 @@ TEST(StealthConfigTlsInitProfileTemporalDivergence,
   Guard guard;
   auto darwin = make_darwin_platform();
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = darwin;
   // Zero out firefox148; Chrome133=1 to keep total_weight > 0.
   params.profile_weights.chrome133 = 1;
@@ -278,6 +282,7 @@ TEST(StealthConfigTlsInitProfileTemporalDivergence, Firefox149WindowsHasIndepend
   Guard guard;
   auto windows = make_windows_platform();
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = windows;
   // Windows allowed: Chrome147_Windows, Firefox149_Windows.
   // Zero out firefox149_windows weight, keep chrome147_windows=1.
@@ -319,6 +324,7 @@ TEST(StealthConfigTlsInitProfileTemporalDivergence, Firefox148ZeroOnlyDisablesLi
   // controllable.
   auto windows = make_windows_platform();
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = windows;
   params.profile_weights.chrome147_windows = 1;
   params.profile_weights.firefox149_windows = 100;

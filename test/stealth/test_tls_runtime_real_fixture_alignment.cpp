@@ -228,6 +228,7 @@ bool matches_proxy_preserved_family_invariants(const FamilyLaneBaseline &baselin
 
 StealthRuntimeParams make_forced_profile_params(BrowserProfile profile) {
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.profile_weights.chrome133 = 0;
   params.profile_weights.chrome131 = 0;
   params.profile_weights.chrome120 = 0;

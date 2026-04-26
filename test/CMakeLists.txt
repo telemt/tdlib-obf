@@ -198,6 +198,9 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_case_alias_fixture_blackbox.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_selection_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_release_profile_gating_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_gate_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_cross_os_profile_rejection.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_and_transport_gate_matrix.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_proxy_alpn_semantics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_plan.cpp

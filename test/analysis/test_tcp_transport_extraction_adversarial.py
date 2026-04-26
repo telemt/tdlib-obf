@@ -104,9 +104,10 @@ class TCPTransportExtractionAdversarial(unittest.TestCase):
             payload = extractor.extract_transport_metrics("2026-04-25T00:00:00Z", repo_root=pathlib.Path("."))
         self.assertEqual(0, payload["sample_count"])
         self.assertEqual(0, payload["evidence_scope"]["first_flight_samples_observed"])
-        self.assertEqual(0.0, payload["metrics"]["ttl_bucket_match_rate"])
-        self.assertEqual(0.0, payload["metrics"]["syn_option_order_class_match_rate"])
-        self.assertEqual(0.0, payload["metrics"]["mss_window_scale_bucket_match_rate"])
+        self.assertIsNone(payload["metrics"]["ttl_bucket_match_rate"])
+        self.assertIsNone(payload["metrics"]["syn_option_order_class_match_rate"])
+        self.assertIsNone(payload["metrics"]["mss_window_scale_bucket_match_rate"])
+        self.assertEqual("unavailable", payload["metric_availability"]["ttl_bucket_match_rate"]["availability"])
         self.assertEqual(0.0, payload["metrics"]["first_flight_segmentation_signature_match_rate"])
 
     def test_extract_transport_metrics_rejects_malformed_fixture_samples(self) -> None:

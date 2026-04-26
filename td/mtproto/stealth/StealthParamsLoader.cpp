@@ -177,6 +177,19 @@ Result<RuntimeActivePolicy> parse_active_policy(Slice value) {
   return Status::Error("unsupported active_policy \"" + value.str() + "\"");
 }
 
+Result<TransportConfidence> parse_transport_confidence(Slice value) {
+  if (value == "unknown") {
+    return TransportConfidence::Unknown;
+  }
+  if (value == "partial") {
+    return TransportConfidence::Partial;
+  }
+  if (value == "strong") {
+    return TransportConfidence::Strong;
+  }
+  return Status::Error("unsupported transport_confidence \"" + value.str() + "\"");
+}
+
 Result<IptParams> parse_ipt_params(JsonValue value) {
   if (value.type() != JsonValue::Type::Object) {
     return Status::Error("ipt must be an object");
@@ -824,7 +837,7 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
       "root", object,
       {Slice("version"), Slice("active_policy"), Slice("ipt"), Slice("drs"), Slice("flow_behavior"),
        Slice("platform_hints"), Slice("profile_weights"), Slice("route_policy"), Slice("route_failure"),
-       Slice("release_mode_profile_gating"), Slice("bulk_threshold_bytes")}));
+       Slice("release_mode_profile_gating"), Slice("transport_confidence"), Slice("bulk_threshold_bytes")}));
 
   TRY_RESULT(version, object.get_required_int_field("version"));
   if (version != 1) {
@@ -860,6 +873,11 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
   if (object.has_field("release_mode_profile_gating")) {
     TRY_RESULT(release_mode_profile_gating, object.get_required_bool_field("release_mode_profile_gating"));
     params.release_mode_profile_gating = release_mode_profile_gating;
+  }
+  if (object.has_field("transport_confidence")) {
+    TRY_RESULT(transport_confidence_name, object.get_required_string_field("transport_confidence"));
+    TRY_RESULT(transport_confidence, parse_transport_confidence(transport_confidence_name));
+    params.transport_confidence = transport_confidence;
   }
   TRY_RESULT(profile_weights_value, object.extract_required_field("profile_weights", JsonValue::Type::Object));
   TRY_RESULT(route_policy_value, object.extract_required_field("route_policy", JsonValue::Type::Object));

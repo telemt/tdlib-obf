@@ -5,15 +5,32 @@
     "fixtures_with_first_flight": 99,
     "syn_phase_transport_available": false
   },
-  "generated_at_utc": "2026-04-25T00:00:00Z",
-  "method": "Observed first-flight record-length extraction from imported ClientHello fixtures; unavailable SYN-phase metrics are fail-closed to 0.0",
+  "generated_at_utc": "2026-04-26T00:00:00Z",
+  "method": "Observed first-flight record-length extraction from imported ClientHello fixtures; unavailable SYN-phase metrics are marked unavailable and never synthesized as numeric values.",
+  "metric_availability": {
+    "first_flight_segmentation_signature_match_rate": {
+      "availability": "available"
+    },
+    "mss_window_scale_bucket_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    },
+    "syn_option_order_class_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    },
+    "ttl_bucket_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    }
+  },
   "metrics": {
     "first_flight_segmentation_signature_match_rate": 1.0,
-    "mss_window_scale_bucket_match_rate": 0.0,
-    "syn_option_order_class_match_rate": 0.0,
-    "ttl_bucket_match_rate": 0.0
+    "mss_window_scale_bucket_match_rate": null,
+    "syn_option_order_class_match_rate": null,
+    "ttl_bucket_match_rate": null
   },
-  "notes": "Fail-closed extraction: imported fixtures do not carry SYN/TTL/MSS/window-scale evidence, so only first-flight record-length segmentation is scored from observed fixture samples.",
+  "notes": "Fail-closed extraction: imported fixtures do not carry SYN/TTL/MSS/window-scale evidence, so only first-flight record-length segmentation is scored. SYN-phase metrics remain explicitly unavailable.",
   "power_policy": {
     "tier2_min_samples": 3,
     "tier3_min_samples": 15

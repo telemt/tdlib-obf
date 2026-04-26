@@ -1,0 +1,75 @@
+{
+  "evidence_scope": {
+    "first_flight_record_lengths_available": true,
+    "first_flight_samples_observed": 540,
+    "fixtures_with_first_flight": 99,
+    "syn_phase_transport_available": false
+  },
+  "gate_evaluation": {
+    "tier2": {
+      "eligible": true,
+      "min_match_rate": 0.85,
+      "min_samples": 3,
+      "passed": false,
+      "reason": "not_scorable_unavailable_metrics",
+      "scorable": false,
+      "unavailable_metrics": [
+        "ttl_bucket_match_rate",
+        "syn_option_order_class_match_rate",
+        "mss_window_scale_bucket_match_rate"
+      ]
+    },
+    "tier3": {
+      "eligible": true,
+      "min_match_rate": 0.95,
+      "min_samples": 15,
+      "passed": false,
+      "reason": "not_scorable_unavailable_metrics",
+      "scorable": false,
+      "unavailable_metrics": [
+        "ttl_bucket_match_rate",
+        "syn_option_order_class_match_rate",
+        "mss_window_scale_bucket_match_rate"
+      ]
+    }
+  },
+  "generated_at_utc": "2026-04-26T00:00:00Z",
+  "metric_availability": {
+    "first_flight_segmentation_signature_match_rate": {
+      "availability": "available"
+    },
+    "mss_window_scale_bucket_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    },
+    "syn_option_order_class_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    },
+    "ttl_bucket_match_rate": {
+      "availability": "unavailable",
+      "reason": "no_syn_phase_data"
+    }
+  },
+  "metrics": {
+    "first_flight_segmentation_signature_match_rate": 1.0,
+    "mss_window_scale_bucket_match_rate": null,
+    "syn_option_order_class_match_rate": null,
+    "ttl_bucket_match_rate": null
+  },
+  "notes": "",
+  "observation_generated_at_utc": "2026-04-26T00:00:00Z",
+  "observation_input_path": "/tmp/tmp757rcr2a/transport_observations.json",
+  "required_metrics": [
+    "ttl_bucket_match_rate",
+    "syn_option_order_class_match_rate",
+    "mss_window_scale_bucket_match_rate",
+    "first_flight_segmentation_signature_match_rate"
+  ],
+  "sample_count": 99,
+  "source_lanes": [
+    "transport_coherence_baseline",
+    "transport_coherence_adversarial_smoke"
+  ],
+  "status": "pending"
+}

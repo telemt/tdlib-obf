@@ -142,7 +142,12 @@ TEST(TLS_MultiDumpIosChromiumStats, IosChromiumStaysDistinctFromIos14AppleTlsWir
 }
 
 TEST(TLS_MultiDumpIosChromiumStats, LongSniStressParsesAndKeepsCriticalExtensions) {
-  const td::string long_sni = td::string(63, 'a') + "." + td::string(63, 'b') + "." + td::string(63, 'c') + ".com";
+  td::string long_sni(63, 'a');
+  long_sni.push_back('.');
+  long_sni.append(63, 'b');
+  long_sni.push_back('.');
+  long_sni.append(63, 'c');
+  long_sni += ".com";
   MockRng rng(0xDEADBEEF);
 
   auto wire = build_tls_client_hello_for_profile(long_sni, "0123456789secret", kUnixTime,

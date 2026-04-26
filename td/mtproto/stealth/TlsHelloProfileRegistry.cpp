@@ -121,27 +121,27 @@ constexpr ProfileSpec PROFILE_SPECS[] = {
 
 constexpr ProfileFixtureMetadata PROFILE_FIXTURES[] = {
     {Slice("curl_cffi:chrome133"), ProfileFixtureSourceKind::CurlCffiCapture, ProfileTrustTier::Verified, true, true,
-     true},
+     true, TransportClaimLevel::CrossLayerStrong},
     {Slice("curl_cffi:chrome131"), ProfileFixtureSourceKind::CurlCffiCapture, ProfileTrustTier::Verified, true, true,
-     true},
+     true, TransportClaimLevel::CrossLayerStrong},
     {Slice("browser_capture:chrome120_non_pq"), ProfileFixtureSourceKind::BrowserCapture, ProfileTrustTier::Verified,
-     true, true, true},
+     true, true, true, TransportClaimLevel::TlsOnly},
     {Slice("browser_capture:chrome147_windows"), ProfileFixtureSourceKind::BrowserCapture, ProfileTrustTier::Verified,
-     true, true, false},
+     true, true, false, TransportClaimLevel::CrossLayerStrong},
     {Slice("browser_capture:chrome147_ios_chromium"), ProfileFixtureSourceKind::BrowserCapture,
-     ProfileTrustTier::Verified, true, false, false},
+     ProfileTrustTier::Verified, true, false, false, TransportClaimLevel::CrossLayerStrong},
     {Slice("browser_capture:firefox148"), ProfileFixtureSourceKind::BrowserCapture, ProfileTrustTier::Verified, true,
-     true, true},
+     true, true, TransportClaimLevel::TlsOnly},
     {Slice("browser_capture:firefox149_macos26_3"), ProfileFixtureSourceKind::BrowserCapture,
-     ProfileTrustTier::Verified, true, true, true},
+     ProfileTrustTier::Verified, true, true, true, TransportClaimLevel::CrossLayerStrong},
     {Slice("browser_capture:firefox149_windows"), ProfileFixtureSourceKind::BrowserCapture, ProfileTrustTier::Verified,
-     true, true, false},
+     true, true, false, TransportClaimLevel::TlsOnly},
     {Slice("utls:HelloSafari_26_3"), ProfileFixtureSourceKind::UtlsSnapshot, ProfileTrustTier::Advisory, false, false,
-     false},
-    {Slice("utls:HelloIOS_14"), ProfileFixtureSourceKind::UtlsSnapshot, ProfileTrustTier::Advisory, false, false,
-     false},
+     false, TransportClaimLevel::TlsOnly},
+    {Slice("utls:HelloIOS_14"), ProfileFixtureSourceKind::UtlsSnapshot, ProfileTrustTier::Advisory, false, false, false,
+     TransportClaimLevel::TlsOnly},
     {Slice("utls:HelloAndroid_11_OkHttp"), ProfileFixtureSourceKind::UtlsSnapshot, ProfileTrustTier::Advisory, false,
-     false, false},
+     false, false, TransportClaimLevel::TlsOnly},
 };
 
 constexpr Slice kRuntimeEchStoreKeyPrefix("stealth_ech_cb#");
@@ -448,6 +448,13 @@ uint32 stable_selection_hash(const SelectionKey &key, const RuntimePlatformHints
   return crc32(material);
 }
 
+bool transport_confidence_allows_profile(const StealthRuntimeParams &runtime_params, BrowserProfile profile) {
+  if (runtime_params.transport_confidence != TransportConfidence::Unknown) {
+    return true;
+  }
+  return profile_fixture_metadata(profile).transport_claim_level == TransportClaimLevel::TlsOnly;
+}
+
 }  // namespace
 
 RuntimePlatformHints default_runtime_platform_hints() noexcept {
@@ -618,16 +625,36 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
   auto key = make_profile_selection_key(destination, unix_time);
   auto weights = runtime_params.profile_weights;
 
+  std::vector<BrowserProfile> confidence_allowed_profiles;
+  confidence_allowed_profiles.reserve(allowed_profiles.size());
+
   uint32 total_weight = 0;
   for (auto profile : allowed_profiles) {
-    total_weight += profile_weight(weights, profile);
+    if (!transport_confidence_allows_profile(runtime_params, profile)) {
+      continue;
+    }
+    auto weight = profile_weight(weights, profile);
+    if (weight == 0) {
+      continue;
+    }
+    total_weight += weight;
+    confidence_allowed_profiles.push_back(profile);
+  }
+
+  if (confidence_allowed_profiles.empty()) {
+    for (auto profile : allowed_profiles) {
+      if (transport_confidence_allows_profile(runtime_params, profile)) {
+        return profile;
+      }
+    }
+    return allowed_profiles.back();
   }
   CHECK(total_weight > 0);
 
   auto roll = stable_selection_hash(key, platform) % total_weight;
   uint32 cumulative_weight = 0;
-  BrowserProfile baseline_profile = allowed_profiles.back();
-  for (auto profile : allowed_profiles) {
+  BrowserProfile baseline_profile = confidence_allowed_profiles.back();
+  for (auto profile : confidence_allowed_profiles) {
     cumulative_weight += profile_weight(weights, profile);
     if (roll < cumulative_weight) {
       baseline_profile = profile;
@@ -642,8 +669,8 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
   bool blocked_advisory = !profile_fixture_metadata(baseline_profile).release_gating;
   uint32 release_weight_total = 0;
   std::vector<BrowserProfile> release_profiles;
-  release_profiles.reserve(allowed_profiles.size());
-  for (auto profile : allowed_profiles) {
+  release_profiles.reserve(confidence_allowed_profiles.size());
+  for (auto profile : confidence_allowed_profiles) {
     if (!profile_fixture_metadata(profile).release_gating) {
       continue;
     }
@@ -657,7 +684,7 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
 
   if (release_weight_total == 0 || release_profiles.empty()) {
     runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1, std::memory_order_relaxed);
-    for (auto profile : allowed_profiles) {
+    for (auto profile : confidence_allowed_profiles) {
       if (profile_fixture_metadata(profile).release_gating) {
         return profile;
       }

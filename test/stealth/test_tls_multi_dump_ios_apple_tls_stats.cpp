@@ -202,7 +202,12 @@ TEST(TLS_MultiDumpIosAppleTlsStats, IosAppleTlsWithShortestValidSniDoesNotPanic)
 }
 
 TEST(TLS_MultiDumpIosAppleTlsStats, IosAppleTlsWithLongSniDoesNotPanic) {
-  const td::string long_sni = td::string(63, 'i') + "." + td::string(63, 'o') + "." + td::string(63, 's') + ".app";
+  td::string long_sni(63, 'i');
+  long_sni.push_back('.');
+  long_sni.append(63, 'o');
+  long_sni.push_back('.');
+  long_sni.append(63, 's');
+  long_sni += ".app";
   MockRng rng(0xD00D);
   auto wire = build_tls_client_hello_for_profile(long_sni, "0123456789secret", kUnixTime, BrowserProfile::IOS14,
                                                  EchMode::Rfc9180Outer, rng);

@@ -158,6 +158,7 @@ TEST(TlsRuntimeCaseAliasFixtureBlackBox, CaseAliasesProduceIdenticalRuntimeWireA
   RuntimeCaseAliasFixtureGuard guard;
 
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_linux_platform();
   params.profile_weights.chrome133 = 1;
   params.profile_weights.firefox148 = 1;
@@ -252,6 +253,7 @@ TEST(TlsRuntimeCaseAliasFixtureBlackBox, WindowsCaseAliasesProduceIdenticalRunti
   RuntimeCaseAliasFixtureGuard guard;
 
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_windows_platform();
   params.profile_weights.chrome147_windows = 1;
   params.profile_weights.firefox149_windows = 1;
@@ -353,6 +355,7 @@ TEST(TlsRuntimeCaseAliasFixtureBlackBox, IosCaseAliasesProduceIdenticalRuntimeWi
   RuntimeCaseAliasFixtureGuard guard;
 
   auto params = default_runtime_stealth_params();
+  params.transport_confidence = td::mtproto::stealth::TransportConfidence::Partial;
   params.platform_hints = make_ios_platform();
   params.profile_weights.ios14 = 1;
   params.profile_weights.chrome147_ios_chromium = 1;

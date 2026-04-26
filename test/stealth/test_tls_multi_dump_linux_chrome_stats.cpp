@@ -124,7 +124,12 @@ TEST(TLS_MultiDumpLinuxChromeStats, LinuxChromeWithShortestValidSniDoesNotPanic)
 TEST(TLS_MultiDumpLinuxChromeStats, LinuxChromeWithLongSniDoesNotPanic) {
   // Near-maximum label length (3 × 63-char labels + TLD). Stresses the SNI
   // extension length encoding and the outer/inner ClientHello length fields.
-  const td::string long_sni = td::string(63, 'a') + "." + td::string(63, 'b') + "." + td::string(63, 'c') + ".com";
+  td::string long_sni(63, 'a');
+  long_sni.push_back('.');
+  long_sni.append(63, 'b');
+  long_sni.push_back('.');
+  long_sni.append(63, 'c');
+  long_sni += ".com";
   MockRng rng(0xD00D);
   auto wire = build_tls_client_hello_for_profile(long_sni, "0123456789secret", kUnixTime, BrowserProfile::Chrome133,
                                                  EchMode::Rfc9180Outer, rng);

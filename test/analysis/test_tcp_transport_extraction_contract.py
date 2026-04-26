@@ -53,12 +53,17 @@ class TCPTransportExtractionContract(unittest.TestCase):
         self.assertEqual(1, payload["schema_version"])
         self.assertEqual("2026-04-25T00:00:00Z", payload["generated_at_utc"])
         self.assertIn("metrics", payload)
+        self.assertIn("metric_availability", payload)
         self.assertIn("evidence_scope", payload)
         self.assertEqual("test/analysis/fixtures/imported/import_manifest.json", payload["source"])
         self.assertFalse(payload["evidence_scope"]["syn_phase_transport_available"])
-        self.assertEqual(0.0, float(payload["metrics"]["ttl_bucket_match_rate"]))
-        self.assertEqual(0.0, float(payload["metrics"]["syn_option_order_class_match_rate"]))
-        self.assertEqual(0.0, float(payload["metrics"]["mss_window_scale_bucket_match_rate"]))
+        self.assertIsNone(payload["metrics"]["ttl_bucket_match_rate"])
+        self.assertIsNone(payload["metrics"]["syn_option_order_class_match_rate"])
+        self.assertIsNone(payload["metrics"]["mss_window_scale_bucket_match_rate"])
+        self.assertEqual(
+            "unavailable",
+            payload["metric_availability"]["ttl_bucket_match_rate"]["availability"],
+        )
 
     def test_extract_transport_metrics_respects_explicit_repo_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

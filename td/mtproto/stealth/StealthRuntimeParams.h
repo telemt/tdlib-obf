@@ -20,6 +20,12 @@ enum class RuntimeActivePolicy : uint8 {
   NonRuEgress = 2,
 };
 
+enum class TransportConfidence : uint8 {
+  Unknown = 0,
+  Partial = 1,
+  Strong = 2,
+};
+
 struct RuntimeRoutePolicyEntry final {
   EchMode ech_mode{EchMode::Disabled};
   bool allow_quic{false};
@@ -78,6 +84,7 @@ struct StealthRuntimeParams final {
   RuntimeFlowBehaviorPolicy flow_behavior;
   RuntimeProfileSelectionPolicy profile_selection;
   bool release_mode_profile_gating{false};
+  TransportConfidence transport_confidence{TransportConfidence::Unknown};
   RuntimeRoutePolicy route_policy;
   RuntimeRouteFailurePolicy route_failure;
   size_t bulk_threshold_bytes{8192};

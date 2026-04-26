@@ -18,6 +18,7 @@ REQUIRED_METRICS = (
     "mss_window_scale_bucket_match_rate",
     "first_flight_segmentation_signature_match_rate",
 )
+ALLOWED_AVAILABILITY = {"available", "unavailable"}
 
 DEFAULT_OBSERVATIONS_RELATIVE_PATH = pathlib.Path("test/analysis/transport_coherence_observations.json")
 
@@ -49,11 +50,41 @@ def _must_be_rate(value: Any, field_name: str) -> float:
     return parsed
 
 
+def _must_be_non_empty_string(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value.strip()
+
+
+def _must_be_metric_availability(value: Any, field_name: str) -> dict[str, Any]:
+    loaded = _must_be_mapping(value, field_name)
+    availability = _must_be_non_empty_string(loaded.get("availability"), f"{field_name}.availability")
+    if availability not in ALLOWED_AVAILABILITY:
+        raise ValueError(f"{field_name}.availability must be one of available/unavailable")
+    if availability == "unavailable":
+        _must_be_non_empty_string(loaded.get("reason"), f"{field_name}.reason")
+    return loaded
+
+
 def load_observations(path: pathlib.Path) -> dict[str, Any]:
     loaded = _must_be_mapping(json.loads(path.read_text(encoding="utf-8")), "transport observations")
     metrics = _must_be_mapping(loaded.get("metrics"), "transport observations.metrics")
+    metric_availability = _must_be_mapping(
+        loaded.get("metric_availability"), "transport observations.metric_availability"
+    )
     for metric_name in REQUIRED_METRICS:
-        _must_be_rate(metrics.get(metric_name), f"transport observations.metrics.{metric_name}")
+        availability_entry = _must_be_metric_availability(
+            metric_availability.get(metric_name), f"transport observations.metric_availability.{metric_name}"
+        )
+        availability = availability_entry["availability"]
+        metric_value = metrics.get(metric_name)
+        if availability == "available":
+            _must_be_rate(metric_value, f"transport observations.metrics.{metric_name}")
+        else:
+            if metric_value is not None:
+                raise ValueError(
+                    f"transport observations.metrics.{metric_name} must be null when metric availability is unavailable"
+                )
     sample_count = _must_be_non_negative_int(loaded.get("sample_count"), "transport observations.sample_count")
     power_policy = _must_be_mapping(loaded.get("power_policy"), "transport observations.power_policy")
     _must_be_non_negative_int(power_policy.get("tier2_min_samples"), "transport observations.power_policy.tier2_min_samples")
@@ -86,9 +117,16 @@ def load_observations(path: pathlib.Path) -> dict[str, Any]:
                 "syn_option_order_class_match_rate",
                 "mss_window_scale_bucket_match_rate",
             ):
-                if float(metrics.get(metric_name, 0.0)) != 0.0:
+                entry = _must_be_metric_availability(
+                    metric_availability.get(metric_name), f"transport observations.metric_availability.{metric_name}"
+                )
+                if entry["availability"] != "unavailable":
                     raise ValueError(
-                        f"transport observations.metrics.{metric_name} must stay 0.0 when syn_phase_transport_available is false"
+                        f"transport observations.metric_availability.{metric_name}.availability must be unavailable when syn_phase_transport_available is false"
+                    )
+                if metrics.get(metric_name) is not None:
+                    raise ValueError(
+                        f"transport observations.metrics.{metric_name} must be null when syn_phase_transport_available is false"
                     )
     loaded["sample_count"] = sample_count
     return loaded
@@ -103,6 +141,7 @@ def _gate_passed(metrics: dict[str, Any], threshold: float) -> bool:
 
 def build_payload(now_utc: str, observations: dict[str, Any], observation_input_path: pathlib.Path) -> dict[str, Any]:
     metrics = dict(observations["metrics"])
+    metric_availability = dict(observations["metric_availability"])
     power_policy = dict(observations["power_policy"])
     thresholds = dict(observations["thresholds"])
 
@@ -112,14 +151,22 @@ def build_payload(now_utc: str, observations: dict[str, Any], observation_input_
     tier3_threshold = float(thresholds["tier3_min_match_rate"])
 
     sample_count = int(observations["sample_count"])
+    unavailable_metrics = [
+        metric_name
+        for metric_name in REQUIRED_METRICS
+        if metric_availability[metric_name]["availability"] == "unavailable"
+    ]
+
     tier2_eligible = sample_count >= tier2_min_samples
     tier3_eligible = sample_count >= tier3_min_samples
-    tier2_passed = tier2_eligible and _gate_passed(metrics, tier2_threshold)
-    tier3_passed = tier3_eligible and _gate_passed(metrics, tier3_threshold)
+    tier2_scorable = tier2_eligible and not unavailable_metrics
+    tier3_scorable = tier3_eligible and not unavailable_metrics
+    tier2_passed = tier2_scorable and _gate_passed(metrics, tier2_threshold)
+    tier3_passed = tier3_scorable and _gate_passed(metrics, tier3_threshold)
 
     if tier2_passed:
         status = "pass"
-    elif tier2_eligible:
+    elif tier2_scorable and tier2_eligible:
         status = "fail"
     else:
         status = "pending"
@@ -129,6 +176,7 @@ def build_payload(now_utc: str, observations: dict[str, Any], observation_input_
         "generated_at_utc": now_utc,
         "required_metrics": list(REQUIRED_METRICS),
         "metrics": metrics,
+        "metric_availability": metric_availability,
         "sample_count": sample_count,
         "observation_input_path": str(observation_input_path.as_posix()),
         "observation_generated_at_utc": str(observations.get("generated_at_utc", "")),
@@ -139,15 +187,21 @@ def build_payload(now_utc: str, observations: dict[str, Any], observation_input_
         "gate_evaluation": {
             "tier2": {
                 "eligible": tier2_eligible,
+                "scorable": tier2_scorable,
                 "passed": tier2_passed,
                 "min_samples": tier2_min_samples,
                 "min_match_rate": tier2_threshold,
+                "unavailable_metrics": list(unavailable_metrics),
+                "reason": "not_scorable_unavailable_metrics" if tier2_eligible and not tier2_scorable else "",
             },
             "tier3": {
                 "eligible": tier3_eligible,
+                "scorable": tier3_scorable,
                 "passed": tier3_passed,
                 "min_samples": tier3_min_samples,
                 "min_match_rate": tier3_threshold,
+                "unavailable_metrics": list(unavailable_metrics),
+                "reason": "not_scorable_unavailable_metrics" if tier3_eligible and not tier3_scorable else "",
             },
         },
         "evidence_scope": dict(observations.get("evidence_scope", {})),
@@ -174,8 +228,13 @@ def main() -> int:
     if not observation_input_path.is_absolute():
         observation_input_path = (repo_root / observation_input_path).resolve()
     observations = load_observations(observation_input_path)
+    observation_payload_path: pathlib.Path
+    try:
+        observation_payload_path = observation_input_path.relative_to(repo_root)
+    except ValueError:
+        observation_payload_path = observation_input_path
     out_path = repo_root / "docs" / "Documentation" / "FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json"
-    payload = build_payload(args.now_utc, observations, observation_input_path.relative_to(repo_root))
+    payload = build_payload(args.now_utc, observations, observation_payload_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0

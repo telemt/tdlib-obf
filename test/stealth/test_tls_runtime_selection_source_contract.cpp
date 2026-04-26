@@ -62,10 +62,15 @@ TEST(TlsRuntimeSelectionSourceContract, RuntimeProfileSelectionUsesPlatformAllow
   ASSERT_TRUE(normalized.find("autoallowed_profiles=allowed_profiles_for_platform(platform);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autokey=make_profile_selection_key(destination,unix_time);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autoweights=runtime_params.profile_weights;") != td::string::npos);
+  ASSERT_TRUE(normalized.find("std::vector<BrowserProfile>confidence_allowed_profiles;") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(!transport_confidence_allows_profile(runtime_params,profile)){continue;}") !=
+              td::string::npos);
   ASSERT_TRUE(normalized.find("CHECK(total_weight>0);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autoroll=stable_selection_hash(key,platform)%total_weight;") != td::string::npos);
-  ASSERT_TRUE(normalized.find("BrowserProfilebaseline_profile=allowed_profiles.back();") != td::string::npos);
-  ASSERT_TRUE(normalized.find("for(autoprofile:allowed_profiles)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("BrowserProfilebaseline_profile=confidence_allowed_profiles.back();") !=
+              td::string::npos);
+  ASSERT_TRUE(normalized.find("for(autoprofile:confidence_allowed_profiles)") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(confidence_allowed_profiles.empty())") != td::string::npos);
   ASSERT_TRUE(normalized.find("if(!runtime_params.release_mode_profile_gating){returnbaseline_profile;}") !=
               td::string::npos);
   ASSERT_TRUE(

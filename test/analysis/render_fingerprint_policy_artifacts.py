@@ -185,13 +185,33 @@ def load_transport_coherence_status(path: pathlib.Path) -> dict[str, Any]:
         raise ValueError("transport.status must be one of pass/fail/pending")
     _must_be_string(loaded.get("generated_at_utc"), "transport.generated_at_utc")
     metrics = _must_be_mapping(loaded.get("metrics"), "transport.metrics")
+    metric_availability = _must_be_mapping(loaded.get("metric_availability"), "transport.metric_availability")
     required_metrics = loaded.get("required_metrics")
     if not isinstance(required_metrics, list):
         raise ValueError("transport.required_metrics must be a list")
     if tuple(required_metrics) != REQUIRED_TRANSPORT_METRICS:
         raise ValueError("transport.required_metrics does not match required policy metrics")
     for metric_name in REQUIRED_TRANSPORT_METRICS:
-        _must_be_number(metrics.get(metric_name), f"transport.metrics.{metric_name}")
+        availability_entry = _must_be_mapping(
+            metric_availability.get(metric_name), f"transport.metric_availability.{metric_name}"
+        )
+        availability_value = _must_be_string(
+            availability_entry.get("availability"),
+            f"transport.metric_availability.{metric_name}.availability",
+        )
+        if availability_value == "available":
+            _must_be_number(metrics.get(metric_name), f"transport.metrics.{metric_name}")
+        elif availability_value == "unavailable":
+            if metrics.get(metric_name) is not None:
+                raise ValueError(f"transport.metrics.{metric_name} must be null when unavailable")
+            _must_be_string(
+                availability_entry.get("reason"),
+                f"transport.metric_availability.{metric_name}.reason",
+            )
+        else:
+            raise ValueError(
+                f"transport.metric_availability.{metric_name}.availability must be available/unavailable"
+            )
     return loaded
 
 

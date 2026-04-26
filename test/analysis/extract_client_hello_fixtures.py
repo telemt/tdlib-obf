@@ -19,6 +19,10 @@ from common_tls import normalize_device_class, normalize_os_family, normalize_ro
 PARSER_VERSION = "tls-clienthello-parser-v1"
 DEFAULT_DISPLAY_FILTER = "tcp && tls.handshake.type == 1"
 
+UNAVAILABLE_SYN_REASON_MISSING_TTL = "missing_ttl_or_hlim"
+UNAVAILABLE_SYN_REASON_MISSING_MSS_WSCALE = "missing_mss_or_window_scale"
+UNAVAILABLE_SYN_REASON_PARSE_ERROR = "syn_parse_error"
+
 
 def run_command(argv: list[str]) -> str:
     result = subprocess.run(argv, capture_output=True, text=True, check=False)
@@ -531,6 +535,162 @@ def collect_stream_payload_hex(pcap_path: pathlib.Path, frame: dict[str, str]) -
     return "".join(payload_parts)
 
 
+def _parse_optional_int(raw_value: str, field_name: str) -> int | None:
+    value = str(raw_value).strip()
+    if not value:
+        return None
+    if "," in value:
+        value = value.split(",", 1)[0].strip()
+        if not value:
+            return None
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be int") from exc
+
+
+def classify_ttl_bucket(ttl: int) -> str:
+    if ttl < 0 or ttl > 255:
+        raise ValueError("ttl must be in [0, 255]")
+    if ttl <= 32:
+        return "ttl_0_32"
+    if ttl <= 64:
+        return "ttl_33_64"
+    if ttl <= 96:
+        return "ttl_65_96"
+    if ttl <= 128:
+        return "ttl_97_128"
+    if ttl <= 192:
+        return "ttl_129_192"
+    return "ttl_193_255"
+
+
+def classify_mss_bucket(mss: int) -> str:
+    if mss <= 0:
+        raise ValueError("mss must be positive")
+    if mss <= 536:
+        return "mss_0_536"
+    if mss <= 1200:
+        return "mss_537_1200"
+    if mss <= 1460:
+        return "mss_1201_1460"
+    return "mss_1461_plus"
+
+
+def classify_window_scale_bucket(window_scale: int) -> str:
+    if window_scale < 0 or window_scale > 14:
+        raise ValueError("window scale must be in [0, 14]")
+    if window_scale <= 2:
+        return "wscale_0_2"
+    if window_scale <= 5:
+        return "wscale_3_5"
+    if window_scale <= 8:
+        return "wscale_6_8"
+    return "wscale_9_plus"
+
+
+def classify_syn_option_order(raw_option_kinds: str) -> str:
+    values = [value.strip() for value in str(raw_option_kinds).split(",") if value.strip()]
+    if not values:
+        return "none"
+
+    normalized: list[str] = []
+    seen: set[int] = set()
+    for value in values:
+        try:
+            kind = int(value)
+        except ValueError as exc:
+            raise ValueError("invalid tcp option kind token") from exc
+        if kind < 0 or kind > 255:
+            raise ValueError("invalid tcp option kind range")
+        if kind in seen:
+            continue
+        seen.add(kind)
+        normalized.append(str(kind))
+    return "-".join(normalized) if normalized else "none"
+
+
+def parse_syn_transport_traits_row(row: dict[str, str]) -> dict[str, Any]:
+    ttl = _parse_optional_int(row.get("ip_ttl", ""), "ip_ttl")
+    if ttl is None:
+        ttl = _parse_optional_int(row.get("ipv6_hlim", ""), "ipv6_hlim")
+    if ttl is None:
+        return {
+            "available": False,
+            "reason": UNAVAILABLE_SYN_REASON_MISSING_TTL,
+        }
+
+    mss = _parse_optional_int(row.get("tcp_mss", ""), "tcp_mss")
+    window_scale = _parse_optional_int(row.get("tcp_wscale", ""), "tcp_wscale")
+    if mss is None or window_scale is None:
+        return {
+            "available": False,
+            "reason": UNAVAILABLE_SYN_REASON_MISSING_MSS_WSCALE,
+            "ttl_bucket": classify_ttl_bucket(ttl),
+        }
+
+    ip_id = _parse_optional_int(row.get("ip_id", ""), "ip_id")
+    if ip_id is not None and (ip_id < 0 or ip_id > 65535):
+        raise ValueError("ip.id must be in [0, 65535]")
+
+    return {
+        "available": True,
+        "ttl_bucket": classify_ttl_bucket(ttl),
+        "mss_bucket": classify_mss_bucket(mss),
+        "window_scale_bucket": classify_window_scale_bucket(window_scale),
+        "syn_option_order_class": classify_syn_option_order(row.get("tcp_options_kind", "")),
+        "ipid_behavior_class": "zero" if ip_id == 0 else "nonzero" if ip_id is not None else "unavailable",
+    }
+
+
+def collect_syn_transport_traits_for_stream(pcap_path: pathlib.Path, tcp_stream: str) -> dict[str, Any]:
+    output = run_command(
+        [
+            "tshark",
+            "-r",
+            str(pcap_path),
+            "-Y",
+            f"tcp.stream == {tcp_stream} && tcp.flags.syn == 1 && tcp.flags.ack == 0",
+            "-c",
+            "1",
+            "-T",
+            "fields",
+            "-E",
+            "separator=|",
+            "-e",
+            "ip.ttl",
+            "-e",
+            "ipv6.hlim",
+            "-e",
+            "tcp.options.mss_val",
+            "-e",
+            "tcp.options.wscale.shift",
+            "-e",
+            "tcp.options.kind",
+            "-e",
+            "ip.id",
+        ]
+    )
+    line = next((value for value in output.splitlines() if value.strip()), "")
+    if not line:
+        return {
+            "available": False,
+            "reason": UNAVAILABLE_SYN_REASON_MISSING_TTL,
+        }
+    parts = line.split("|")
+    if len(parts) != 6:
+        raise RuntimeError(f"unexpected tshark SYN trait row: {line}")
+    row = {
+        "ip_ttl": parts[0],
+        "ipv6_hlim": parts[1],
+        "tcp_mss": parts[2],
+        "tcp_wscale": parts[3],
+        "tcp_options_kind": parts[4],
+        "ip_id": parts[5],
+    }
+    return parse_syn_transport_traits_row(row)
+
+
 def frame_time_utc(epoch_string: str) -> str:
     epoch = float(epoch_string)
     return dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -622,6 +782,7 @@ def main() -> int:
     if not frames:
         raise SystemExit("no matching ClientHello frames found")
 
+    syn_traits_cache: dict[str, dict[str, Any]] = {}
     samples: list[dict[str, Any]] = []
     for frame in frames:
         try:
@@ -644,6 +805,16 @@ def main() -> int:
         source_tls_record_version = parse_first_record_version(frame["tls_record_version"])
         source_tls_record_length = parse_total_record_length(frame["tls_record_length"])
         source_tls_handshake_type = parse_first_handshake_type(frame["tls_handshake_type"])
+        tcp_stream = str(frame["tcp_stream"])
+        if tcp_stream not in syn_traits_cache:
+            try:
+                syn_traits_cache[tcp_stream] = collect_syn_transport_traits_for_stream(pcap_path, tcp_stream)
+            except ValueError:
+                syn_traits_cache[tcp_stream] = {
+                    "available": False,
+                    "reason": UNAVAILABLE_SYN_REASON_PARSE_ERROR,
+                }
+
         parsed.update(
             {
                 "fixture_id": build_fixture_id(args.profile_id, pcap_path, frame["frame_number"]),
@@ -656,6 +827,7 @@ def main() -> int:
                 else parsed["record_version"],
                 "source_tls_record_length": source_tls_record_length if source_tls_record_length is not None else parsed["record_length"],
                 "source_tls_handshake_type": source_tls_handshake_type if source_tls_handshake_type is not None else parsed["handshake_type"],
+                "syn_transport_traits": syn_traits_cache[tcp_stream],
             }
         )
         samples.append(parsed)

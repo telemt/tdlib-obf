@@ -69,6 +69,11 @@ enum class ProfileTrustTier : uint8 {
   Verified = 1,
 };
 
+enum class TransportClaimLevel : uint8 {
+  TlsOnly = 0,
+  CrossLayerStrong = 1,
+};
+
 struct RouteFailureState final {
   bool ech_block_suspected{false};
   uint32 recent_ech_failures{0};
@@ -117,6 +122,7 @@ struct ProfileFixtureMetadata final {
   bool has_independent_network_provenance{false};
   bool has_utls_snapshot_corroboration{false};
   bool release_gating{false};
+  TransportClaimLevel transport_claim_level{TransportClaimLevel::TlsOnly};
 };
 
 struct RuntimeEchDecision final {

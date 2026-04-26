@@ -30,9 +30,15 @@ class BuildTransportCoherenceStatusAdversarialTest(unittest.TestCase):
                         "sample_count": 99,
                         "metrics": {
                             "ttl_bucket_match_rate": 1.0,
-                            "syn_option_order_class_match_rate": 0.0,
-                            "mss_window_scale_bucket_match_rate": 0.0,
+                            "syn_option_order_class_match_rate": None,
+                            "mss_window_scale_bucket_match_rate": None,
                             "first_flight_segmentation_signature_match_rate": 1.0,
+                        },
+                        "metric_availability": {
+                            "ttl_bucket_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "syn_option_order_class_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "mss_window_scale_bucket_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "first_flight_segmentation_signature_match_rate": {"availability": "available"},
                         },
                         "power_policy": {
                             "tier2_min_samples": 3,
@@ -52,7 +58,7 @@ class BuildTransportCoherenceStatusAdversarialTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "must stay 0.0 when syn_phase_transport_available is false"):
+            with self.assertRaisesRegex(ValueError, "must be null when metric availability is unavailable"):
                 status_builder.load_observations(path)
 
     def test_rejects_invalid_evidence_scope_field_types(self) -> None:
@@ -63,10 +69,16 @@ class BuildTransportCoherenceStatusAdversarialTest(unittest.TestCase):
                     {
                         "sample_count": 99,
                         "metrics": {
-                            "ttl_bucket_match_rate": 0.0,
-                            "syn_option_order_class_match_rate": 0.0,
-                            "mss_window_scale_bucket_match_rate": 0.0,
+                            "ttl_bucket_match_rate": None,
+                            "syn_option_order_class_match_rate": None,
+                            "mss_window_scale_bucket_match_rate": None,
                             "first_flight_segmentation_signature_match_rate": 1.0,
+                        },
+                        "metric_availability": {
+                            "ttl_bucket_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "syn_option_order_class_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "mss_window_scale_bucket_match_rate": {"availability": "unavailable", "reason": "no_syn_phase_data"},
+                            "first_flight_segmentation_signature_match_rate": {"availability": "available"},
                         },
                         "power_policy": {
                             "tier2_min_samples": 3,

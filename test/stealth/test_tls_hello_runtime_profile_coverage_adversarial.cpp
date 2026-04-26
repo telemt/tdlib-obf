@@ -5,6 +5,7 @@
 //
 
 #include "td/actor/actor.h"  // IWYU pragma: keep
+#include "td/mtproto/stealth/StealthRuntimeParams.h"
 #include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
 #include "td/utils/common.h"
 #include "td/utils/port/PollFlags.h"
@@ -37,7 +38,11 @@ using td::mtproto::stealth::DeviceClass;
 using td::mtproto::stealth::NetworkRouteHints;
 using td::mtproto::stealth::pick_runtime_profile;
 using td::mtproto::stealth::reset_runtime_ech_failure_state_for_tests;
+using td::mtproto::stealth::reset_runtime_stealth_params_for_tests;
 using td::mtproto::stealth::RuntimePlatformHints;
+using td::mtproto::stealth::set_runtime_stealth_params_for_tests;
+using td::mtproto::stealth::StealthRuntimeParams;
+using td::mtproto::stealth::TransportConfidence;
 using td::mtproto::test::create_socket_pair;
 using td::mtproto::test::find_extension;
 using td::mtproto::test::fixtures::kAlpsChrome131;
@@ -55,6 +60,17 @@ class NoopCallback final : public td::TransparentProxy::Callback {
   }
 
   void on_connected() final {
+  }
+};
+
+class RuntimeParamsGuard final {
+ public:
+  RuntimeParamsGuard() {
+    reset_runtime_stealth_params_for_tests();
+  }
+
+  ~RuntimeParamsGuard() {
+    reset_runtime_stealth_params_for_tests();
   }
 };
 
@@ -133,7 +149,12 @@ void assert_firefox_runtime_proxy_shape(const td::mtproto::test::ParsedClientHel
   ASSERT_TRUE(has_key_share_group(hello, kPqHybridGroup));
 }
 
-TEST(TlsHelloRuntimeProfileCoverageAdversarial, DefaultNonDarwinDesktopSelectionCoversAllAllowedProfiles) {
+TEST(TlsHelloRuntimeProfileCoverageAdversarial, UnknownTransportConfidenceRestrictsNonDarwinDesktopToTlsOnlyProfiles) {
+  RuntimeParamsGuard guard;
+  StealthRuntimeParams params;
+  params.transport_confidence = TransportConfidence::Unknown;
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
+
   auto platform = make_non_darwin_platform();
 
   std::unordered_set<int> seen_profiles;
@@ -142,6 +163,40 @@ TEST(TlsHelloRuntimeProfileCoverageAdversarial, DefaultNonDarwinDesktopSelection
     auto unix_time = static_cast<td::int32>(bucket * 86400 + 3600);
     for (td::uint32 index = 0; index < 256; index++) {
       td::string domain = "runtime-coverage-" + td::to_string(bucket) + "-" + td::to_string(index) + ".example.com";
+      auto profile = pick_runtime_profile(domain, unix_time, platform);
+      ASSERT_TRUE(profile != BrowserProfile::Safari26_3);
+      ASSERT_TRUE(profile != BrowserProfile::IOS14);
+      ASSERT_TRUE(profile != BrowserProfile::Android11_OkHttp_Advisory);
+      seen_profiles.insert(static_cast<int>(profile));
+      if (seen_profiles.size() == 2u) {
+        done = true;
+        break;
+      }
+    }
+  }
+
+  ASSERT_EQ(2u, seen_profiles.size());
+  ASSERT_TRUE(seen_profiles.count(static_cast<int>(BrowserProfile::Chrome133)) == 0);
+  ASSERT_TRUE(seen_profiles.count(static_cast<int>(BrowserProfile::Chrome131)) == 0);
+  ASSERT_TRUE(seen_profiles.count(static_cast<int>(BrowserProfile::Chrome120)) != 0);
+  ASSERT_TRUE(seen_profiles.count(static_cast<int>(BrowserProfile::Firefox148)) != 0);
+}
+
+TEST(TlsHelloRuntimeProfileCoverageAdversarial, PartialTransportConfidenceRestoresAllNonDarwinDesktopProfiles) {
+  RuntimeParamsGuard guard;
+  StealthRuntimeParams params;
+  params.transport_confidence = TransportConfidence::Partial;
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
+
+  auto platform = make_non_darwin_platform();
+
+  std::unordered_set<int> seen_profiles;
+  bool done = false;
+  for (td::uint32 bucket = 20000; bucket < 20384 && !done; bucket++) {
+    auto unix_time = static_cast<td::int32>(bucket * 86400 + 3600);
+    for (td::uint32 index = 0; index < 256; index++) {
+      td::string domain =
+          "runtime-coverage-partial-" + td::to_string(bucket) + "-" + td::to_string(index) + ".example.com";
       auto profile = pick_runtime_profile(domain, unix_time, platform);
       ASSERT_TRUE(profile != BrowserProfile::Safari26_3);
       ASSERT_TRUE(profile != BrowserProfile::IOS14);

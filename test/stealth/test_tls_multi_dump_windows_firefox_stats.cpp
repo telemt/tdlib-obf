@@ -224,7 +224,12 @@ TEST(TLS_MultiDumpWindowsFirefoxStats, WindowsFirefoxWithShortestValidSniDoesNot
 }
 
 TEST(TLS_MultiDumpWindowsFirefoxStats, WindowsFirefoxWithLongSniDoesNotPanic) {
-  const td::string long_sni = td::string(63, 'x') + "." + td::string(63, 'y') + "." + td::string(63, 'z') + ".org";
+  td::string long_sni(63, 'x');
+  long_sni.push_back('.');
+  long_sni.append(63, 'y');
+  long_sni.push_back('.');
+  long_sni.append(63, 'z');
+  long_sni += ".org";
   MockRng rng(0xD00D);
   auto wire = build_tls_client_hello_for_profile(long_sni, "0123456789secret", kUnixTime,
                                                  BrowserProfile::Firefox149_Windows, EchMode::Rfc9180Outer, rng);
