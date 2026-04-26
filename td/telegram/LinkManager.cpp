@@ -4568,6 +4568,8 @@ Result<MessageLinkInfo> LinkManager::get_message_link_info(Slice url) {
   Slice media_timestamp_slice;
   Slice todo_item_id_slice;
   Slice poll_option_id_slice;
+  bool has_todo_item_id = false;
+  bool has_poll_option_id = false;
   bool is_single = false;
   bool for_comment = false;
   if (link_info.type_ == LinkType::Tg) {
@@ -4621,10 +4623,18 @@ Result<MessageLinkInfo> LinkManager::get_message_link_info(Slice url) {
         top_thread_message_id_slice = key_value.second;
       }
       if (key_value.first == "task") {
+        if (has_todo_item_id) {
+          return Status::Error("Duplicate checklist task identifier");
+        }
         todo_item_id_slice = key_value.second;
+        has_todo_item_id = true;
       }
       if (key_value.first == "option") {
+        if (has_poll_option_id) {
+          return Status::Error("Duplicate poll option identifier");
+        }
         poll_option_id_slice = key_value.second;
+        has_poll_option_id = true;
       }
     }
   } else {
@@ -4671,10 +4681,18 @@ Result<MessageLinkInfo> LinkManager::get_message_link_info(Slice url) {
           top_thread_message_id_slice = key_value.second;
         }
         if (key_value.first == "task") {
+          if (has_todo_item_id) {
+            return Status::Error("Duplicate checklist task identifier");
+          }
           todo_item_id_slice = key_value.second;
+          has_todo_item_id = true;
         }
         if (key_value.first == "option") {
+          if (has_poll_option_id) {
+            return Status::Error("Duplicate poll option identifier");
+          }
           poll_option_id_slice = key_value.second;
+          has_poll_option_id = true;
         }
       }
     }
@@ -4769,7 +4787,7 @@ Result<MessageLinkInfo> LinkManager::get_message_link_info(Slice url) {
   }
   auto poll_option_id = r_poll_option_id.move_as_ok();
   if (!check_utf8(poll_option_id)) {
-    poll_option_id.clear();
+    return Status::Error("Invalid poll option identifier");
   }
 
   MessageLinkInfo info;

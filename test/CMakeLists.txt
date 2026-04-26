@@ -29,6 +29,9 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/http.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/http_reader_smuggling_security.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/link.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/message_link_info_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/message_link_info_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/message_link_info_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/message_entities.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/socks5_response_parser_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/mtproto.cpp
@@ -155,6 +158,8 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_route_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_reauth_delay_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_migrate_token_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_migrate_token_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_adversarial.cpp

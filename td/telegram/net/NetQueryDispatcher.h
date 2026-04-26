@@ -65,6 +65,7 @@ class NetQueryDispatcher {
   static bool is_known_main_dc_id(int32 raw_dc_id, bool is_test);
   static bool is_persistable_main_dc_id(int32 raw_dc_id, bool is_test);
   static bool is_registered_file_dc_id(int32 raw_dc_id, bool is_test, Slice serialized_dc_options);
+  static Result<int32> parse_migrate_dc_id(Slice error_message, Slice prefix);
   static double main_dc_migration_cooldown();
   static bool is_main_dc_migration_rate_limited(double last_migration_at, double now);
 

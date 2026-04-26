@@ -528,11 +528,38 @@ NetQueryDispatcher::NetQueryDispatcher(const std::function<ActorShared<>()> &cre
 
 NetQueryDispatcher::~NetQueryDispatcher() = default;
 
+Result<int32> NetQueryDispatcher::parse_migrate_dc_id(Slice error_message, Slice prefix) {
+  if (!begins_with(error_message, prefix)) {
+    return Status::Error(400, "Unexpected migrate error prefix");
+  }
+
+  auto raw_dc_id = error_message.substr(prefix.size());
+  if (raw_dc_id.empty()) {
+    return Status::Error(400, "Missing migrate DC ID");
+  }
+  for (auto c : raw_dc_id) {
+    if (!is_digit(c)) {
+      return Status::Error(400, "Migrate DC ID must be canonical decimal digits");
+    }
+  }
+
+  TRY_RESULT(parsed_dc_id, to_integer_safe<int32>(raw_dc_id));
+  if (parsed_dc_id <= 0) {
+    return Status::Error(400, "Migrate DC ID must be positive");
+  }
+  return parsed_dc_id;
+}
+
 void NetQueryDispatcher::try_fix_migrate(NetQueryPtr &net_query) {
   auto error_message = net_query->error().message();
   static constexpr CSlice file_migrate_prefix = "FILE_MIGRATE_";
   if (begins_with(error_message, file_migrate_prefix)) {
-    auto new_dc_id = to_integer<int32>(error_message.substr(file_migrate_prefix.size()));
+    auto r_new_dc_id = parse_migrate_dc_id(error_message, file_migrate_prefix);
+    if (r_new_dc_id.is_error()) {
+      LOG(ERROR) << "Receive malformed file migrate error " << error_message << ": " << r_new_dc_id.error();
+      return;
+    }
+    auto new_dc_id = r_new_dc_id.move_as_ok();
     auto serialized_dc_options = G()->td_db()->get_binlog_pmc()->get("dc_options");
     if (!is_registered_file_dc_id(new_dc_id, G()->is_test_dc(), serialized_dc_options)) {
       LOG(ERROR) << "Receive invalid DC ID in " << error_message;
@@ -543,8 +570,13 @@ void NetQueryDispatcher::try_fix_migrate(NetQueryPtr &net_query) {
   }
   static constexpr CSlice prefixes[] = {"PHONE_MIGRATE_", "NETWORK_MIGRATE_", "USER_MIGRATE_"};
   for (auto &prefix : prefixes) {
-    if (error_message.substr(0, prefix.size()) == prefix) {
-      auto new_main_dc_id = to_integer<int32>(error_message.substr(prefix.size()));
+    if (begins_with(error_message, prefix)) {
+      auto r_new_main_dc_id = parse_migrate_dc_id(error_message, prefix);
+      if (r_new_main_dc_id.is_error()) {
+        LOG(ERROR) << "Receive malformed main migrate error " << error_message << ": " << r_new_main_dc_id.error();
+        return;
+      }
+      auto new_main_dc_id = r_new_main_dc_id.move_as_ok();
       auto is_accepted = set_main_dc_id(new_main_dc_id, true);
 
       if (!is_accepted) {
