@@ -1170,8 +1170,12 @@ MessageInputReplyTo BusinessConnectionManager::create_business_message_input_rep
       if (!clean_input_string(reply_to_message->poll_option_id_)) {
         reply_to_message->poll_option_id_.clear();
       }
-      return MessageInputReplyTo{message_id, DialogId(), MessageQuote(td_, std::move(reply_to_message->quote_)),
-                                 max(0, reply_to_message->checklist_task_id_), reply_to_message->poll_option_id_};
+      return MessageInputReplyTo{message_id,
+                                 DialogId(),
+                                 MessageQuote(td_, std::move(reply_to_message->quote_)),
+                                 max(0, reply_to_message->checklist_task_id_),
+                                 reply_to_message->poll_option_id_,
+                                 "business inputMessageReplyToMessage"};
     }
     case td_api::inputMessageReplyToExternalMessage::ID:
       return {};
@@ -1823,9 +1827,8 @@ void BusinessConnectionManager::edit_business_message_media(
     return promise.set_error(400, "Unsupported input message content type");
   }
 
-  bool is_premium = td_->option_manager_->get_option_boolean("is_premium");
   TRY_RESULT_PROMISE(promise, content,
-                     get_input_message_content(DialogId(), std::move(input_message_content), td_, is_premium));
+                     get_input_message_content(DialogId(), std::move(input_message_content), td_, true));
   if (!content.ttl.is_empty()) {
     return promise.set_error(400, "Can't enable self-destruction for media");
   }

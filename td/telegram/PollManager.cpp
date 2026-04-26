@@ -702,6 +702,7 @@ td_api::object_ptr<td_api::poll> PollManager::get_poll_object(PollId poll_id, co
     // hide the voter counts
     for (auto &poll_option : poll_options) {
       poll_option->voter_count_ = 0;
+      poll_option->recent_voter_ids_.clear();
     }
   } else {
     // calculate vote percentage and fix total_voter_count
@@ -803,14 +804,10 @@ PollId PollManager::create_poll(FormattedText &&question, vector<FormattedText> 
     has_open_answers = false;
   }
   keep_only_custom_emoji(question);
-  for (auto &option : options) {
-    keep_only_custom_emoji(option);
-  }
   auto poll = make_unique<Poll>();
   poll->question_ = std::move(question);
-  int pos = 0;
   for (auto &option_text : options) {
-    poll->options_.emplace_back(std::move(option_text), nullptr, pos++);
+    poll->options_.emplace_back(std::move(option_text), nullptr);
   }
   poll->is_anonymous_ = is_anonymous;
   poll->allow_multiple_answers_ = allow_multiple_answers;
@@ -1023,6 +1020,9 @@ void PollManager::get_poll_option_properties(PollId poll_id, const string &optio
     }
   }
   if (option == nullptr) {
+    if (option_id.empty()) {
+      return promise.set_value(td_api::make_object<td_api::pollOptionProperties>(false, false, false, false));
+    }
     return promise.set_error(400, "Poll option not found");
   }
   bool can_be_deleted = can_delete_poll_option(poll, option, message_id, is_forward, is_outgoing);
@@ -1115,7 +1115,7 @@ void PollManager::set_poll_answer(MessageFullId message_full_id, vector<int32> &
     if (index >= poll->options_.size()) {
       return promise.set_error(400, "Invalid option identifier specified");
     }
-    options.push_back(poll->options_[index].data_);
+    options.push_back(poll->options_[index].get_data());
 
     affected_option_ids[index + 1]++;
   }
@@ -1447,7 +1447,7 @@ void PollManager::get_poll_voters(MessageFullId message_full_id, int32 option_id
                      std::move(result));
       });
   td_->create_handler<GetPollVotersQuery>(std::move(query_promise))
-      ->send(poll_id, message_full_id, BufferSlice(poll->options_[option_id].data_), voters.next_offset_,
+      ->send(poll_id, message_full_id, BufferSlice(poll->options_[option_id].get_data()), voters.next_offset_,
              max(limit, 10));
 }
 
@@ -1500,7 +1500,7 @@ void PollManager::on_get_poll_voters(PollId poll_id, int32 option_id, string off
     switch (peer_vote->get_id()) {
       case telegram_api::messagePeerVote::ID: {
         auto voter = telegram_api::move_object_as<telegram_api::messagePeerVote>(peer_vote);
-        if (voter->option_ != poll->options_[option_id].data_) {
+        if (voter->option_ != poll->options_[option_id].get_data()) {
           continue;
         }
 
@@ -1516,7 +1516,7 @@ void PollManager::on_get_poll_voters(PollId poll_id, int32 option_id, string off
       }
       case telegram_api::messagePeerVoteMultiple::ID: {
         auto voter = telegram_api::move_object_as<telegram_api::messagePeerVoteMultiple>(peer_vote);
-        if (!td::contains(voter->options_, poll->options_[option_id].data_)) {
+        if (!td::contains(voter->options_, poll->options_[option_id].get_data())) {
           continue;
         }
 
@@ -1947,14 +1947,14 @@ PollId PollManager::on_get_poll(PollId poll_id, tl_object_ptr<telegram_api::poll
       vector<string> correct_option_datas;
       for (auto correct_option_id : poll->correct_option_ids_) {
         CHECK(0 <= correct_option_id && correct_option_id < static_cast<int32>(poll->options_.size()));
-        correct_option_datas.push_back(poll->options_[correct_option_id].data_);
+        correct_option_datas.push_back(poll->options_[correct_option_id].get_data());
       }
       poll->options_ = std::move(options);
       poll->option_min_channels_ = std::move(option_min_channels);
       if (!correct_option_datas.empty()) {  // repair correct_option_ids just in case
         poll->correct_option_ids_.clear();
         for (size_t i = 0; i < poll->options_.size(); i++) {
-          if (td::contains(correct_option_datas, poll->options_[i].data_)) {
+          if (td::contains(correct_option_datas, poll->options_[i].get_data())) {
             poll->correct_option_ids_.push_back(static_cast<int32>(i));
           }
         }
@@ -2081,7 +2081,7 @@ PollId PollManager::on_get_poll(PollId poll_id, tl_object_ptr<telegram_api::poll
     Slice data = poll_result->option_.as_slice();
     for (size_t option_index = 0; option_index < poll->options_.size(); option_index++) {
       auto &option = poll->options_[option_index];
-      if (option.data_ != data) {
+      if (option.get_data() != data) {
         continue;
       }
       if (!is_min) {

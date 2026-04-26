@@ -28,16 +28,17 @@ class Td;
 struct PollOption {
   FormattedText text_;
   unique_ptr<MessageContent> media_;
-  string data_;
   DialogId added_by_dialog_id_;
   vector<DialogId> recent_voter_dialog_ids_;
   int32 added_date_ = 0;
   int32 voter_count_ = 0;
   bool is_chosen_ = false;
 
+  friend bool operator==(const PollOption &lhs, const PollOption &rhs);
+
   PollOption() = default;
 
-  PollOption(FormattedText &&text, unique_ptr<MessageContent> &&media, int32 pos);
+  PollOption(FormattedText &&text, unique_ptr<MessageContent> &&media);
 
   PollOption(Td *td, telegram_api::object_ptr<telegram_api::PollAnswer> &&poll_answer_ptr,
              vector<std::pair<ChannelId, MinChannel>> &min_channels);
@@ -53,6 +54,8 @@ struct PollOption {
   int32 get_added_date() const {
     return added_date_;
   }
+
+  PollOption dup_option(Td *td, DialogId dialog_id) const;
 
   void append_file_ids(const Td *td, vector<FileId> &file_ids) const;
 
@@ -71,6 +74,9 @@ struct PollOption {
 
   template <class ParserT>
   void parse(ParserT &parser);
+
+ private:
+  string data_;
 };
 
 bool operator==(const PollOption &lhs, const PollOption &rhs);

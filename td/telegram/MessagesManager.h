@@ -123,6 +123,7 @@ class MessageContent;
 class MessageForwardInfo;
 struct MessageReactions;
 class MissingInvitees;
+class RequestedDialogType;
 class SuggestedPost;
 class Td;
 class Usernames;
@@ -478,9 +479,7 @@ class MessagesManager final : public Actor {
 
   void set_dialog_message_ttl(DialogId dialog_id, int32 ttl, Promise<Unit> &&promise);
 
-  void share_dialogs_with_bot(const td_api::object_ptr<td_api::KeyboardButtonSource> &source_ptr, int32 button_id,
-                              vector<DialogId> shared_dialog_ids, bool expect_user, bool only_check,
-                              Promise<Unit> &&promise);
+  Result<const RequestedDialogType *> get_message_requested_dialog_type(MessageFullId message_full_id, int32 button_id);
 
   void process_suggested_post(MessageFullId message_full_id, bool is_rejected, int32 schedule_date,
                               const string &comment, Promise<Unit> &&promise);
@@ -1926,7 +1925,7 @@ class MessagesManager final : public Actor {
   void set_message_reply(const Dialog *d, Message *m, MessageInputReplyTo input_reply_to, bool is_message_in_dialog);
 
   void update_message_reply_to_message_id(const Dialog *d, Message *m, MessageId reply_to_message_id,
-                                          bool is_message_in_dialog);
+                                          bool is_message_in_dialog, const char *source);
 
   void restore_message_reply_to_message_id(Dialog *d, Message *m);
 
@@ -3140,6 +3139,8 @@ class MessagesManager final : public Actor {
   void suffix_load_till_message_id(Dialog *d, MessageId message_id, Promise<Unit> &&promise);
 
   bool is_deleted_secret_chat(const Dialog *d) const;
+
+  static bool is_message_forward(const Message *m);
 
   static int32 get_message_schedule_date(const Message *m);
 

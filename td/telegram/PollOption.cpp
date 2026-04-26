@@ -16,14 +16,9 @@
 
 namespace td {
 
-PollOption::PollOption(FormattedText &&text, unique_ptr<MessageContent> &&media, int32 pos)
+PollOption::PollOption(FormattedText &&text, unique_ptr<MessageContent> &&media)
     : text_(std::move(text)), media_(std::move(media)) {
-  if (pos < 10) {
-    data_ = string(1, static_cast<char>(pos + '0'));
-  } else {
-    data_ = string(2, static_cast<char>(pos - 10 + '0'));
-    data_[0] = static_cast<char>('0' + pos / 10);
-  }
+  keep_only_custom_emoji(text_);
 }
 
 PollOption::PollOption(Td *td, telegram_api::object_ptr<telegram_api::PollAnswer> &&poll_answer_ptr,
@@ -33,7 +28,7 @@ PollOption::PollOption(Td *td, telegram_api::object_ptr<telegram_api::PollAnswer
     return;
   }
   auto poll_answer = telegram_api::move_object_as<telegram_api::pollAnswer>(poll_answer_ptr);
-  text_ = get_formatted_text(nullptr, std::move(poll_answer->text_), true, true, "get_poll_answers");
+  text_ = get_formatted_text(nullptr, std::move(poll_answer->text_), true, true, "PollOption");
   keep_only_custom_emoji(text_);
   if (poll_answer->media_ != nullptr) {
     media_ = get_message_content(td, FormattedText(), std::move(poll_answer->media_), DialogId(), 0, false, UserId(),
@@ -53,6 +48,14 @@ PollOption::PollOption(Td *td, telegram_api::object_ptr<telegram_api::PollAnswer
       added_date_ = 0;
     }
   }
+}
+
+PollOption PollOption::dup_option(Td *td, DialogId dialog_id) const {
+  PollOption result;
+  result.text_ = text_;
+  remove_unallowed_entities(td, result.text_, dialog_id);
+  result.media_ = dup_message_content(td, dialog_id, media_.get(), MessageContentDupType::Copy, MessageCopyOptions());
+  return result;
 }
 
 void PollOption::append_file_ids(const Td *td, vector<FileId> &file_ids) const {
