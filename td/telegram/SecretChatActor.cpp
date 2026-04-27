@@ -8,6 +8,7 @@
 
 #include "td/telegram/net/DcId.h"
 #include "td/telegram/net/NetQueryCreator.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/secret_api.hpp"
 #include "td/telegram/ServerMessageId.h"
 #include "td/telegram/telegram_api.h"
@@ -82,10 +83,12 @@ void SecretChatActor::update_chat(telegram_api::object_ptr<telegram_api::Encrypt
 void SecretChatActor::create_chat(UserId user_id, int64 user_access_hash, int32 random_id,
                                   Promise<SecretChatId> promise) {
   if (close_flag_) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::LocalGuard);
     promise.set_error(400, "Chat is closed");
     return;
   }
   if (auth_state_.state != State::Empty) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::LocalGuard);
     promise.set_error(500, "Bad random_id");
     check_status(Status::Error("Unexpected request_chat"));
     loop();
@@ -1770,12 +1773,17 @@ Status SecretChatActor::on_update_chat(telegram_api::encryptedChat &update) {
   TRY_STATUS(save_common_info(update));
   if (auth_state_.state == State::WaitRequestResponse) {
     auth_state_.handshake.set_g_a(update.g_a_or_b_.as_slice());
-    TRY_STATUS(auth_state_.handshake.run_checks(true, context_->dh_callback()));
+    auto run_checks_status = auth_state_.handshake.run_checks(true, context_->dh_callback());
+    if (run_checks_status.is_error()) {
+      net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::DhConfigReject);
+      return run_checks_status;
+    }
     auto id_and_key = auth_state_.handshake.gen_key();
     pfs_state_.auth_key = mtproto::AuthKey(id_and_key.first, std::move(id_and_key.second));
     calc_key_hash();
   }
   if (static_cast<int64>(pfs_state_.auth_key.id()) != update.key_fingerprint_) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::PeerReject);
     return Status::Error("Key fingerprint mismatch");
   }
   auth_state_.state = State::Ready;
@@ -1794,6 +1802,7 @@ Status SecretChatActor::on_update_chat(telegram_api::encryptedChat &update) {
   return Status::OK();
 }
 Status SecretChatActor::on_update_chat(telegram_api::encryptedChatDiscarded &update) {
+  net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::PeerReject);
   cancel_chat(update.history_deleted_, true, Promise<Unit>());
   return Status::OK();
 }
@@ -1802,7 +1811,12 @@ Status SecretChatActor::on_update_chat(NetQueryPtr query) {
   static_assert(std::is_same<telegram_api::messages_requestEncryption::ReturnType,
                              telegram_api::messages_acceptEncryption::ReturnType>::value,
                 "");
-  TRY_RESULT(config, fetch_result<telegram_api::messages_requestEncryption>(std::move(query)));
+  auto config_result = fetch_result<telegram_api::messages_requestEncryption>(std::move(query));
+  if (config_result.is_error()) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::NetworkPath);
+    return config_result.move_as_error();
+  }
+  auto config = config_result.move_as_ok();
   TRY_STATUS(on_update_chat(std::move(config)));
   if (auth_state_.state == State::WaitRequestResponse) {
     context_->secret_chat_db()->set_value(auth_state_);
@@ -1881,10 +1895,19 @@ void SecretChatActor::get_dh_config() {
 
 Status SecretChatActor::on_dh_config(NetQueryPtr query) {
   LOG(INFO) << "Receive DH config";
-  TRY_RESULT(config, fetch_result<telegram_api::messages_getDhConfig>(std::move(query)));
+  auto config_result = fetch_result<telegram_api::messages_getDhConfig>(std::move(query));
+  if (config_result.is_error()) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::NetworkPath);
+    return config_result.move_as_error();
+  }
+  auto config = config_result.move_as_ok();
   downcast_call(*config, [&](auto &obj) { this->on_dh_config(obj); });
-  TRY_STATUS(mtproto::DhHandshake::check_config(auth_state_.dh_config.g, auth_state_.dh_config.prime,
-                                                context_->dh_callback()));
+  auto check_status =
+      mtproto::DhHandshake::check_config(auth_state_.dh_config.g, auth_state_.dh_config.prime, context_->dh_callback());
+  if (check_status.is_error()) {
+    net_health::note_peer_channel_create_failure(net_health::PeerChannelCreateFailureReason::DhConfigReject);
+    return check_status;
+  }
   auth_state_.handshake.set_config(auth_state_.dh_config.g, auth_state_.dh_config.prime);
   return Status::OK();
 }

@@ -11,6 +11,8 @@
 #include "td/mtproto/MtprotoQuery.h"
 #include "td/mtproto/PacketInfo.h"
 #include "td/mtproto/RawConnection.h"
+#include "td/mtproto/SaltWindowPolicy.h"
+#include "td/mtproto/SessionEventBounds.h"
 
 #include "td/utils/buffer.h"
 #include "td/utils/common.h"
@@ -211,6 +213,7 @@ class SessionConnection final
   bool ack_overflow_bulk_latched_ = false;
 
   double last_get_future_salt_at_ = 0;
+  SaltWindowPolicy salt_window_policy_;
   enum { Init, Run, Fail, Closed } state_;
   Mode mode_;
   bool connected_flag_ = false;
@@ -221,6 +224,12 @@ class SessionConnection final
 
   unique_ptr<RawConnection> raw_connection_;
   AuthData *const auth_data_;
+
+  // Service message sequencers (Phase 17 hardening — anti-T26/T27).
+  SessionInitSequencer session_init_seq_;
+  RouteCorrectionSequencer route_correction_seq_;
+  MessageId highest_sent_msg_id_;
+
   SessionConnection::Callback *callback_ = nullptr;
   BufferSlice *current_buffer_slice_ = nullptr;
 

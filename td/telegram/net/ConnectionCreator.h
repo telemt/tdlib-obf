@@ -120,6 +120,8 @@ class ConnectionCreator final : public NetQueryCallback {
                                                          const IPAddress &resolved_proxy_ip_address);
   static Status verify_connection_peer(const Proxy &proxy, const IPAddress &expected_peer_address,
                                        const IPAddress &actual_peer_address);
+  static bool is_reviewed_route_address(const IPAddress &ip_address, [[maybe_unused]] bool is_test);
+  static DcOptions filter_reviewed_route_options(DcOptions options, bool is_test);
 
  private:
   friend class ProxyChecker;

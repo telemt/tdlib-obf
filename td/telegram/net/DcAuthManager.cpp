@@ -15,8 +15,6 @@
 #include "td/telegram/telegram_api.h"
 #include "td/telegram/UniqueId.h"
 
-#include "td/actor/actor.h"
-
 #include "td/utils/logging.h"
 #include "td/utils/misc.h"
 
@@ -24,6 +22,37 @@
 #include <limits>
 
 namespace td {
+
+namespace dc_lane {
+
+int32 reviewed_exchange_timeout_seconds() {
+  return 300;
+}
+
+size_t reviewed_exchange_retry_cap() {
+  return 3;
+}
+
+bool is_reviewed_exchange_target(int32 raw_dc_id, bool is_test) {
+  return NetQueryDispatcher::is_known_main_dc_id(raw_dc_id, is_test);
+}
+
+bool can_retry_exchange(uint32 failure_count) {
+  return failure_count < dc_lane::reviewed_exchange_retry_cap();
+}
+
+}  // namespace dc_lane
+
+namespace {
+
+void clear_exchange_bytes(BufferSlice &bytes) {
+  if (!bytes.empty()) {
+    bytes.as_mutable_slice().fill(0);
+  }
+  bytes = BufferSlice();
+}
+
+}  // namespace
 
 int VERBOSITY_NAME(dc) = VERBOSITY_NAME(DEBUG) + 2;
 
@@ -116,23 +145,36 @@ void DcAuthManager::on_result(NetQueryPtr net_query) {
         if (!G()->is_expected_error(r_result_auth_exported.error())) {
           LOG(WARNING) << "Receive error for auth.exportAuthorization: " << r_result_auth_exported.error();
         }
+        dc.exchange_failure_count++;
+        dc.exchange_retry_cap_reported = false;
+        net_health::note_aux_transfer_export_failure();
         dc.state = DcInfo::State::Export;
         break;
       }
       auto result_auth_exported = r_result_auth_exported.move_as_ok();
+      net_health::note_aux_transfer_export_success();
       dc.export_id = result_auth_exported->id_;
+      clear_exchange_bytes(dc.export_bytes);
       dc.export_bytes = std::move(result_auth_exported->bytes_);
       break;
     }
     case DcInfo::State::BeforeOk: {
       auto result_auth = fetch_result<telegram_api::auth_importAuthorization>(std::move(net_query));
+      clear_exchange_bytes(dc.export_bytes);
+      dc.export_id = -1;
       if (result_auth.is_error()) {
         if (!G()->is_expected_error(result_auth.error())) {
           LOG(WARNING) << "Receive error for auth.importAuthorization: " << result_auth.error();
         }
+        dc.exchange_failure_count++;
+        dc.exchange_retry_cap_reported = false;
+        net_health::note_aux_transfer_import_failure();
         dc.state = DcInfo::State::Export;
         break;
       }
+      net_health::note_aux_transfer_import_success();
+      dc.exchange_failure_count = 0;
+      dc.exchange_retry_cap_reported = false;
       dc.state = DcInfo::State::Ok;
       break;
     }
@@ -145,11 +187,17 @@ void DcAuthManager::on_result(NetQueryPtr net_query) {
 void DcAuthManager::dc_loop(DcInfo &dc) {
   VLOG(dc) << "In dc_loop: " << dc.dc_id << " " << dc.auth_key_state;
   if (dc.auth_key_state == AuthKeyState::OK) {
+    dc.exchange_failure_count = 0;
+    dc.exchange_retry_cap_reported = false;
+    clear_exchange_bytes(dc.export_bytes);
+    dc.export_id = -1;
     return;
   }
   if (dc.state == DcInfo::State::Ok) {
     LOG(WARNING) << "Lost key in " << dc.dc_id << ", restart dc_loop";
     dc.state = DcInfo::State::Waiting;
+    dc.exchange_failure_count = 0;
+    dc.exchange_retry_cap_reported = false;
   }
   CHECK(dc.shared_auth_data);
   switch (dc.state) {
@@ -158,13 +206,27 @@ void DcAuthManager::dc_loop(DcInfo &dc) {
       [[fallthrough]];
     }
     case DcInfo::State::Export: {
+      if (!dc_lane::is_reviewed_exchange_target(dc.dc_id.get_raw_id(), G()->is_test_dc())) {
+        net_health::note_aux_transfer_target_reject();
+        dc.state = DcInfo::State::Waiting;
+        return;
+      }
+      if (!dc_lane::can_retry_exchange(dc.exchange_failure_count)) {
+        if (!dc.exchange_retry_cap_reported) {
+          net_health::note_aux_transfer_retry_cap_hit();
+          dc.exchange_retry_cap_reported = true;
+        }
+        dc.state = DcInfo::State::Waiting;
+        return;
+      }
       // send auth.exportAuthorization to auth_dc
       VLOG(dc) << "Send exportAuthorization to " << dc.dc_id;
       auto id = UniqueId::next();
       auto query =
           G()->net_query_creator().create(id, nullptr, telegram_api::auth_exportAuthorization(dc.dc_id.get_raw_id()),
                                           {}, DcId::main(), NetQuery::Type::Common, NetQuery::AuthFlag::On);
-      query->total_timeout_limit_ = 60 * 60 * 24;
+      query->total_timeout_limit_ = dc_lane::reviewed_exchange_timeout_seconds();
+      net_health::note_aux_transfer_export_request();
       G()->net_query_dispatcher().dispatch_with_callback(std::move(query), actor_shared(this, dc.dc_id.get_raw_id()));
       dc.wait_id = id;
       dc.export_id = -1;
@@ -178,10 +240,13 @@ void DcAuthManager::dc_loop(DcInfo &dc) {
       }
       uint64 id = UniqueId::next();
       VLOG(dc) << "Send importAuthorization to " << dc.dc_id;
+      BufferSlice import_bytes(dc.export_bytes.as_slice());
+      clear_exchange_bytes(dc.export_bytes);
       auto query = G()->net_query_creator().create(
-          id, nullptr, telegram_api::auth_importAuthorization(dc.export_id, std::move(dc.export_bytes)), {}, dc.dc_id,
+          id, nullptr, telegram_api::auth_importAuthorization(dc.export_id, std::move(import_bytes)), {}, dc.dc_id,
           NetQuery::Type::Common, NetQuery::AuthFlag::Off);
-      query->total_timeout_limit_ = 60 * 60 * 24;
+      query->total_timeout_limit_ = dc_lane::reviewed_exchange_timeout_seconds();
+      net_health::note_aux_transfer_import_request();
       G()->net_query_dispatcher().dispatch_with_callback(std::move(query), actor_shared(this, dc.dc_id.get_raw_id()));
       dc.wait_id = id;
       dc.state = DcInfo::State::BeforeOk;

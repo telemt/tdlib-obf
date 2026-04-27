@@ -59,7 +59,11 @@ class OptionManager {
 
   static bool is_synchronous_option(Slice name);
 
-  static bool resolve_use_pfs_option_value(bool requested_use_pfs);
+  static bool resolve_session_mode_option_value(bool requested_mode);
+  static int32 clamp_reviewed_call_window_ms(Slice name, int32 value);
+  static int32 clamp_reviewed_session_count(int32 value);
+  static bool is_reviewed_aux_route_id(int32 dc_id, bool is_test_dc);
+  static bool is_reviewed_domain_option_value(Slice value);
 
   static td_api::object_ptr<td_api::OptionValue> get_option_synchronously(Slice name);
 

@@ -12,6 +12,7 @@
 #include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/SendCodeHelper.h"
 #include "td/telegram/SentEmailCode.h"
+#include "td/telegram/SessionEntryGate.h"
 #include "td/telegram/td_api.h"
 #include "td/telegram/telegram_api.h"
 #include "td/telegram/TermsOfService.h"
@@ -212,6 +213,7 @@ class AuthManager final : public NetActor {
   string login_token_;
   double login_token_expires_at_ = 0.0;
   int32 imported_dc_id_ = -1;
+  session_entry::SessionEntryGate session_entry_gate_;
 
   // State::WaitPassword
   string password_;

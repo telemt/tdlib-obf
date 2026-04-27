@@ -33,6 +33,34 @@ TEST(NetMonitorAdversarial, SameDcReplayDoesNotCountAsBurst) {
   ASSERT_EQ(0u, snapshot.counters.auth_key_destroy_burst_total);
 }
 
+TEST(NetMonitorAdversarial, BindFailureAgeBucketsFailClosedAtBoundary) {
+  td::net_health::reset_net_monitor_for_tests();
+
+  td::net_health::note_bind_encrypted_message_invalid(4, true, 59.999);
+  td::net_health::note_bind_encrypted_message_invalid(4, true, 60.0);
+  td::net_health::note_bind_encrypted_message_invalid(4, false, -1.0);
+
+  auto snapshot = td::net_health::get_net_monitor_snapshot();
+  ASSERT_EQ(3u, snapshot.counters.bind_encrypted_message_invalid_total);
+  ASSERT_EQ(2u, snapshot.counters.bind_encrypted_message_invalid_guarded_total);
+  ASSERT_EQ(1u, snapshot.counters.bind_encrypted_message_invalid_unguarded_total);
+  ASSERT_EQ(2u, snapshot.counters.bind_encrypted_message_invalid_recent_key_total);
+  ASSERT_EQ(1u, snapshot.counters.bind_encrypted_message_invalid_settled_key_total);
+}
+
+TEST(NetMonitorAdversarial, ExportLaneRollupAlwaysContainsAllRouteWindowFields) {
+  td::net_health::reset_net_monitor_for_tests();
+
+  auto rollup = td::net_health::get_lane_probe_rollup();
+  ASSERT_TRUE(rollup.find("rcso=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("rcui=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("rpna=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("rppa=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("rpm=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("aro=") != td::string::npos);
+  ASSERT_TRUE(rollup.find("swo=") != td::string::npos);
+}
+
 TEST(NetMonitorAdversarial, RepeatedDestroyExtendsDcReauthBarrier) {
   td::net_health::reset_net_monitor_for_tests();
 

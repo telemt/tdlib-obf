@@ -11,8 +11,6 @@
 #include "td/telegram/net/DcId.h"
 #include "td/telegram/net/NetQuery.h"
 
-#include "td/actor/actor.h"
-
 #include "td/utils/buffer.h"
 #include "td/utils/common.h"
 #include "td/utils/logging.h"
@@ -23,6 +21,15 @@
 namespace td {
 
 extern int VERBOSITY_NAME(dc);
+
+namespace dc_lane {
+
+int32 reviewed_exchange_timeout_seconds();
+size_t reviewed_exchange_retry_cap();
+bool is_reviewed_exchange_target(int32 raw_dc_id, bool is_test);
+bool can_retry_exchange(uint32 failure_count);
+
+}  // namespace dc_lane
 
 class DcAuthManager final : public NetQueryCallback {
  public:
@@ -45,6 +52,8 @@ class DcAuthManager final : public NetQueryCallback {
     uint64 wait_id = 0;
     int64 export_id = 0;
     BufferSlice export_bytes;
+    uint32 exchange_failure_count{0};
+    bool exchange_retry_cap_reported{false};
   };
 
   ActorShared<> parent_;

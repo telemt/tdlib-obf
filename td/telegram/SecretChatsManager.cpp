@@ -15,6 +15,7 @@
 #include "td/telegram/MessagesManager.h"
 #include "td/telegram/net/NetQuery.h"
 #include "td/telegram/net/NetQueryDispatcher.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/SecretChatDb.h"
 #include "td/telegram/SequenceDispatcher.h"
 #include "td/telegram/StateManager.h"
@@ -165,6 +166,7 @@ void SecretChatsManager::send_set_ttl_message(SecretChatId secret_chat_id, int32
 
 void SecretChatsManager::on_update_chat(tl_object_ptr<telegram_api::updateEncryption> update) {
   if (!use_secret_chats_ || close_flag_) {
+    net_health::note_peer_channel_suppress();
     return;
   }
   PendingChatUpdate pending_update;

@@ -38,6 +38,21 @@ enum class FullConfigRecoveryConnectionAction : int32 { Dispatch, DelayForever }
 
 FullConfigRecoveryConnectionAction get_full_config_recovery_connection_action(size_t request_raw_connection_count);
 
+namespace lane_config {
+
+bool is_reviewed_recovery_host(Slice value);
+bool is_reviewed_token_payload(Slice value);
+bool is_reviewed_primary_prefix(Slice value);
+bool is_reviewed_bot_alias(Slice value);
+bool should_apply_blocked_mode(bool is_from_main_dc, bool previous_value, bool requested_value, double now,
+                               double &next_true_transition_at);
+bool should_trigger_config_refresh(bool has_dc_updates, double now, double &next_refresh_at);
+bool should_apply_lang_pack_refresh(double now, double &next_refresh_at);
+int32 clamp_call_window_ms(Slice field_name, int32 value);
+int32 clamp_session_window(int32 value);
+
+}  // namespace lane_config
+
 Result<SimpleConfig> decode_config(Slice input);
 Result<SimpleConfig> decode_simple_config_payload(Slice payload);
 Status check_config_entry(int64 fingerprint);
@@ -103,6 +118,10 @@ class ConfigManager final : public NetQueryCallback {
   Timestamp expire_time_;
 
   FloodControlStrict lazy_request_flood_control_;
+  double blocked_mode_true_transition_at_{0.0};
+  double next_config_refresh_at_{0.0};
+  double next_lang_pack_refresh_at_{0.0};
+  bool has_applied_token_update_{false};
 
   vector<Promise<Unit>> reget_config_queries_;
 

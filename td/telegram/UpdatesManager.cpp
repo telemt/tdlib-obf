@@ -47,6 +47,7 @@
 #include "td/telegram/MessageTtl.h"
 #include "td/telegram/misc.h"
 #include "td/telegram/net/DcOptions.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/NotificationManager.h"
 #include "td/telegram/NotificationSettingsManager.h"
 #include "td/telegram/NotificationSettingsScope.h"
@@ -1211,6 +1212,7 @@ void UpdatesManager::on_get_updates_impl(telegram_api::object_ptr<telegram_api::
       auto &update = static_cast<telegram_api::updateShort *>(updates_ptr.get())->update_;
       auto update_id = update->get_id();
       if (update_id == telegram_api::updateLoginToken::ID) {
+        net_health::note_session_entry_update();
         td_->auth_manager_->on_update_login_token();
         return promise.set_value(Unit());
       }
@@ -1222,7 +1224,6 @@ void UpdatesManager::on_get_updates_impl(telegram_api::object_ptr<telegram_api::
 
       switch (update_id) {
         case telegram_api::updateServiceNotification::ID:
-        case telegram_api::updateDcOptions::ID:
         case telegram_api::updateConfig::ID:
         case telegram_api::updateLangPackTooLong::ID:
         case telegram_api::updateLangPack::ID:
@@ -2533,7 +2534,6 @@ void UpdatesManager::on_pending_updates(vector<tl_object_ptr<telegram_api::Updat
         case telegram_api::updateEncryptedChatTyping::ID:
         case telegram_api::updateLoginToken::ID:
         case telegram_api::updateSentPhoneCode::ID:
-        case telegram_api::updateDcOptions::ID:
         case telegram_api::updateConfig::ID:
         case telegram_api::updateServiceNotification::ID:
         case telegram_api::updateLangPackTooLong::ID:
@@ -4413,6 +4413,10 @@ void UpdatesManager::on_update(tl_object_ptr<telegram_api::updateDialogFilterOrd
 }
 
 void UpdatesManager::on_update(tl_object_ptr<telegram_api::updateDcOptions> update, Promise<Unit> &&promise) {
+  if (!td_->auth_manager_->is_authorized()) {
+    net_health::note_route_push_pre_auth();
+    return promise.set_value(Unit());
+  }
   send_closure(G()->config_manager(), &ConfigManager::on_dc_options_update, DcOptions(update->dc_options_));
   promise.set_value(Unit());
 }
@@ -4753,6 +4757,8 @@ void UpdatesManager::on_update(tl_object_ptr<telegram_api::updateDeleteScheduled
 }
 
 void UpdatesManager::on_update(tl_object_ptr<telegram_api::updateLoginToken> update, Promise<Unit> &&promise) {
+  static_cast<void>(update);
+  net_health::note_session_entry_update();
   LOG(INFO) << "Ignore updateLoginToken after authorization";
   promise.set_value(Unit());
 }

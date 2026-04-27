@@ -13,18 +13,19 @@
 
 namespace {
 
-TEST(NetReliabilityMonitorStress, ConcurrentProtectedModeTamperCountersRemainAccurate) {
+TEST(NetMonitorDecayStress, ConcurrentMediumSignalsPreserveCountAndEscalation) {
   td::net_health::reset_net_monitor_for_tests();
+  td::net_health::set_lane_probe_now_for_tests(5000.0);
 
   constexpr td::uint32 thread_count = 4;
-  constexpr td::uint32 iterations_per_thread = 250;
+  constexpr td::uint32 iterations_per_thread = 200;
 
   std::vector<std::thread> threads;
   threads.reserve(thread_count);
   for (td::uint32 index = 0; index < thread_count; index++) {
-    threads.emplace_back([] {
+    threads.emplace_back([index] {
       for (td::uint32 iteration = 0; iteration < iterations_per_thread; iteration++) {
-        td::net_health::note_session_param_coerce_attempt();
+        td::net_health::note_bind_retry_budget_exhausted(static_cast<td::int32>((index % 5) + 1));
       }
     });
   }
@@ -34,7 +35,7 @@ TEST(NetReliabilityMonitorStress, ConcurrentProtectedModeTamperCountersRemainAcc
 
   auto snapshot = td::net_health::get_net_monitor_snapshot();
   ASSERT_EQ(static_cast<td::uint64>(thread_count) * iterations_per_thread,
-            snapshot.counters.session_param_coerce_attempt_total);
+            snapshot.counters.bind_retry_budget_exhausted_total);
   ASSERT_TRUE(snapshot.state == td::net_health::NetMonitorState::Suspicious);
 }
 

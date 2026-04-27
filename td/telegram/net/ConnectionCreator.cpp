@@ -18,6 +18,7 @@
 #include "td/telegram/logevent/LogEvent.h"
 #include "td/telegram/net/MtprotoHeader.h"
 #include "td/telegram/net/NetQueryDispatcher.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/net/NetType.h"
 #include "td/telegram/PromoDataManager.h"
 #include "td/telegram/StateManager.h"
@@ -35,6 +36,7 @@
 
 #include "td/utils/algorithm.h"
 #include "td/utils/base64.h"
+#include "td/utils/FlatHashSet.h"
 #include "td/utils/format.h"
 #include "td/utils/HashTableUtils.h"
 #include "td/utils/logging.h"
@@ -46,6 +48,8 @@
 #include "td/utils/tl_helpers.h"
 
 #include <algorithm>
+#include <array>
+#include <limits>
 #include <utility>
 
 namespace td {
@@ -71,6 +75,152 @@ string sanitize_lifecycle_label(Slice debug_str) {
 
 string make_lifecycle_destination(const IPAddress &ip_address, Slice debug_str) {
   return PSTRING() << ip_address << '|' << sanitize_lifecycle_label(debug_str);
+}
+
+string get_dc_option_signature(const DcOption &option) {
+  return PSTRING() << option.get_dc_id().get_raw_id() << '|' << option.get_ip_address().get_ip_str() << ':'
+                   << option.get_ip_address().get_port() << '|' << option.is_ipv6() << option.is_media_only()
+                   << option.is_obfuscated_tcp_only() << option.is_static() << '|'
+                   << format::as_hex(option.get_secret().get_raw_secret());
+}
+
+struct Ipv4Cidr {
+  uint32 network;
+  uint32 mask;
+};
+
+struct Ipv6Cidr {
+  std::array<uint8, 16> network;
+  uint8 prefix;
+};
+
+uint32 make_ipv4_mask(uint8 prefix) {
+  if (prefix == 0) {
+    return 0;
+  }
+  return std::numeric_limits<uint32>::max() << (32 - prefix);
+}
+
+bool ipv4_in_cidr(uint32 ip, const Ipv4Cidr &cidr) {
+  return (ip & cidr.mask) == cidr.network;
+}
+
+std::array<uint8, 16> to_ipv6_octets(const IPAddress &ip_address) {
+  std::array<uint8, 16> result{};
+  auto ipv6 = ip_address.get_ipv6();
+  if (ipv6.size() != 16) {
+    return result;
+  }
+  for (size_t i = 0; i < result.size(); i++) {
+    result[i] = static_cast<uint8>(ipv6[i]);
+  }
+  return result;
+}
+
+bool ipv6_in_cidr(const std::array<uint8, 16> &ip, const Ipv6Cidr &cidr) {
+  size_t full_bytes = cidr.prefix / 8;
+  uint8 tail_bits = cidr.prefix % 8;
+
+  for (size_t i = 0; i < full_bytes; i++) {
+    if (ip[i] != cidr.network[i]) {
+      return false;
+    }
+  }
+  if (tail_bits == 0) {
+    return true;
+  }
+
+  uint8 mask = static_cast<uint8>(0xffu << (8 - tail_bits));
+  return (ip[full_bytes] & mask) == (cidr.network[full_bytes] & mask);
+}
+
+bool is_forbidden_ipv4(uint32 ip) {
+  static const std::array<Ipv4Cidr, 10> forbidden = {{
+      {0x0a000000u, make_ipv4_mask(8)},   // 10.0.0.0/8
+      {0xac100000u, make_ipv4_mask(12)},  // 172.16.0.0/12
+      {0xc0a80000u, make_ipv4_mask(16)},  // 192.168.0.0/16
+      {0x64400000u, make_ipv4_mask(10)},  // 100.64.0.0/10
+      {0x7f000000u, make_ipv4_mask(8)},   // 127.0.0.0/8
+      {0xa9fe0000u, make_ipv4_mask(16)},  // 169.254.0.0/16
+      {0xe0000000u, make_ipv4_mask(4)},   // 224.0.0.0/4
+      {0xc0000200u, make_ipv4_mask(24)},  // 192.0.2.0/24
+      {0xc6336400u, make_ipv4_mask(24)},  // 198.51.100.0/24
+      {0xcb007100u, make_ipv4_mask(24)},  // 203.0.113.0/24
+  }};
+
+  for (const auto &cidr : forbidden) {
+    if (ipv4_in_cidr(ip, cidr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_forbidden_ipv6(const std::array<uint8, 16> &ip) {
+  static const std::array<Ipv6Cidr, 4> forbidden = {{
+      {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}, 128},             // ::1/128
+      {{{0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 10},        // fe80::/10
+      {{{0xff, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 8},         // ff00::/8
+      {{{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 32},  // 2001:db8::/32
+  }};
+
+  for (const auto &cidr : forbidden) {
+    if (ipv6_in_cidr(ip, cidr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_reviewed_ipv4(uint32 ip) {
+  static const std::array<Ipv4Cidr, 9> reviewed = {{
+      {0x5b6c3800u, make_ipv4_mask(22)},  // 91.108.56.0/22
+      {0x5b6c0400u, make_ipv4_mask(22)},  // 91.108.4.0/22
+      {0x5b6c0800u, make_ipv4_mask(22)},  // 91.108.8.0/22
+      {0x5b6c1000u, make_ipv4_mask(22)},  // 91.108.16.0/22
+      {0x5b6c0c00u, make_ipv4_mask(22)},  // 91.108.12.0/22
+      {0x959aa000u, make_ipv4_mask(20)},  // 149.154.160.0/20
+      {0x5b69c000u, make_ipv4_mask(23)},  // 91.105.192.0/23
+      {0x5b6c1400u, make_ipv4_mask(22)},  // 91.108.20.0/22
+      {0xb94c9700u, make_ipv4_mask(24)},  // 185.76.151.0/24
+  }};
+
+  for (const auto &cidr : reviewed) {
+    if (ipv4_in_cidr(ip, cidr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_reviewed_ipv6(const std::array<uint8, 16> &ip) {
+  static const std::array<Ipv6Cidr, 5> reviewed = {{
+      {{{0x20, 0x01, 0x0b, 0x28, 0xf2, 0x3d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 48},
+      {{{0x20, 0x01, 0x0b, 0x28, 0xf2, 0x3f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 48},
+      {{{0x20, 0x01, 0x06, 0x7c, 0x04, 0xe8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 48},
+      {{{0x20, 0x01, 0x0b, 0x28, 0xf2, 0x3c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 48},
+      {{{0x2a, 0x0a, 0xf2, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, 32},
+  }};
+
+  for (const auto &cidr : reviewed) {
+    if (ipv6_in_cidr(ip, cidr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_forbidden_route_address(const IPAddress &ip_address) {
+  if (!ip_address.is_valid()) {
+    return true;
+  }
+  if (ip_address.is_ipv4()) {
+    return is_forbidden_ipv4(ip_address.get_ipv4());
+  }
+  if (ip_address.is_ipv6()) {
+    return is_forbidden_ipv6(to_ipv6_octets(ip_address));
+  }
+  return true;
 }
 
 Slice proxy_mode_name(const Proxy &proxy) {
@@ -1055,6 +1205,8 @@ Status ConnectionCreator::verify_connection_peer(const Proxy &proxy, const IPAdd
     return Status::OK();
   }
 
+  net_health::note_route_peer_mismatch();
+
   return Status::Error(PSLICE() << "Connected peer mismatch: expected " << normalized_expected_peer_address << ", got "
                                 << normalized_actual_peer_address);
 }
@@ -1130,6 +1282,12 @@ Result<mtproto::TransportType> ConnectionCreator::get_transport_type(const Proxy
   }
 
   if (info.use_http) {
+#if !TD_DARWIN_WATCH_OS && !TD_EMSCRIPTEN
+    if (!proxy.use_http_caching_proxy()) {
+      net_health::note_lane_protocol_downgrade_flag();
+      return mtproto::TransportType{mtproto::TransportType::ObfuscatedTcp, raw_dc_id, info.option->get_secret()};
+    }
+#endif
     return mtproto::TransportType{mtproto::TransportType::Http, 0, mtproto::ProxySecret()};
   } else {
     return mtproto::TransportType{mtproto::TransportType::ObfuscatedTcp, raw_dc_id, info.option->get_secret()};
@@ -1590,6 +1748,23 @@ void ConnectionCreator::client_wakeup(uint32 hash) {
 }
 
 void ConnectionCreator::on_dc_options(DcOptions new_dc_options) {
+  FlatHashSet<string> baseline_signatures;
+  auto baseline_options = filter_reviewed_route_options(get_default_dc_options(G()->is_test_dc()), G()->is_test_dc());
+  baseline_signatures.reserve(baseline_options.dc_options.size());
+  for (const auto &baseline_option : baseline_options.dc_options) {
+    baseline_signatures.insert(get_dc_option_signature(baseline_option));
+  }
+
+  for (const auto &incoming_option : new_dc_options.dc_options) {
+    if (baseline_signatures.count(get_dc_option_signature(incoming_option)) == 0) {
+      net_health::note_route_push_nonbaseline_address();
+    }
+    // §19: record per-DC address update arrival for forced-reauth sequence detection
+    net_health::note_route_address_update(incoming_option.get_dc_id().get_raw_id(), Time::now());
+  }
+
+  new_dc_options = filter_reviewed_route_options(std::move(new_dc_options), G()->is_test_dc());
+
   auto seed = G()->get_option_integer("my_id");
   std::stable_sort(new_dc_options.dc_options.begin(), new_dc_options.dc_options.end(),
                    [seed](const DcOption &lhs, const DcOption &rhs) {
@@ -1623,10 +1798,57 @@ void ConnectionCreator::on_dc_options(DcOptions new_dc_options) {
 }
 
 void ConnectionCreator::add_dc_options(DcOptions &&new_dc_options) {
-  dc_options_set_.add_dc_options(get_default_dc_options(G()->is_test_dc()));
+  dc_options_set_.add_dc_options(
+      filter_reviewed_route_options(get_default_dc_options(G()->is_test_dc()), G()->is_test_dc()));
 #if !TD_EMSCRIPTEN  // FIXME
-  dc_options_set_.add_dc_options(std::move(new_dc_options));
+  dc_options_set_.add_dc_options(filter_reviewed_route_options(std::move(new_dc_options), G()->is_test_dc()));
 #endif
+}
+
+bool ConnectionCreator::is_reviewed_route_address(const IPAddress &ip_address, [[maybe_unused]] bool is_test) {
+  if (!ip_address.is_valid()) {
+    return false;
+  }
+  if (ip_address.is_ipv4()) {
+    auto ip = ip_address.get_ipv4();
+    if (is_forbidden_ipv4(ip)) {
+      return false;
+    }
+    return is_reviewed_ipv4(ip);
+  }
+  if (ip_address.is_ipv6()) {
+    auto octets = to_ipv6_octets(ip_address);
+    if (is_forbidden_ipv6(octets)) {
+      return false;
+    }
+    return is_reviewed_ipv6(octets);
+  }
+  return false;
+}
+
+DcOptions ConnectionCreator::filter_reviewed_route_options(DcOptions options, bool is_test) {
+  DcOptions filtered;
+  filtered.dc_options.reserve(options.dc_options.size());
+
+  for (auto &option : options.dc_options) {
+    if (is_forbidden_route_address(option.get_ip_address())) {
+      net_health::note_route_push_nonbaseline_address();
+      continue;
+    }
+
+    auto dc_id = option.get_dc_id();
+    if (dc_id.is_internal() && !NetQueryDispatcher::is_known_main_dc_id(dc_id.get_raw_id(), is_test)) {
+      net_health::note_route_catalog_unknown_id();
+      continue;
+    }
+    if (dc_id.is_internal() && !is_reviewed_route_address(option.get_ip_address(), is_test)) {
+      net_health::note_route_push_nonbaseline_address();
+      continue;
+    }
+    filtered.dc_options.push_back(std::move(option));
+  }
+
+  return filtered;
 }
 
 void ConnectionCreator::on_dc_update(DcId dc_id, string ip_port, Promise<> promise) {

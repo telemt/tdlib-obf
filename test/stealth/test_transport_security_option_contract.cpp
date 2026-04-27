@@ -11,11 +11,11 @@
 namespace {
 
 TEST(TransportSecurityOptionContract, RelaxedRequestNormalizesToProtectedMode) {
-  ASSERT_TRUE(td::OptionManager::resolve_use_pfs_option_value(false));
+  ASSERT_TRUE(td::OptionManager::resolve_session_mode_option_value(false));
 }
 
 TEST(TransportSecurityOptionContract, ProtectedRequestStaysProtectedMode) {
-  ASSERT_TRUE(td::OptionManager::resolve_use_pfs_option_value(true));
+  ASSERT_TRUE(td::OptionManager::resolve_session_mode_option_value(true));
 }
 
 }  // namespace

@@ -575,7 +575,7 @@ void Session::on_bind_result(NetQueryPtr query) {
       auto now = Time::now();
       bool has_immunity =
           !is_server_time_reliable || auth_key_age < 60 || (auth_key_age > 86400 && last_success_time > now - 86400);
-      net_health::note_bind_encrypted_message_invalid(raw_dc_id_, has_immunity);
+      net_health::note_bind_encrypted_message_invalid(raw_dc_id_, has_immunity, auth_key_age);
       auto debug = PSTRING() << ". Server time is " << server_time << ", auth key created at " << auth_key_creation_date
                              << ", is_server_time_reliable = " << is_server_time_reliable << ", use_pfs = " << use_pfs_
                              << ", last_success_time = " << last_success_time << ", now = " << now;
@@ -1774,6 +1774,10 @@ void Session::create_gen_auth_key_actor(HandshakeId handshake_id) {
   LOG(INFO) << "Create GenAuthKeyActor " << handshake_id;
   info.flag_ = true;
   bool is_main = handshake_id == MainAuthKeyHandshake;
+  // §19: record main-handshake initiation for forced-reauth sequence detection
+  if (is_main) {
+    net_health::note_handshake_initiated(raw_dc_id_, Time::now());
+  }
   if (!info.handshake_) {
     auto key_validity_time = is_main && !is_cdn_ ? 0 : Random::fast(23 * 60 * 60, 24 * 60 * 60);
     info.handshake_ = make_unique<mtproto::AuthKeyHandshake>(dc_id_, key_validity_time);

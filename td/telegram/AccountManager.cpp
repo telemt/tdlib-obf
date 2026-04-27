@@ -14,6 +14,7 @@
 #include "td/telegram/logevent/LogEvent.h"
 #include "td/telegram/logevent/LogEventHelper.h"
 #include "td/telegram/net/NetQueryCreator.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/OptionManager.h"
 #include "td/telegram/Td.h"
 #include "td/telegram/TdDb.h"
@@ -1052,6 +1053,7 @@ void AccountManager::toggle_session_can_accept_calls(int64 session_id, bool can_
 
 void AccountManager::toggle_session_can_accept_secret_chats(int64 session_id, bool can_accept_secret_chats,
                                                             Promise<Unit> &&promise) {
+  net_health::note_peer_channel_toggle(can_accept_secret_chats);
   change_authorization_settings_on_server(session_id, true, !can_accept_secret_chats, false, false, false, 0,
                                           std::move(promise));
 }

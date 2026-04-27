@@ -19,6 +19,7 @@
 #include "td/telegram/misc.h"
 #include "td/telegram/net/DcId.h"
 #include "td/telegram/net/NetQueryDispatcher.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/NewPasswordState.h"
 #include "td/telegram/NotificationManager.h"
 #include "td/telegram/NotificationSettingsManager.h"
@@ -28,6 +29,7 @@
 #include "td/telegram/PromoDataManager.h"
 #include "td/telegram/ReactionManager.h"
 #include "td/telegram/SendCodeHelper.hpp"
+#include "td/telegram/SessionEntryGate.h"
 #include "td/telegram/StateManager.h"
 #include "td/telegram/StickersManager.h"
 #include "td/telegram/Td.h"
@@ -508,6 +510,13 @@ void AuthManager::request_qr_code_authentication(uint64 query_id, vector<UserId>
 }
 
 void AuthManager::send_export_login_token_query() {
+  net_health::note_session_entry_export_request();
+  if (!session_entry_gate_.on_export_attempt(Time::now())) {
+    net_health::note_session_entry_export_rate_gate();
+    login_code_retry_delay_ = clamp(2 * login_code_retry_delay_, 1, 60);
+    set_login_token_expires_at(Time::now() + login_code_retry_delay_);
+    return;
+  }
   poll_export_login_code_timeout_.cancel_timeout();
   start_net_query(NetQueryType::RequestQrCode,
                   G()->net_query_creator().create_unauth(telegram_api::auth_exportLoginToken(
@@ -906,10 +915,12 @@ void AuthManager::log_out(uint64 query_id) {
     // TODO: could skip full logout if still no authorization
     // TODO: send auth.cancelCode if state_ == State::WaitCode
     LOG(WARNING) << "Destroying auth keys by user request";
+    net_health::note_session_entry_clear(net_health::SessionEntryClearReason::UserLogout);
     destroy_auth_keys(net_health::AuthKeyDestroyReason::UserLogout);
     on_current_query_ok();
   } else {
     LOG(WARNING) << "Logging out by user request";
+    net_health::note_session_entry_clear(net_health::SessionEntryClearReason::UserLogout);
     G()->td_db()->get_binlog_pmc()->set("auth", "logout");
     update_state(State::LoggingOut);
     send_log_out_query();
@@ -1191,6 +1202,7 @@ void AuthManager::on_get_login_token(tl_object_ptr<telegram_api::auth_LoginToken
       auto token = move_tl_object_as<telegram_api::auth_loginToken>(login_token);
       login_token_ = token->token_.as_slice().str();
       set_login_token_expires_at(Time::now() + td::max(token->expires_ - G()->server_time(), 1.0));
+      session_entry_gate_.on_token_generated(Time::now());
       update_state(State::WaitQrCodeConfirmation);
       on_current_query_ok();
       break;
@@ -1211,6 +1223,9 @@ void AuthManager::on_get_login_token(tl_object_ptr<telegram_api::auth_LoginToken
     }
     case telegram_api::auth_loginTokenSuccess::ID: {
       auto token = move_tl_object_as<telegram_api::auth_loginTokenSuccess>(login_token);
+      if (session_entry_gate_.is_fast_acceptance(Time::now())) {
+        net_health::note_session_entry_fast_accept();
+      }
       on_get_authorization(std::move(token->authorization_));
       break;
     }
@@ -1621,6 +1636,16 @@ void AuthManager::on_result(NetQueryPtr net_query) {
 }
 
 void AuthManager::update_state(State new_state, bool should_save_state) {
+  auto old_state = state_;
+  if (old_state == State::WaitQrCodeConfirmation && new_state != State::WaitQrCodeConfirmation) {
+    if (new_state != State::LoggingOut && new_state != State::DestroyingKeys && new_state != State::Closing) {
+      net_health::note_session_entry_clear(net_health::SessionEntryClearReason::FlowTransition);
+    }
+    poll_export_login_code_timeout_.cancel_timeout();
+    login_token_.clear();
+    login_token_expires_at_ = 0.0;
+  }
+
   bool skip_update = (state_ == State::LoggingOut || state_ == State::DestroyingKeys) &&
                      (new_state == State::LoggingOut || new_state == State::DestroyingKeys);
   state_ = new_state;

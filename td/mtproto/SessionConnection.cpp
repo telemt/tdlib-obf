@@ -13,9 +13,12 @@
 #include "td/mtproto/mtproto_api.h"
 #include "td/mtproto/mtproto_api.hpp"
 #include "td/mtproto/PacketStorer.h"
+#include "td/mtproto/SaltWindowPolicy.h"
 #include "td/mtproto/stealth/TrafficClassifier.h"
 #include "td/mtproto/Transport.h"
 #include "td/mtproto/utils.h"
+
+#include "td/telegram/net/NetReliabilityMonitor.h"
 
 #include "td/utils/algorithm.h"
 #include "td/utils/as.h"
@@ -372,13 +375,39 @@ Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::new_
   VLOG(mtproto) << "Receive new_session_created " << info << ": [first " << first_message_id
                 << "] [unique_id:" << new_session_created.unique_id_ << ']';
 
+  // Phase 17 hardening: validate unique_id and rate-gate salt updates (anti-T26).
+  auto init_decision = session_init_seq_.on_event(new_session_created.unique_id_, Time::now_cached());
+  if (init_decision == SessionInitSequencer::Decision::Reject) {
+    net_health::note_session_init_replay();
+    LOG(WARNING) << "Dropping new_session_created with invalid unique_id=" << new_session_created.unique_id_;
+    return Status::OK();
+  }
+  if (init_decision == SessionInitSequencer::Decision::AcceptWithoutSaltUpdate) {
+    net_health::note_session_init_rate_gate();
+  }
+
+  // Clamp first_msg_id to prevent amplification attacks.
+  {
+    auto [clamped_id, was_clamped] = SessionInitSequencer::clamp_first_msg_id(
+        static_cast<uint64>(new_session_created.first_msg_id_), highest_sent_msg_id_.get());
+    if (was_clamped) {
+      net_health::note_session_init_scope_clamp();
+      LOG(WARNING) << "Clamping new_session_created.first_msg_id from " << new_session_created.first_msg_id_ << " to "
+                   << clamped_id;
+      first_message_id = MessageId(clamped_id);
+    }
+  }
+
   auto it = service_queries_.find(first_message_id);
   if (it != service_queries_.end()) {
     first_message_id = it->second.container_message_id_;
     LOG(INFO) << "Update first_message_id to container's " << first_message_id;
   }
 
-  callback_->on_new_session_created(new_session_created.unique_id_, first_message_id);
+  // Only notify session of salt update when permitted by the sequencer.
+  if (init_decision == SessionInitSequencer::Decision::AcceptWithSaltUpdate) {
+    callback_->on_new_session_created(new_session_created.unique_id_, first_message_id);
+  }
   return Status::OK();
 }
 
@@ -482,9 +511,30 @@ Status SessionConnection::on_packet(const MsgInfo &info,
 Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::bad_server_salt &bad_server_salt) {
   MsgInfo bad_info{MessageId(static_cast<uint64>(bad_server_salt.bad_msg_id_)), bad_server_salt.bad_msg_seqno_, 0};
   VLOG(mtproto) << "Receive bad_server_salt " << info << ": " << bad_info;
+
+  // Phase 17 hardening: validate bad_msg_id cross-reference and rate-gate (anti-T27).
+  auto correction_decision =
+      route_correction_seq_.on_event(static_cast<uint64>(bad_server_salt.bad_msg_id_), Time::now_cached());
+
+  if (correction_decision == RouteCorrectionSequencer::Decision::TearDown) {
+    net_health::note_route_correction_chain_reset();
+    LOG(WARNING) << "Consecutive bad_server_salt limit exceeded; closing connection";
+    return Status::Error("Route correction chain limit exceeded");
+  }
+  if (correction_decision == RouteCorrectionSequencer::Decision::RateLimit) {
+    net_health::note_route_correction_rate_gate();
+    LOG(WARNING) << "bad_server_salt rate-limited for bad_msg_id=" << bad_server_salt.bad_msg_id_;
+    return Status::OK();
+  }
+  if (correction_decision == RouteCorrectionSequencer::Decision::Reject) {
+    net_health::note_route_correction_unref();
+    LOG(WARNING) << "bad_server_salt references unknown bad_msg_id=" << bad_server_salt.bad_msg_id_;
+    return Status::OK();
+  }
+
+  // Accept: apply salt and resend.
   auth_data_->set_server_salt(bad_server_salt.new_server_salt_, Time::now_cached());
   callback_->on_server_salt_updated();
-
   on_message_failed(bad_info.message_id, Status::Error("Bad server salt"));
   return Status::OK();
 }
@@ -494,6 +544,10 @@ Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::msgs
   VLOG(mtproto) << "Receive msgs_ack " << info << ": " << message_ids;
   for (auto message_id : message_ids) {
     callback_->on_message_ack(message_id);
+  }
+  if (!message_ids.empty()) {
+    // Phase 17 hardening: delivery confirmation resets consecutive correction counter.
+    route_correction_seq_.on_delivery_confirmed();
   }
   return Status::OK();
 }
@@ -537,12 +591,41 @@ Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::pong
 }
 
 Status SessionConnection::on_packet(const MsgInfo &info, const mtproto_api::future_salts &salts) {
-  vector<ServerSalt> new_salts;
+  vector<SaltEntry> raw_entries;
+  raw_entries.reserve(salts.salts_.size());
   for (auto &it : salts.salts_) {
-    new_salts.push_back(
-        ServerSalt{it->salt_, static_cast<double>(it->valid_since_), static_cast<double>(it->valid_until_)});
+    raw_entries.push_back(
+        SaltEntry{it->salt_, static_cast<double>(it->valid_since_), static_cast<double>(it->valid_until_)});
   }
   auto now = Time::now_cached();
+
+  auto swp_result = salt_window_policy_.validate(raw_entries, now);
+  if (swp_result.overflowed) {
+    net_health::note_route_salt_overflow();
+  }
+  if (swp_result.entry_window_oob) {
+    net_health::note_route_salt_entry_window_oob();
+  }
+  if (swp_result.coverage_oob) {
+    net_health::note_route_salt_coverage_oob();
+  }
+  if (swp_result.monotonic_violation) {
+    net_health::note_route_salt_monotonic_violation();
+  }
+  if (swp_result.anchor_oob) {
+    net_health::note_route_salt_anchor_oob();
+  }
+  if (swp_result.rate_limited) {
+    net_health::note_route_salt_rate_gate();
+    VLOG(mtproto) << "future_salts rate-gated (§27)";
+    return Status::OK();
+  }
+
+  vector<ServerSalt> new_salts;
+  new_salts.reserve(swp_result.entries.size());
+  for (auto &e : swp_result.entries) {
+    new_salts.push_back(ServerSalt{e.salt, e.valid_since, e.valid_until});
+  }
   auth_data_->set_future_salts(new_salts, now);
   VLOG(mtproto) << "Receive future_salts " << info << ": is_valid = " << auth_data_->is_server_salt_valid(now)
                 << ", has_salt = " << auth_data_->has_salt(now)
@@ -1159,6 +1242,16 @@ void SessionConnection::flush_packet() {
 
     auto quick_ack_token = use_quick_ack ? parent_message_id.get() : 0;
     send_crypto(storer, quick_ack_token, hint);
+  }
+
+  // Phase 17 hardening: track sent message IDs for route-correction cross-reference.
+  for (const auto &q : queries) {
+    if (q.message_id != MessageId()) {
+      route_correction_seq_.track_sent(q.message_id.get());
+      if (q.message_id.get() > highest_sent_msg_id_.get()) {
+        highest_sent_msg_id_ = q.message_id;
+      }
+    }
   }
 
   if (ack_overflow_bulk_latched_ && to_ack_message_ids_.empty()) {

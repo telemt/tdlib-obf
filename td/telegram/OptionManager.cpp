@@ -306,7 +306,7 @@ void OptionManager::on_td_inited() {
 
 void OptionManager::set_option_boolean(Slice name, bool value) {
   if (name == "use_pfs") {
-    value = resolve_use_pfs_option_value(value);
+    value = resolve_session_mode_option_value(value);
   }
   set_option(name, value ? Slice("Btrue") : Slice("Bfalse"));
 }
@@ -366,19 +366,81 @@ string OptionManager::get_option_string(Slice name, string default_value) const 
   return value.substr(1);
 }
 
-bool OptionManager::resolve_use_pfs_option_value(bool requested_use_pfs) {
-  if (!requested_use_pfs) {
+bool OptionManager::resolve_session_mode_option_value(bool requested_mode) {
+  if (!requested_mode) {
     net_health::note_session_param_coerce_attempt();
   }
   return true;
 }
 
+int32 OptionManager::clamp_reviewed_call_window_ms(Slice name, int32 value) {
+  return lane_config::clamp_call_window_ms(name, value);
+}
+
+int32 OptionManager::clamp_reviewed_session_count(int32 value) {
+  return lane_config::clamp_session_window(value);
+}
+
+bool OptionManager::is_reviewed_aux_route_id(int32 dc_id, bool is_test_dc) {
+  return NetQueryDispatcher::is_known_main_dc_id(dc_id, is_test_dc);
+}
+
+bool OptionManager::is_reviewed_domain_option_value(Slice value) {
+  if (value.empty() || value[0] != 'S') {
+    return false;
+  }
+  auto domain = value.substr(1);
+  if (domain.empty()) {
+    return false;
+  }
+  return lane_config::is_reviewed_recovery_host(domain);
+}
+
 void OptionManager::set_option(Slice name, Slice value) {
   CHECK(!name.empty());
   CHECK(Scheduler::instance()->sched_id() == current_scheduler_id_);
+  if (name == "test_mode") {
+    net_health::note_config_test_mode_mismatch();
+    return;
+  }
   if (name == "use_pfs" && value == Slice("Bfalse")) {
     value = Slice("Btrue");
   }
+
+  if (value.size() > 1 && value[0] == 'I') {
+    auto int_value = to_integer<int32>(value.substr(1));
+    if (name == "call_receive_timeout_ms" || name == "call_ring_timeout_ms" || name == "call_connect_timeout_ms" ||
+        name == "call_packet_timeout_ms") {
+      auto clamped = clamp_reviewed_call_window_ms(name, int_value);
+      if (clamped != int_value) {
+        net_health::note_config_call_window_clamp();
+        int_value = clamped;
+        value = PSLICE() << 'I' << int_value;
+      }
+    } else if (name == "session_count") {
+      auto clamped = clamp_reviewed_session_count(int_value);
+      if (clamped != int_value) {
+        net_health::note_session_window_oob();
+        int_value = clamped;
+        value = PSLICE() << 'I' << int_value;
+      }
+    } else if (name == "webfile_dc_id") {
+      if (!is_reviewed_aux_route_id(int_value, G()->is_test_dc())) {
+        net_health::note_aux_route_id_oob();
+        return;
+      }
+    }
+  }
+
+  if (name == "dc_txt_domain_name" && value.empty()) {
+    net_health::note_config_domain_reject();
+    return;
+  }
+  if (name == "dc_txt_domain_name" && !is_reviewed_domain_option_value(value)) {
+    net_health::note_config_domain_reject();
+    return;
+  }
+
   if (value.empty()) {
     if (options_->erase(name.str()) == 0) {
       return;
@@ -778,6 +840,15 @@ void OptionManager::get_option(const string &name, Promise<td_api::object_ptr<td
         return promise.set_value(td_api::make_object<td_api::optionValueBoolean>(td_->online_manager_->is_online()));
       }
       break;
+    case 'r':
+      if (name == "route_window_state") {
+        return promise.set_value(
+            td_api::make_object<td_api::optionValueInteger>(net_health::get_lane_probe_state_code()));
+      }
+      if (name == "route_window_rollup") {
+        return promise.set_value(td_api::make_object<td_api::optionValueString>(net_health::get_lane_probe_rollup()));
+      }
+      break;
     case 'u':
       if (name == "unix_time") {
         return promise.set_value(get_unix_time_option_value_object());
@@ -921,11 +992,9 @@ void OptionManager::set_option(const string &name, td_api::object_ptr<td_api::Op
       if (set_boolean_option("disable_network_statistics")) {
         return;
       }
-      if (set_string_option("dns_type",
-                            [](Slice value) {
-                              return value == Slice("google") || value == Slice("cloudflare") ||
-                                     value == Slice("custom");
-                            })) {
+      if (set_string_option("dns_type", [](Slice value) {
+            return value == Slice("google") || value == Slice("cloudflare") || value == Slice("custom");
+          })) {
         return;
       }
       if (set_boolean_option("disable_persistent_network_statistics")) {

@@ -123,6 +123,7 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_transport_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_security_option_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_option_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_data_session_mode_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_bootstrap_state_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_protocol_envelope_frame_safety.cpp
@@ -155,8 +156,19 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_decay_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_decay_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_decay_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_decay_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_auth_destroy_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_auth_destroy_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_auth_destroy_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_config_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_option_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_route_contract.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_reauth_delay_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_route_fixture_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_net_monitor_synergy_bugs_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_reauth_delay_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_migrate_token_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_window_migrate_token_adversarial.cpp
@@ -166,6 +178,11 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_light_fuzz.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_catalog_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_catalog_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_catalog_integration.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_catalog_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_catalog_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_ingestion_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_first_seen_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_bundle_cdn_ingestion_light_fuzz.cpp
@@ -245,8 +262,13 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_auth_recovery_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_auth_recovery_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_auth_recovery_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_auth_recovery_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_wiring.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_control_mix_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_event_bounds_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_event_bounds_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_event_bounds_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_event_bounds_stress.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_hint_wiring_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_parse_error_diagnostics_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_service_ack_mix_adversarial.cpp
@@ -279,6 +301,47 @@ set(TD_TEST_SOURCE
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_classification_determinism.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_aux_window_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_aux_window_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_aux_window_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_aux_window_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_aux_window_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_salt_policy_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_salt_policy_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_salt_policy_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_salt_policy_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_salt_policy_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_peer_channel_guard_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_peer_channel_guard_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_peer_channel_guard_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_peer_channel_guard_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_peer_channel_guard_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_clear_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_clear_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_clear_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_clear_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_clear_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_entry_gate_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_lane_protocol_guard_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_lane_protocol_guard_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_lane_protocol_guard_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_lane_protocol_guard_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_lane_protocol_guard_source_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_flow_anchor_reset_contract.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_flow_anchor_reset_adversarial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_flow_anchor_reset_light_fuzz.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_flow_anchor_reset_stress.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_flow_anchor_reset_source_contract.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy_adversarial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config.cpp

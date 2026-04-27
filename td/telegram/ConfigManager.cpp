@@ -23,6 +23,7 @@
 #include "td/telegram/net/DcOptions.h"
 #include "td/telegram/net/NetQuery.h"
 #include "td/telegram/net/NetQueryDispatcher.h"
+#include "td/telegram/net/NetReliabilityMonitor.h"
 #include "td/telegram/net/NetType.h"
 #include "td/telegram/net/PublicRsaKeySharedMain.h"
 #include "td/telegram/net/Session.h"
@@ -78,6 +79,7 @@
 #include "td/utils/tl_parsers.h"
 #include "td/utils/UInt.h"
 
+#include <cctype>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -128,6 +130,221 @@ FullConfigRecoveryConnectionAction get_full_config_recovery_connection_action(si
   return request_raw_connection_count <= 2 ? FullConfigRecoveryConnectionAction::Dispatch
                                            : FullConfigRecoveryConnectionAction::DelayForever;
 }
+
+namespace lane_config {
+namespace {
+
+constexpr size_t MAX_RECOVERY_HOST_LENGTH = 128;
+constexpr size_t MAX_TOKEN_LENGTH = 256;
+constexpr size_t MAX_PRIMARY_PREFIX_LENGTH = 256;
+constexpr size_t MAX_BOT_ALIAS_LENGTH = 64;
+constexpr double BLOCKED_MODE_TRUE_TRANSITION_MIN_INTERVAL = 600.0;
+constexpr double CONFIG_REFRESH_MIN_INTERVAL = 60.0;
+constexpr double LANG_PACK_REFRESH_MIN_INTERVAL = 3600.0;
+
+bool is_ascii_alnum(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) != 0;
+}
+
+bool is_valid_host_label(Slice label) {
+  if (label.empty() || label.size() > 63) {
+    return false;
+  }
+  if (label[0] == '-' || label[label.size() - 1] == '-') {
+    return false;
+  }
+  for (auto c : label) {
+    if (!is_ascii_alnum(c) && c != '-') {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool is_reviewed_primary_host(Slice host) {
+  if (host.empty()) {
+    return false;
+  }
+  size_t start = 0;
+  while (start < host.size()) {
+    size_t dot_pos = start;
+    while (dot_pos < host.size() && host[dot_pos] != '.') {
+      dot_pos++;
+    }
+    auto label = host.substr(start, dot_pos - start);
+    if (!is_valid_host_label(label)) {
+      return false;
+    }
+    if (dot_pos == host.size()) {
+      break;
+    }
+    start = dot_pos + 1;
+  }
+
+  string lower_host = host.str();
+  for (auto &c : lower_host) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  if (lower_host == "t.me" || lower_host == "telegram.org") {
+    return true;
+  }
+  return ends_with(lower_host, ".telegram.org");
+}
+
+}  // namespace
+
+bool is_reviewed_recovery_host(Slice value) {
+  if (value.empty() || value.size() > MAX_RECOVERY_HOST_LENGTH) {
+    return false;
+  }
+  if (value.find('/') != Slice::npos || value.find(':') != Slice::npos || value.find('?') != Slice::npos ||
+      value.find('&') != Slice::npos || value.find('=') != Slice::npos) {
+    return false;
+  }
+
+  size_t start = 0;
+  bool has_dot = false;
+  while (start < value.size()) {
+    size_t dot_pos = start;
+    while (dot_pos < value.size() && value[dot_pos] != '.') {
+      dot_pos++;
+    }
+    has_dot = has_dot || (dot_pos < value.size());
+    auto label = value.substr(start, dot_pos - start);
+    if (!is_valid_host_label(label)) {
+      return false;
+    }
+    if (dot_pos == value.size()) {
+      break;
+    }
+    start = dot_pos + 1;
+  }
+  if (!has_dot) {
+    return false;
+  }
+
+  return value == "apv3.stel.com" || value == "tapv3.stel.com";
+}
+
+bool is_reviewed_token_payload(Slice value) {
+  if (value.empty() || value.size() > MAX_TOKEN_LENGTH) {
+    return false;
+  }
+  for (auto c : value) {
+    if (is_ascii_alnum(c) || c == '-' || c == '_' || c == '.') {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+bool is_reviewed_primary_prefix(Slice value) {
+  if (value.empty() || value.size() > MAX_PRIMARY_PREFIX_LENGTH) {
+    return false;
+  }
+  for (auto c : value) {
+    if (static_cast<unsigned char>(c) < 33 || c == 127) {
+      return false;
+    }
+  }
+
+  Slice scheme("https://");
+  if (!begins_with(value, scheme)) {
+    return false;
+  }
+
+  auto authority_and_path = value.substr(scheme.size());
+  if (authority_and_path.empty()) {
+    return false;
+  }
+  auto authority_end = authority_and_path.size();
+  for (size_t i = 0; i < authority_and_path.size(); i++) {
+    auto c = authority_and_path[i];
+    if (c == '?' || c == '#') {
+      return false;
+    }
+    if (c == '/') {
+      authority_end = i;
+      break;
+    }
+  }
+  auto authority = authority_and_path.substr(0, authority_end);
+  if (authority.empty() || authority.find('@') != Slice::npos || authority.find(':') != Slice::npos) {
+    return false;
+  }
+  return is_reviewed_primary_host(authority);
+}
+
+bool is_reviewed_bot_alias(Slice value) {
+  if (value.empty() || value.size() > MAX_BOT_ALIAS_LENGTH) {
+    return false;
+  }
+  for (auto c : value) {
+    if (is_ascii_alnum(c) || c == '_') {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+bool should_apply_blocked_mode(bool is_from_main_dc, bool previous_value, bool requested_value, double now,
+                               double &next_true_transition_at) {
+  if (!is_from_main_dc) {
+    return false;
+  }
+  if (!requested_value || previous_value) {
+    return true;
+  }
+  if (now < next_true_transition_at) {
+    return false;
+  }
+  next_true_transition_at = now + BLOCKED_MODE_TRUE_TRANSITION_MIN_INTERVAL;
+  return true;
+}
+
+bool should_trigger_config_refresh(bool has_dc_updates, double now, double &next_refresh_at) {
+  if (!has_dc_updates) {
+    return false;
+  }
+  if (now < next_refresh_at) {
+    return false;
+  }
+  next_refresh_at = now + CONFIG_REFRESH_MIN_INTERVAL;
+  return true;
+}
+
+bool should_apply_lang_pack_refresh(double now, double &next_refresh_at) {
+  if (now < next_refresh_at) {
+    return false;
+  }
+  next_refresh_at = now + LANG_PACK_REFRESH_MIN_INTERVAL;
+  return true;
+}
+
+int32 clamp_call_window_ms(Slice field_name, int32 value) {
+  if (field_name == "call_receive_timeout_ms") {
+    return clamp(value, 5000, 120000);
+  }
+  if (field_name == "call_ring_timeout_ms") {
+    return clamp(value, 10000, 120000);
+  }
+  if (field_name == "call_connect_timeout_ms") {
+    return clamp(value, 5000, 60000);
+  }
+  if (field_name == "call_packet_timeout_ms") {
+    return clamp(value, 5000, 60000);
+  }
+  return clamp(value, 1000, 86400 * 1000);
+}
+
+int32 clamp_session_window(int32 value) {
+  return clamp(value, 1, 8);
+}
+
+}  // namespace lane_config
 
 Status check_config_entry(int64 fingerprint) {
   string key_material;
@@ -1085,10 +1302,13 @@ void ConfigManager::set_content_settings(bool ignore_sensitive_content_restricti
 
 void ConfigManager::on_dc_options_update(DcOptions dc_options) {
   save_dc_options_update(dc_options);
-  if (!dc_options.dc_options.empty()) {
+  auto now = Time::now();
+  if (lane_config::should_trigger_config_refresh(!dc_options.dc_options.empty(), now, next_config_refresh_at_)) {
     expire_time_ = Timestamp::now();
     save_config_expire(expire_time_);
     set_timeout_in(expire_time_.in());
+  } else if (!dc_options.dc_options.empty()) {
+    net_health::note_config_refresh_rate_gate();
   }
   send_closure(config_recoverer_, &ConfigRecoverer::on_dc_options_update, std::move(dc_options));
 }
@@ -1256,50 +1476,112 @@ void ConfigManager::process_config(tl_object_ptr<telegram_api::config> config) {
   }
   expire_time_ = Timestamp::in(reload_in);
   set_timeout_at(expire_time_.at());
-  LOG_IF(ERROR, config->test_mode_ != G()->is_test_dc()) << "Wrong parameter is_test";
+  if (config->test_mode_ != G()->is_test_dc()) {
+    net_health::note_config_test_mode_mismatch();
+  }
 
   OptionManager &options = *G()->get_option_manager();
 
   // Do not save dc_options in config, because it will be interpreted and saved by ConnectionCreator.
   DcOptions dc_options(config->dc_options_);
+  FlatHashSet<int32> unique_internal_dc_ids;
+  for (const auto &dc_option : dc_options.dc_options) {
+    auto dc_id = dc_option.get_dc_id();
+    if (!dc_id.is_internal()) {
+      continue;
+    }
+    auto raw_dc_id = dc_id.get_raw_id();
+    unique_internal_dc_ids.insert(raw_dc_id);
+    if (!NetQueryDispatcher::is_known_main_dc_id(raw_dc_id, G()->is_test_dc())) {
+      net_health::note_route_catalog_unknown_id();
+    }
+  }
+  auto expected_internal_dc_count = G()->is_test_dc() ? 3u : 5u;
+  if (unique_internal_dc_ids.size() > expected_internal_dc_count) {
+    net_health::note_route_catalog_span_oob();
+  }
   send_closure(G()->connection_creator(), &ConnectionCreator::on_dc_options, std::move(dc_options));
 
   options.set_option_integer("recent_stickers_limit", config->stickers_recent_limit_);
   options.set_option_integer("channels_read_media_period", config->channels_read_media_period_);
 
-  send_closure(G()->link_manager(), &LinkManager::update_autologin_token, std::move(config->autologin_token_));
+  if (!config->autologin_token_.empty()) {
+    if (!is_from_main_dc) {
+      net_health::note_config_token_reject();
+    } else if (!lane_config::is_reviewed_token_payload(config->autologin_token_)) {
+      net_health::note_config_token_reject();
+    } else {
+      net_health::note_config_token_update(has_applied_token_update_);
+      has_applied_token_update_ = true;
+      send_closure(G()->link_manager(), &LinkManager::update_autologin_token, std::move(config->autologin_token_));
+    }
+  }
 
-  options.set_option_boolean("test_mode", config->test_mode_);
   options.set_option_integer("forwarded_message_count_max", config->forwarded_count_max_);
   options.set_option_integer("basic_group_size_max", config->chat_size_max_);
   options.set_option_integer("supergroup_size_max", config->megagroup_size_max_);
-  if (is_from_main_dc || !options.have_option("expect_blocking")) {
+  auto previous_blocked_mode = options.get_option_boolean("expect_blocking", false);
+  if (lane_config::should_apply_blocked_mode(is_from_main_dc, previous_blocked_mode, config->blocked_mode_, Time::now(),
+                                             blocked_mode_true_transition_at_)) {
     options.set_option_boolean("expect_blocking", config->blocked_mode_);
+  } else if (!is_from_main_dc) {
+    net_health::note_config_blocking_source_reject();
+  } else {
+    net_health::note_config_blocking_rate_gate();
   }
-  if (is_from_main_dc || !options.have_option("dc_txt_domain_name")) {
-    options.set_option_string("dc_txt_domain_name", config->dc_txt_domain_name_);
+  if (is_from_main_dc) {
+    if (lane_config::is_reviewed_recovery_host(config->dc_txt_domain_name_)) {
+      options.set_option_string("dc_txt_domain_name", config->dc_txt_domain_name_);
+    } else {
+      net_health::note_config_domain_reject();
+    }
+  } else if (!config->dc_txt_domain_name_.empty()) {
+    net_health::note_config_domain_reject();
   }
   if (is_from_main_dc || !options.have_option("t_me_url")) {
     auto url = config->me_url_prefix_;
     if (!url.empty()) {
-      if (url.back() != '/') {
-        url.push_back('/');
+      if (lane_config::is_reviewed_primary_prefix(url)) {
+        if (url.back() != '/') {
+          url.push_back('/');
+        }
+        options.set_option_string("t_me_url", url);
+      } else {
+        net_health::note_config_prefix_reject();
       }
-      options.set_option_string("t_me_url", url);
     }
   }
   if (is_from_main_dc) {
-    options.set_option_integer("webfile_dc_id", config->webfile_dc_id_);
+    if (!NetQueryDispatcher::is_known_main_dc_id(config->webfile_dc_id_, G()->is_test_dc())) {
+      net_health::note_aux_route_id_oob();
+    } else {
+      options.set_option_integer("webfile_dc_id", config->webfile_dc_id_);
+    }
+    if (config->tmp_sessions_ != 0 && (config->tmp_sessions_ < 1 || config->tmp_sessions_ > 8)) {
+      net_health::note_session_window_oob();
+    }
     if (config->tmp_sessions_ > 1) {
-      options.set_option_integer("session_count", config->tmp_sessions_);
+      options.set_option_integer("session_count", lane_config::clamp_session_window(config->tmp_sessions_));
     } else {
       options.set_option_empty("session_count");
     }
     if (!config->suggested_lang_code_.empty() || config->lang_pack_version_ > 0 ||
         config->base_lang_pack_version_ > 0) {
-      options.set_option_string("suggested_language_pack_id", config->suggested_lang_code_);
-      options.set_option_integer("language_pack_version", config->lang_pack_version_);
-      options.set_option_integer("base_language_pack_version", config->base_lang_pack_version_);
+      auto previous_lang_pack_version = options.get_option_integer("language_pack_version", 0);
+      auto previous_base_lang_pack_version = options.get_option_integer("base_language_pack_version", 0);
+      bool has_lang_pack_increment = config->lang_pack_version_ > previous_lang_pack_version ||
+                                     config->base_lang_pack_version_ > previous_base_lang_pack_version;
+      bool should_apply_lang_pack = true;
+      if (has_lang_pack_increment &&
+          !lane_config::should_apply_lang_pack_refresh(Time::now(), next_lang_pack_refresh_at_)) {
+        should_apply_lang_pack = false;
+        net_health::note_config_lang_pack_rate_gate();
+      }
+      if (should_apply_lang_pack) {
+        options.set_option_string("suggested_language_pack_id", config->suggested_lang_code_);
+        options.set_option_integer("language_pack_version", config->lang_pack_version_);
+        options.set_option_integer("base_language_pack_version", config->base_lang_pack_version_);
+      }
     } else {
       options.set_option_empty("suggested_language_pack_id");
       options.set_option_empty("language_pack_version");
@@ -1315,30 +1597,44 @@ void ConfigManager::process_config(tl_object_ptr<telegram_api::config> config) {
 
     options.set_option_integer("rating_e_decay", config->rating_e_decay_);
   }
-  options.set_option_integer("call_ring_timeout_ms", config->call_ring_timeout_ms_);
-  options.set_option_integer("call_connect_timeout_ms", config->call_connect_timeout_ms_);
-  options.set_option_integer("call_packet_timeout_ms", config->call_packet_timeout_ms_);
-  options.set_option_integer("call_receive_timeout_ms", config->call_receive_timeout_ms_);
+  auto ring_timeout = lane_config::clamp_call_window_ms("call_ring_timeout_ms", config->call_ring_timeout_ms_);
+  auto connect_timeout = lane_config::clamp_call_window_ms("call_connect_timeout_ms", config->call_connect_timeout_ms_);
+  auto packet_timeout = lane_config::clamp_call_window_ms("call_packet_timeout_ms", config->call_packet_timeout_ms_);
+  auto receive_timeout = lane_config::clamp_call_window_ms("call_receive_timeout_ms", config->call_receive_timeout_ms_);
+  if (ring_timeout != config->call_ring_timeout_ms_ || connect_timeout != config->call_connect_timeout_ms_ ||
+      packet_timeout != config->call_packet_timeout_ms_ || receive_timeout != config->call_receive_timeout_ms_) {
+    net_health::note_config_call_window_clamp();
+  }
+  options.set_option_integer("call_ring_timeout_ms", ring_timeout);
+  options.set_option_integer("call_connect_timeout_ms", connect_timeout);
+  options.set_option_integer("call_packet_timeout_ms", packet_timeout);
+  options.set_option_integer("call_receive_timeout_ms", receive_timeout);
 
   options.set_option_integer("message_text_length_max", clamp(config->message_length_max_, 4096, 1000000));
   options.set_option_integer("message_caption_length_max", clamp(config->caption_length_max_, 1024, 1000000));
 
   if (config->gif_search_username_.empty()) {
     options.set_option_empty("animation_search_bot_username");
-  } else {
+  } else if (lane_config::is_reviewed_bot_alias(config->gif_search_username_)) {
     options.set_option_string("animation_search_bot_username", config->gif_search_username_);
+  } else {
+    net_health::note_config_alias_reject();
   }
   if (!options.have_option("venue_search_bot_username")) {
     if (config->venue_search_username_.empty()) {
       options.set_option_empty("venue_search_bot_username");
-    } else {
+    } else if (lane_config::is_reviewed_bot_alias(config->venue_search_username_)) {
       options.set_option_string("venue_search_bot_username", config->venue_search_username_);
+    } else {
+      net_health::note_config_alias_reject();
     }
   }
   if (config->img_search_username_.empty()) {
     options.set_option_empty("photo_search_bot_username");
-  } else {
+  } else if (lane_config::is_reviewed_bot_alias(config->img_search_username_)) {
     options.set_option_string("photo_search_bot_username", config->img_search_username_);
+  } else {
+    net_health::note_config_alias_reject();
   }
 
   auto fix_timeout_ms = [](int32 timeout_ms) {

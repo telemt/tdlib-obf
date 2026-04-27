@@ -330,7 +330,9 @@ set(TD_MTPROTO_SOURCE
   td/mtproto/RawConnection.cpp
   td/mtproto/RSA.cpp
   td/mtproto/BlobStore.cpp
+  td/mtproto/SaltWindowPolicy.cpp
   td/mtproto/SessionConnection.cpp
+    td/mtproto/SessionEventBounds.cpp
   td/mtproto/TcpTransport.cpp
   td/mtproto/TlsInit.cpp
   td/mtproto/stealth/ChaffScheduler.cpp
@@ -374,7 +376,9 @@ set(TD_MTPROTO_SOURCE
   td/mtproto/ProxySecret.h
   td/mtproto/RawConnection.h
   td/mtproto/RSA.h
+  td/mtproto/SaltWindowPolicy.h
   td/mtproto/SessionConnection.h
+    td/mtproto/SessionEventBounds.h
   td/mtproto/TcpTransport.h
   td/mtproto/TlsInit.h
   td/mtproto/stealth/Interfaces.h
@@ -681,6 +685,7 @@ set(TDLIB_SOURCE_PART2
   td/telegram/SendCodeHelper.cpp
   td/telegram/SentEmailCode.cpp
   td/telegram/SequenceDispatcher.cpp
+  td/telegram/SessionEntryGate.cpp
   td/telegram/SharedDialog.cpp
   td/telegram/SpecialStickerSetType.cpp
   td/telegram/SponsoredMessageManager.cpp
