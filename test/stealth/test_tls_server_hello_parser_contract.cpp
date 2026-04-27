@@ -14,8 +14,8 @@
 #include "test/stealth/ServerHelloFixtureLoader.h"
 #include "test/stealth/TlsHelloParsers.h"
 
-#include "td/utils/Slice.h"
 #include "td/utils/common.h"
+#include "td/utils/Slice.h"
 #include "td/utils/tests.h"
 
 #include <cstring>
@@ -31,11 +31,11 @@ using td::mtproto::test::ServerHelloFixtureSample;
 using td::mtproto::test::synthesize_server_hello_wire;
 
 td::string build_minimal_server_hello(td::uint16 selected_version, bool use_hrr_random,
-                                      td::uint8 record_type_override = 0x16,
-                                      td::uint8 handshake_type_override = 0x02,
-                                      bool include_supported_versions_ext = true) {
+                                      td::uint8 record_type_override = 0x16, td::uint8 handshake_type_override = 0x02,
+                                      bool include_supported_versions_ext = true,
+                                      td::uint16 server_legacy_version_override = 0x0303) {
   td::string body;
-  append_u16(body, 0x0303);  // server_legacy_version
+  append_u16(body, server_legacy_version_override);
   if (use_hrr_random) {
     for (size_t i = 0; i < kHelloRetryRequestRandom.size(); ++i) {
       append_u8(body, kHelloRetryRequestRandom[i]);
@@ -45,9 +45,9 @@ td::string build_minimal_server_hello(td::uint16 selected_version, bool use_hrr_
       append_u8(body, static_cast<td::uint8>(0x10 + (i & 0x0F)));
     }
   }
-  append_u8(body, 0);         // empty session_id
-  append_u16(body, 0x1301);   // cipher_suite
-  append_u8(body, 0x00);      // compression_method
+  append_u8(body, 0);        // empty session_id
+  append_u16(body, 0x1301);  // cipher_suite
+  append_u8(body, 0x00);     // compression_method
 
   td::string extensions;
   if (include_supported_versions_ext) {
@@ -132,6 +132,16 @@ TEST(TlsServerHelloParserContract, UnexpectedHandshakeTypeFailsToParse) {
   auto wire = build_minimal_server_hello(0x0304, /*use_hrr_random=*/false,
                                          /*record_type_override=*/0x16,
                                          /*handshake_type_override=*/0x01);  // ClientHello
+  auto parsed = parse_tls_server_hello(wire);
+  ASSERT_TRUE(parsed.is_error());
+}
+
+TEST(TlsServerHelloParserContract, InvalidServerLegacyVersionFailsToParse) {
+  auto wire = build_minimal_server_hello(0x0304, /*use_hrr_random=*/false,
+                                         /*record_type_override=*/0x16,
+                                         /*handshake_type_override=*/0x02,
+                                         /*include_supported_versions_ext=*/true,
+                                         /*server_legacy_version_override=*/0x0304);
   auto parsed = parse_tls_server_hello(wire);
   ASSERT_TRUE(parsed.is_error());
 }

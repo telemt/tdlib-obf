@@ -205,10 +205,23 @@ def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_inde
     raw_record_lengths = sample.get("record_lengths")
     raw_record_count = sample.get("record_count")
     raw_record_length = sample.get("record_length")
-    has_record_metadata = any(
-        field in sample for field in ("record_lengths", "record_count", "record_length")
-    )
+    # Strict multi-record cross-validation is triggered only when the explicit
+    # multi-record metadata fields ("record_lengths" or "record_count") are present.
+    # "record_length" alone is a basic TLS record-header scalar that older fixtures
+    # carry without the accompanying normalised list; treating it as a trigger for
+    # the full multi-record schema requirement breaks backward compatibility with
+    # every pre-multi-record fixture.
+    has_record_metadata = "record_lengths" in sample or "record_count" in sample
+
     if not has_record_metadata:
+        # Old-schema: record_length scalar is the only record field.
+        # Validate it in isolation when present (positive int ≤ 65535 per TLS spec).
+        if raw_record_length is not None:
+            _parse_bounded_positive_int(
+                f"sample[{sample_index}].record_length",
+                raw_record_length,
+                max_value=65535,
+            )
         return
 
     if raw_record_lengths is None:

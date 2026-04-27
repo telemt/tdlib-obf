@@ -492,15 +492,14 @@ inline Result<ParsedServerHello> parse_tls_server_hello(Slice wire) {
   res.server_legacy_version = server_legacy_version;
   // Legal server_legacy_version values: 0x0303 (TLS 1.2 or TLS 1.3),
   // rarely 0x0302 (TLS 1.1). Accept 0x0301..0x0303.
-  if (res.server_legacy_version < 0x0301 || res.server_legacy_version > 0x0304) {
+  if (res.server_legacy_version < 0x0301 || res.server_legacy_version > 0x0303) {
     return Status::Error("Unexpected ServerHello legacy version");
   }
 
   TRY_RESULT(server_random, reader.read_slice(32));
   res.server_random = server_random;
   if (res.server_random.size() == kHelloRetryRequestRandom.size() &&
-      std::memcmp(res.server_random.data(), kHelloRetryRequestRandom.data(),
-                  kHelloRetryRequestRandom.size()) == 0) {
+      std::memcmp(res.server_random.data(), kHelloRetryRequestRandom.data(), kHelloRetryRequestRandom.size()) == 0) {
     res.is_hello_retry_request = true;
   }
 

@@ -66,10 +66,10 @@ int32 ConnectionFailureBackoff::max_backoff_seconds() {
 }
 
 bool should_apply_connection_failure_backoff(bool act_as_if_online, const Proxy &proxy) {
-  if (!act_as_if_online) {
-    return true;
-  }
-  return proxy.use_proxy();
+  static_cast<void>(act_as_if_online);
+  static_cast<void>(proxy);
+  // Fail closed: all connection failure paths use bounded exponential backoff.
+  return true;
 }
 
 ConnectionFailureClassification classify_connection_failure(bool act_as_if_online, const Proxy &proxy,

@@ -16,8 +16,8 @@ TEST(ConnectionRetryPolicySecurity, OfflineDirectConnectionsKeepExponentialBacko
   ASSERT_TRUE(td::should_apply_connection_failure_backoff(false, td::Proxy()));
 }
 
-TEST(ConnectionRetryPolicySecurity, OnlineDirectConnectionsStayOnFastRetryPath) {
-  ASSERT_FALSE(td::should_apply_connection_failure_backoff(true, td::Proxy()));
+TEST(ConnectionRetryPolicySecurity, OnlineDirectConnectionsUseExponentialBackoff) {
+  ASSERT_TRUE(td::should_apply_connection_failure_backoff(true, td::Proxy()));
 }
 
 TEST(ConnectionRetryPolicySecurity, OnlineMtprotoProxyConnectionsUseExponentialBackoff) {

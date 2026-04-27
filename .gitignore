@@ -14,7 +14,6 @@ docs/Samples/xray-core-code/*
 test/analysis/__pycache__/**
 /tdlib/
 vcpkg/
-.clang-tidy
 pvs.cfg
 tools/sqlite/__pycache__/
 tools/catalog_sync/__pycache__/
@@ -26,3 +25,4 @@ pvs-report.json
 test_sqlite_kv
 Analysis_Report.json
 .PVS-Studio/**
+.vscode/mcp.json

@@ -369,21 +369,39 @@ Result<SslCtxPtr> do_create_ssl_ctx(CSlice cert_file, SslCtx::VerifyPeer verify_
 }
 
 Result<SslCtxPtr> get_default_ssl_ctx() {
-  static auto ctx = do_create_ssl_ctx(CSlice(), SslCtx::VerifyPeer::On);
-  if (ctx.is_error()) {
-    return ctx.error().clone();
+  static std::mutex ctx_mutex;
+  static SslCtxPtr ctx;
+
+  std::lock_guard<std::mutex> lock(ctx_mutex);
+  if (ctx) {
+    return ctx;
   }
 
-  return ctx.ok();
+  auto created_ctx = do_create_ssl_ctx(CSlice(), SslCtx::VerifyPeer::On);
+  if (created_ctx.is_error()) {
+    return created_ctx.error().clone();
+  }
+
+  ctx = created_ctx.move_as_ok();
+  return ctx;
 }
 
 Result<SslCtxPtr> get_default_unverified_ssl_ctx() {
-  static auto ctx = do_create_ssl_ctx(CSlice(), SslCtx::VerifyPeer::Off);
-  if (ctx.is_error()) {
-    return ctx.error().clone();
+  static std::mutex ctx_mutex;
+  static SslCtxPtr ctx;
+
+  std::lock_guard<std::mutex> lock(ctx_mutex);
+  if (ctx) {
+    return ctx;
   }
 
-  return ctx.ok();
+  auto created_ctx = do_create_ssl_ctx(CSlice(), SslCtx::VerifyPeer::Off);
+  if (created_ctx.is_error()) {
+    return created_ctx.error().clone();
+  }
+
+  ctx = created_ctx.move_as_ok();
+  return ctx;
 }
 
 }  // namespace

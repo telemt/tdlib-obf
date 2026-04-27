@@ -153,6 +153,7 @@ class ConnectionCreator final : public NetQueryCallback {
 
     ConnectionFailureBackoff backoff;
     ConnectionFailureClassification last_failure_classification;
+    size_t bounded_retry_failures{0};
     FloodControlStrict sanity_flood_control;
     FloodControlStrict flood_control;
     FloodControlStrict flood_control_online;
@@ -166,6 +167,7 @@ class ConnectionCreator final : public NetQueryCallback {
     std::shared_ptr<ConnectionRotationGateSnapshotHandle> rotation_gate_snapshot;
 
     static constexpr double READY_CONNECTIONS_TIMEOUT = 10;
+    static constexpr size_t MAX_BOUNDED_RETRY_FAILURES = 8;
 
     bool inited{false};
     uint32 hash{0};
@@ -246,6 +248,8 @@ class ConnectionCreator final : public NetQueryCallback {
   void client_add_connection(uint32 hash, Result<unique_ptr<mtproto::RawConnection>> r_raw_connection, bool check_flag,
                              uint64 auth_data_generation, uint64 session_id);
   void client_set_timeout_at(ClientInfo &client, double wakeup_at);
+  bool register_bounded_retry_failure(ClientInfo &client, const ConnectionFailureClassification &classification,
+                                      const Status &status);
 
   void on_proxy_resolved(Result<IPAddress> ip_address, bool dummy);
 

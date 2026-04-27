@@ -14,13 +14,14 @@
 
 namespace {
 
-TEST(ConnectionRetryPolicyClassificationSecurity, DirectOnlineFailureStaysOnFastRetryPath) {
+TEST(ConnectionRetryPolicyClassificationSecurity, DirectOnlineFailureUsesBackoffAndBoundedRetry) {
   auto classification =
       td::classify_connection_failure(true, td::Proxy(), td::Status::Error("generic connect failure"));
 
   ASSERT_FALSE(classification.proxy_backed);
   ASSERT_FALSE(classification.deterministic);
-  ASSERT_FALSE(classification.apply_exponential_backoff);
+  ASSERT_TRUE(classification.apply_exponential_backoff);
+  ASSERT_TRUE(classification.bounded_retry);
   ASSERT_EQ(static_cast<td::int32>(td::ProxyFailureStage::None), static_cast<td::int32>(classification.stage));
 }
 

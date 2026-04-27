@@ -49,6 +49,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <utility>
 
@@ -58,6 +59,19 @@ namespace {
 
 int64 lifecycle_now_ms(double now_seconds = Time::now()) {
   return static_cast<int64>(now_seconds * 1000.0);
+}
+
+int32 clamp_backoff_event_time_to_int32(double now) {
+  if (!std::isfinite(now)) {
+    return std::numeric_limits<int32>::max();
+  }
+  if (now <= static_cast<double>(std::numeric_limits<int32>::min())) {
+    return std::numeric_limits<int32>::min();
+  }
+  if (now >= static_cast<double>(std::numeric_limits<int32>::max())) {
+    return std::numeric_limits<int32>::max();
+  }
+  return static_cast<int32>(now);
 }
 
 string sanitize_lifecycle_label(Slice debug_str) {
@@ -1539,9 +1553,6 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
       return client_set_timeout_at(client, wakeup_at);
     }
     client.sanity_flood_control.add_event(now);
-    if (apply_connection_failure_backoff) {
-      client.backoff.add_event(static_cast<int32>(now));
-    }
 
     // Create new RawConnection
     // sync part
@@ -1556,7 +1567,18 @@ void ConnectionCreator::client_loop(ClientInfo &client) {
       if (extra.stat) {
         extra.stat->on_error();  // TODO: different kind of error
       }
-      return client_set_timeout_at(client, Time::now() + 0.1);
+      client.last_failure_classification = classify_connection_failure(act_as_if_online, proxy, error);
+      if (client.last_failure_classification.apply_exponential_backoff) {
+        client.backoff.add_event(clamp_backoff_event_time_to_int32(now));
+      }
+      if (register_bounded_retry_failure(client, client.last_failure_classification, error)) {
+        return;
+      }
+      auto wakeup_at_after_failure = Time::now() + 0.1;
+      if (client.last_failure_classification.apply_exponential_backoff) {
+        wakeup_at_after_failure = max(wakeup_at_after_failure, static_cast<double>(client.backoff.get_wakeup_at()));
+      }
+      return client_set_timeout_at(client, wakeup_at_after_failure);
     }
 
     // Events with failed socket creation are ignored
@@ -1698,6 +1720,37 @@ void ConnectionCreator::client_set_timeout_at(ClientInfo &client, double wakeup_
                     << wakeup_at - Time::now_cached();
 }
 
+bool ConnectionCreator::register_bounded_retry_failure(ClientInfo &client,
+                                                       const ConnectionFailureClassification &classification,
+                                                       const Status &status) {
+  if (!classification.bounded_retry) {
+    client.bounded_retry_failures = 0;
+    return false;
+  }
+
+  client.bounded_retry_failures++;
+  if (client.bounded_retry_failures < ClientInfo::MAX_BOUNDED_RETRY_FAILURES) {
+    return false;
+  }
+
+  LOG(WARNING) << "Bounded retry limit reached" << tag("client", format::as_hex(client.hash))
+               << tag("attempts", client.bounded_retry_failures) << tag("status_code", status.code())
+               << tag("status_message", sanitize_connection_failure_status_message_for_log(status));
+
+  auto capped_error =
+      Status::Error(status.code(),
+                    PSLICE() << "Connection retry limit reached after " << client.bounded_retry_failures
+                             << " failures; last_error=" << sanitize_connection_failure_status_message_for_log(status));
+  for (auto &query : client.queries) {
+    if (!query.is_canceled()) {
+      query.set_error(capped_error.clone());
+    }
+  }
+  client.queries.clear();
+  client.bounded_retry_failures = 0;
+  return true;
+}
+
 void ConnectionCreator::client_add_connection(uint32 hash, Result<unique_ptr<mtproto::RawConnection>> r_raw_connection,
                                               bool check_flag, uint64 auth_data_generation, uint64 session_id) {
   auto &client = clients_[hash];
@@ -1712,6 +1765,7 @@ void ConnectionCreator::client_add_connection(uint32 hash, Result<unique_ptr<mtp
     VLOG(connections) << "Add ready connection " << r_raw_connection.ok().get() << " for "
                       << tag("client", format::as_hex(hash));
     client.backoff.clear();
+    client.bounded_retry_failures = 0;
     client.last_failure_classification = {};
     client.ready_connections.emplace_back(r_raw_connection.move_as_ok(), Time::now_cached());
   } else {
@@ -1719,6 +1773,12 @@ void ConnectionCreator::client_add_connection(uint32 hash, Result<unique_ptr<mtp
     const auto &failure_status = r_raw_connection.error();
     client.last_failure_classification =
         classify_connection_failure(online_flag_ || is_logging_out_, proxy, failure_status);
+    if (client.last_failure_classification.apply_exponential_backoff) {
+      client.backoff.add_event(clamp_backoff_event_time_to_int32(Time::now()));
+    }
+    if (register_bounded_retry_failure(client, client.last_failure_classification, failure_status)) {
+      return;
+    }
     auto action_hint = connection_failure_action_hint(client.last_failure_classification.stage,
                                                       client.last_failure_classification.reason);
     VLOG(connections) << "Classified connection failure " << tag("client", format::as_hex(hash))

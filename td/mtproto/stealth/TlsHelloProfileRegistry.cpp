@@ -242,20 +242,49 @@ string normalized_runtime_destination_key(Slice destination) {
   return key;
 }
 
-string route_failure_cache_key(Slice destination, int32 unix_time) {
+uint32 legacy_route_failure_bucket(int32 unix_time) {
   auto unix_time64 = static_cast<int64>(unix_time);
   if (unix_time64 < 0) {
     unix_time64 = 0;
   }
 
+  return static_cast<uint32>(unix_time64 / kRouteFailureKeyBucketSeconds);
+}
+
+string route_failure_cache_key(Slice destination, int32 unix_time) {
+  static_cast<void>(unix_time);
+
+  return normalized_runtime_destination_key(destination);
+}
+
+string legacy_route_failure_cache_key(Slice destination, int32 unix_time) {
+  auto bucket = legacy_route_failure_bucket(unix_time);
+
   string key = normalized_runtime_destination_key(destination);
   key += '|';
-  key += std::to_string(static_cast<uint32>(unix_time64 / kRouteFailureKeyBucketSeconds));
+  key += std::to_string(bucket);
   return key;
 }
 
 string route_failure_store_key(Slice destination, int32 unix_time) {
   return kRuntimeEchStoreKeyPrefix.str() + route_failure_cache_key(destination, unix_time);
+}
+
+string legacy_route_failure_store_key(Slice destination, int32 unix_time) {
+  return kRuntimeEchStoreKeyPrefix.str() + legacy_route_failure_cache_key(destination, unix_time);
+}
+
+td::vector<string> legacy_route_failure_store_keys_for_lookup(Slice destination, int32 unix_time) {
+  td::vector<string> keys;
+  keys.reserve(2);
+  keys.push_back(legacy_route_failure_store_key(destination, unix_time));
+
+  auto bucket = legacy_route_failure_bucket(unix_time);
+  if (bucket > 0) {
+    auto previous_bucket_time = static_cast<int32>((bucket - 1) * kRouteFailureKeyBucketSeconds);
+    keys.push_back(legacy_route_failure_store_key(destination, previous_bucket_time));
+  }
+  return keys;
 }
 
 string serialize_route_failure_cache_entry(const RouteFailureCacheEntry &entry) {
@@ -367,6 +396,46 @@ void erase_route_failure_cache_entry_locked(Slice destination, int32 unix_time) 
   store->erase(route_failure_store_key(destination, unix_time));
 }
 
+void erase_legacy_route_failure_cache_entries_locked(Slice destination, int32 unix_time) {
+  auto store = route_failure_store();
+  if (store == nullptr) {
+    return;
+  }
+  for (const auto &key : legacy_route_failure_store_keys_for_lookup(destination, unix_time)) {
+    store->erase(key);
+  }
+}
+
+bool try_load_legacy_route_failure_cache_entry_locked(Slice destination, int32 unix_time,
+                                                      RouteFailureCacheEntry &entry) {
+  auto store = route_failure_store();
+  if (store == nullptr) {
+    return false;
+  }
+
+  for (const auto &legacy_key : legacy_route_failure_store_keys_for_lookup(destination, unix_time)) {
+    auto serialized = store->get(legacy_key);
+    if (serialized.empty()) {
+      continue;
+    }
+
+    if (!parse_route_failure_cache_entry(serialized, entry)) {
+      entry = make_fail_closed_route_failure_cache_entry();
+      erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
+      return true;
+    }
+    if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
+      store->erase(legacy_key);
+      continue;
+    }
+
+    erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
+    return true;
+  }
+
+  return false;
+}
+
 RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int32 unix_time) {
   auto &cache = route_failure_cache();
   auto key = route_failure_cache_key(destination, unix_time);
@@ -377,10 +446,15 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       return RouteFailureState{};
     }
     auto serialized = store->get(route_failure_store_key(destination, unix_time));
-    if (serialized.empty()) {
-      return RouteFailureState{};
-    }
     RouteFailureCacheEntry entry;
+    if (serialized.empty()) {
+      if (!try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry)) {
+        return RouteFailureState{};
+      }
+      auto inserted = cache.emplace(key, entry);
+      persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
+      return inserted.first->second.state;
+    }
     if (!parse_route_failure_cache_entry(serialized, entry)) {
       entry = make_fail_closed_route_failure_cache_entry();
       auto inserted = cache.emplace(key, entry);
@@ -516,6 +590,7 @@ void note_runtime_ech_failure(Slice destination, int32 unix_time) {
     entry.state.ech_block_suspected = true;
     entry.disabled_until = Timestamp::in(runtime_params.route_failure.ech_disable_ttl_seconds);
   }
+  erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
   persist_route_failure_cache_entry_locked(destination, unix_time, entry);
 }
 
@@ -523,6 +598,7 @@ void note_runtime_ech_success(Slice destination, int32 unix_time) {
   auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
   route_failure_cache().erase(route_failure_cache_key(destination, unix_time));
   erase_route_failure_cache_entry_locked(destination, unix_time);
+  erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
 }
 
 void reset_runtime_ech_failure_state_for_tests() {

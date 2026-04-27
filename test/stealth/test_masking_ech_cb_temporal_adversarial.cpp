@@ -18,14 +18,12 @@
 //   more than 300s apart NEVER trigger the circuit breaker, so ECH probes
 //   continue indefinitely — each one visible to the censor.
 //
-// Threat model B — day-bucket isolation causes predictable daily re-probe:
-//   route_failure_cache_key includes unix_time / 86400.  A circuit breaker
-//   tripped late in a 24-hour bucket produces no entry in the next bucket.
-//   ECH is re-enabled at the day boundary regardless of TTL — creating a
-//   predictable "ECH probe at midnight" pattern.
-//   NOTE: This is a KNOWN DESIGN LIMITATION.  Tests here document current
-//   de-facto behavior so future engineers understand the invariant and can
-//   reason about whether/when to change it.
+// Threat model B — day-bucket isolation must not create a predictable daily
+// re-probe:
+//   a circuit breaker tripped late in a 24-hour bucket must remain visible in
+//   the next bucket until its TTL expires in real time. Otherwise the client
+//   emits a fresh ECH probe at the day boundary, giving DPI a deterministic
+//   timing signal.
 //
 // Threat model C — success re-enables ECH even for pathologically failing routes:
 //   A single ECH success clears the entire failure counter.  On a route that
@@ -195,16 +193,11 @@ TEST(MaskingEchCbTemporalAdversarial, AlternatingFailureSuccessNeverTripsCircuit
 }
 
 // -----------------------------------------------------------------------
-// Threat model B: day-bucket isolation causes fresh ECH probe in new bucket.
-//
-// Failing ECH in bucket N creates cascade state under key "domain|N".
-// Querying in bucket N+1 finds key "domain|N+1" empty and returns
-// ECH enabled.  If TTL has NOT expired, this creates a spurious re-probe.
-// This test DOCUMENTS the current limitation (not a hard assertion of
-// desired behavior, which might change).
+// Threat model B: crossing the 24-hour unix_time bucket boundary must NOT
+// re-enable ECH while the real-time TTL is still active.
 // -----------------------------------------------------------------------
 
-TEST(MaskingEchCbTemporalAdversarial, CircuitBreakerStateNotCarriedAcrossDayBuckets) {
+TEST(MaskingEchCbTemporalAdversarial, CircuitBreakerStateCarriesAcrossDayBucketsUntilTtlExpires) {
   RuntimeGuard guard;
 
   auto params = default_runtime_stealth_params();
@@ -225,16 +218,12 @@ TEST(MaskingEchCbTemporalAdversarial, CircuitBreakerStateNotCarriedAcrossDayBuck
   ASSERT_TRUE(decision_bucket0.disabled_by_circuit_breaker);
 
   // Move to bucket 1 (10 seconds after midnight), still within TTL (300s).
-  // The cache key is now "domain|1" which has no entries.
   const int32 ts_after_midnight = kBucketSeconds + 10;  // 10 seconds into next day
 
-  // CURRENT BEHAVIOR (documented limitation):
-  // ECH is re-enabled in bucket 1 because state is NOT carried across buckets.
-  // This creates a predictable "ECH probe at day boundary" pattern visible to DPI.
+  // The decision must remain fail-closed until the real-time TTL expires.
   auto decision_bucket1 = get_runtime_ech_decision(dest, ts_after_midnight, known_non_ru());
-  // Document: ECH is enabled in new bucket even though within TSL — this is the known limitation.
-  // If this invariant changes (fix is applied), this assertion should be updated to EchMode::Disabled.
-  ASSERT_TRUE(decision_bucket1.ech_mode == EchMode::Rfc9180Outer);
+  ASSERT_TRUE(decision_bucket1.ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(decision_bucket1.disabled_by_circuit_breaker);
 }
 
 // -----------------------------------------------------------------------

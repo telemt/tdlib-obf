@@ -762,7 +762,8 @@ static void init_thread_local_evp_mac_ctx(EVP_MAC_CTX *&evp_mac_ctx, const char 
   OSSL_PARAM params[2];
   params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, const_cast<char *>(digest), 0);
   params[1] = OSSL_PARAM_construct_end();
-  EVP_MAC_CTX_set_params(evp_mac_ctx, params);
+  int res = EVP_MAC_CTX_set_params(evp_mac_ctx, params);
+  LOG_IF(FATAL, res != 1);
   EVP_MAC_free(hmac);
   detail::add_thread_local_destructor(create_destructor([&evp_mac_ctx]() mutable {
     EVP_MAC_CTX_free(const_cast<EVP_MAC_CTX *>(evp_mac_ctx));
