@@ -101,8 +101,7 @@ void gen_to_json(StringBuilder &sb, const tl::simple::Schema &schema, bool is_he
         sb << ";\n\n";
       } else {
         sb << " {\n"
-           << "  td_api::downcast_call(const_cast<td_api::" << type_name
-           << " &>(object), [&jv](const auto &object) { "
+           << "  td_api::downcast_call(object, [&jv](const auto &object) { "
               "to_json(jv, object); });\n"
            << "}\n\n";
       }

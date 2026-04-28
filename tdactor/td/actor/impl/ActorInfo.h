@@ -25,8 +25,8 @@
 namespace td {
 
 inline StringBuilder &operator<<(StringBuilder &sb, const ActorInfo &info) {
-  sb << info.get_name() << ":" << const_cast<void *>(static_cast<const void *>(&info)) << ":"
-     << const_cast<void *>(static_cast<const void *>(info.get_context()));
+  sb << info.get_name() << ":" << static_cast<const void *>(&info) << ":"
+     << static_cast<const void *>(info.get_context());
   return sb;
 }
 

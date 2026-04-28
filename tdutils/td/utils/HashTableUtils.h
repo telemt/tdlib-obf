@@ -13,6 +13,8 @@
 
 namespace td {
 
+static constexpr uint32 kU64HighShiftBits = 32;
+
 template <class EqT, class KeyT>
 bool is_hash_table_key_empty(const KeyT &key) {
   return EqT()(key, KeyT());
@@ -56,12 +58,12 @@ inline uint32 Hash<uint32>::operator()(const uint32 &value) const {
 
 template <>
 inline uint32 Hash<int64>::operator()(const int64 &value) const {
-  return randomize_hash(static_cast<uint32>(value + (value >> 32)));
+  return randomize_hash(static_cast<uint32>(value + (value >> kU64HighShiftBits)));
 }
 
 template <>
 inline uint32 Hash<uint64>::operator()(const uint64 &value) const {
-  return randomize_hash(static_cast<uint32>(value + (value >> 32)));
+  return randomize_hash(static_cast<uint32>(value + (value >> kU64HighShiftBits)));
 }
 
 template <>

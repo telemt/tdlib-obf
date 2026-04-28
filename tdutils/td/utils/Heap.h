@@ -10,6 +10,8 @@
 
 namespace td {
 
+static constexpr int DEFAULT_K_HEAP_ARITY = 4;
+
 struct HeapNode {
   bool in_heap() const {
     return pos_ != -1;
@@ -23,8 +25,12 @@ struct HeapNode {
   int32 pos_ = -1;
 };
 
-template <class KeyT, int K = 4>
+template <class KeyT, int K = DEFAULT_K_HEAP_ARITY>
 class KHeap {
+  static_assert(K > 0, "Heap arity must be positive");
+  static constexpr size_t kArity = static_cast<size_t>(K);
+  static constexpr size_t kShrinkDivisor = 4;
+
  public:
   bool empty() const {
     return array_.empty();
@@ -96,7 +102,7 @@ class KHeap {
 
   void check() const {
     for (size_t i = 0; i < array_.size(); i++) {
-      for (size_t j = i * K + 1; j < i * K + 1 + K && j < array_.size(); j++) {
+      for (size_t j = i * kArity + 1; j < i * kArity + 1 + kArity && j < array_.size(); j++) {
         CHECK(array_[i].key_ <= array_[j].key_);
       }
     }
@@ -113,7 +119,7 @@ class KHeap {
     auto item = array_[pos];
 
     while (pos) {
-      auto parent_pos = (pos - 1) / K;
+      auto parent_pos = (pos - 1) / kArity;
       auto parent_item = array_[parent_pos];
 
       if (parent_item.key_ < item.key_) {
@@ -132,8 +138,8 @@ class KHeap {
   void fix_down(size_t pos) {
     auto item = array_[pos];
     while (true) {
-      auto left_pos = pos * K + 1;
-      auto right_pos = min(left_pos + K, array_.size());
+      auto left_pos = pos * kArity + 1;
+      auto right_pos = min(left_pos + kArity, array_.size());
       auto next_pos = pos;
       KeyT next_key = item.key_;
       for (auto i = left_pos; i < right_pos; i++) {
@@ -162,7 +168,7 @@ class KHeap {
       fix_down(pos);
       fix_up(pos);
     }
-    if (array_.capacity() > 50 && array_.size() < array_.capacity() / 4) {
+    if (array_.capacity() > 50 && array_.size() < array_.capacity() / kShrinkDivisor) {
       array_.shrink_to_fit();
     }
   }

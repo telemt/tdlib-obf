@@ -1,8 +1,7 @@
-# SPDX-FileCopyrightText: Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2026
-# SPDX-FileCopyrightText: Copyright 2026 telemt community
-# SPDX-License-Identifier: BSL-1.0 AND MIT
-# telemt: https://github.com/telemt
-# telemt: https://t.me/telemtrs
+# SPDX-FileCopyrightText: Copyright Aliaksei Levin (levlam@telegram.org), Arseny
+# Smirnov (arseny30@gmail.com) 2014-2026 SPDX-FileCopyrightText: Copyright 2026
+# telemt community SPDX-License-Identifier: BSL-1.0 AND MIT telemt:
+# https://github.com/telemt telemt: https://t.me/telemtrs
 
 if((CMAKE_MAJOR_VERSION LESS 3) OR (CMAKE_VERSION VERSION_LESS "3.10"))
   message(FATAL_ERROR "CMake >= 3.10 is required")
@@ -33,6 +32,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/message_link_info_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/message_link_info_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/message_entities.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/message_entity_v557_pre_code_regression.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/socks5_response_parser_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mtproto.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/dns_resolver.cpp
@@ -41,6 +41,26 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/poll.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_regressions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_level1_contracts_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/flat_hash_table_memsize_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/flat_hash_table_memsize_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/flat_hash_table_memsize_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/flat_hash_table_memsize_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/flat_hash_table_memsize_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tdutils_heap_hash_misc_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tdutils_heap_hash_misc_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tdutils_heap_hash_misc_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tdutils_heap_hash_misc_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tdutils_heap_hash_misc_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/td_api_json_const_dispatch_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/td_api_json_const_dispatch_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/td_api_json_const_dispatch_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/td_api_json_const_dispatch_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/td_api_json_const_dispatch_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/query_merger.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secure_storage.cpp

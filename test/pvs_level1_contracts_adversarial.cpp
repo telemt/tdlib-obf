@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "td/utils/common.h"
+#include "td/utils/logging.h"
 #include "td/utils/misc.h"
 #include "td/utils/Status.h"
 #include "td/utils/tests.h"
@@ -152,4 +153,66 @@ TEST(PvsLevel1Adversarial, to_lower_inplace_binary_light_fuzz) {
       ASSERT_EQ(td::to_lower(before[pos]), data[pos]);
     }
   }
+}
+
+TEST(PvsLevel1Contracts, logging_strip_predicate_contract_default_levels) {
+  constexpr int kBuildStrip = STRIP_LOG;
+  ASSERT_EQ(VERBOSITY_NAME(DEBUG), kBuildStrip);
+
+  ASSERT_FALSE((td::detail::IsLogStripped<VERBOSITY_NAME(DEBUG), kBuildStrip>::value));
+  ASSERT_FALSE((td::detail::IsLogStripped<VERBOSITY_NAME(INFO), kBuildStrip>::value));
+  ASSERT_FALSE((td::detail::IsLogStripped<VERBOSITY_NAME(WARNING), kBuildStrip>::value));
+  ASSERT_FALSE((td::detail::IsLogStripped<VERBOSITY_NAME(ERROR), kBuildStrip>::value));
+  ASSERT_FALSE((td::detail::IsLogStripped<VERBOSITY_NAME(FATAL), kBuildStrip>::value));
+  ASSERT_TRUE((td::detail::IsLogStripped<VERBOSITY_NAME(NEVER), kBuildStrip>::value));
+}
+
+TEST(PvsLevel1Contracts, logging_macro_source_contract_no_identical_integral_constant_compare) {
+  const auto logging_h = load_repo_text("tdutils/td/utils/logging.h");
+
+  ASSERT_EQ(td::string::npos, logging_h.find("integral_constant<int, VERBOSITY_NAME(strip_level)>() >"));
+  ASSERT_TRUE(logging_h.find("IsLogStripped<VERBOSITY_NAME(strip_level), STRIP_LOG>::value") != td::string::npos);
+}
+
+TEST(PvsLevel1Adversarial, logging_strip_predicate_matches_numeric_relation_for_full_level_grid) {
+  constexpr int kLevels[] = {VERBOSITY_NAME(PLAIN),   VERBOSITY_NAME(FATAL), VERBOSITY_NAME(ERROR),
+                             VERBOSITY_NAME(WARNING), VERBOSITY_NAME(INFO),  VERBOSITY_NAME(DEBUG),
+                             VERBOSITY_NAME(NEVER)};
+
+  for (int strip_level : kLevels) {
+    for (int build_strip_level : kLevels) {
+      const bool expected = strip_level > build_strip_level;
+      const bool observed = td::detail::is_log_stripped(strip_level, build_strip_level);
+      ASSERT_EQ(expected, observed);
+    }
+  }
+}
+
+TEST(PvsLevel1Adversarial, logging_strip_predicate_light_fuzz_matches_arithmetic_reference) {
+  constexpr int kIterations = 30000;
+  std::mt19937 rng(0x9D219A73u);
+  std::uniform_int_distribution<int> dist(-2048, 2048);
+
+  for (int i = 0; i < kIterations; i++) {
+    const int strip_level = dist(rng);
+    const int build_strip_level = dist(rng);
+    const bool expected = strip_level > build_strip_level;
+    const bool observed = td::detail::is_log_stripped(strip_level, build_strip_level);
+    ASSERT_EQ(expected, observed);
+  }
+}
+
+TEST(PvsLevel1Adversarial, logging_strip_predicate_stress_is_deterministic) {
+  constexpr int kIters = 200000;
+  td::int32 checksum = 0;
+
+  for (int i = 0; i < kIters; i++) {
+    const int strip_level = (i % 11) - 5;
+    const int build_strip_level = ((i * 7) % 13) - 6;
+    if (td::detail::is_log_stripped(strip_level, build_strip_level)) {
+      checksum++;
+    }
+  }
+
+  ASSERT_EQ(92440, checksum);
 }

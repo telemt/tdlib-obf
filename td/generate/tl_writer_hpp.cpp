@@ -58,7 +58,10 @@ std::string TD_TL_writer_hpp::gen_output_begin(const std::string &additional_imp
 }
 
 std::string TD_TL_writer_hpp::gen_output_begin_once() const {
-  return std::string();
+  return "template <class Base, class T>\n"
+         "bool downcast_call(const Base &obj, const T &func) {\n"
+         "  return downcast_call(const_cast<Base &>(obj), [&](auto &value) { func(std::as_const(value)); });\n"
+         "}\n\n";
 }
 
 std::string TD_TL_writer_hpp::gen_output_end() const {

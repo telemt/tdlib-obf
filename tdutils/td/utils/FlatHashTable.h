@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <utility>
 
 namespace td {
@@ -23,13 +24,19 @@ uint32 get_random_flat_hash_table_bucket(uint32 bucket_count_mask);
 
 template <class NodeT, class HashT, class EqT>
 class FlatHashTable {
-  static constexpr uint32 INVALID_BUCKET = 0xFFFFFFFF;
+  static constexpr uint32 INVALID_BUCKET = std::numeric_limits<uint32>::max();
+  static constexpr uint32 MAX_BUCKET_COUNT_BY_NODE_SIZE =
+      static_cast<uint32>(std::numeric_limits<int32>::max() / sizeof(NodeT));
+
+  static constexpr size_t to_size(uint32 value) {
+    return static_cast<size_t>(value);
+  }
 
   void allocate_nodes(uint32 size) {
     DCHECK(size >= 8);
     DCHECK((size & (size - 1)) == 0);
-    CHECK(size <= min(static_cast<uint32>(1) << 29, static_cast<uint32>(0x7FFFFFFF / sizeof(NodeT))));
-    nodes_ = new NodeT[size];
+    CHECK(size <= min(static_cast<uint32>(1) << 29, MAX_BUCKET_COUNT_BY_NODE_SIZE));
+    nodes_ = new NodeT[to_size(size)];
     // used_node_count_ = 0;
     bucket_count_mask_ = size - 1;
     bucket_count_ = size;
@@ -272,7 +279,7 @@ class FlatHashTable {
   }
 
   size_t size() const {
-    return used_node_count_;
+    return static_cast<size_t>(used_node_count_);
   }
 
   bool empty() const {
@@ -311,7 +318,7 @@ class FlatHashTable {
     }
     auto bucket = calc_bucket(key);
     while (true) {
-      auto &node = nodes_[bucket];
+      auto &node = nodes_[to_size(bucket)];
       if (node.empty()) {
         if (unlikely(used_node_count_ * 5 >= bucket_count_mask_ * 3)) {
           resize(2 * bucket_count_);
@@ -387,7 +394,7 @@ class FlatHashTable {
     }
 
     auto it = begin_impl();
-    auto end = nodes_ + bucket_count();
+    auto end = nodes_ + to_size(bucket_count());
     while (it != end && !it->empty()) {
       ++it;
     }
@@ -439,11 +446,11 @@ class FlatHashTable {
     }
     if (begin_bucket_ == INVALID_BUCKET) {
       begin_bucket_ = detail::get_random_flat_hash_table_bucket(bucket_count_mask_);
-      while (nodes_[begin_bucket_].empty()) {
+      while (nodes_[to_size(begin_bucket_)].empty()) {
         next_bucket(begin_bucket_);
       }
     }
-    return nodes_ + begin_bucket_;
+    return nodes_ + to_size(begin_bucket_);
   }
 
   NodeT *find_impl(const KeyT &key) {
@@ -452,7 +459,7 @@ class FlatHashTable {
     }
     auto bucket = calc_bucket(key);
     while (true) {
-      auto &node = nodes_[bucket];
+      auto &node = nodes_[to_size(bucket)];
       if (node.empty()) {
         return nullptr;
       }
@@ -492,16 +499,16 @@ class FlatHashTable {
     allocate_nodes(new_size);
     used_node_count_ = old_size;
 
-    auto old_nodes_end = old_nodes + old_bucket_count;
+    auto old_nodes_end = old_nodes + to_size(old_bucket_count);
     for (NodeT *old_node = old_nodes; old_node != old_nodes_end; ++old_node) {
       if (old_node->empty()) {
         continue;
       }
       auto bucket = calc_bucket(old_node->key());
-      while (!nodes_[bucket].empty()) {
+      while (!nodes_[to_size(bucket)].empty()) {
         next_bucket(bucket);
       }
-      nodes_[bucket] = std::move(*old_node);
+      nodes_[to_size(bucket)] = std::move(*old_node);
     }
     clear_nodes(old_nodes);
   }
@@ -512,13 +519,13 @@ class FlatHashTable {
     used_node_count_--;
 
     const auto bucket_count = bucket_count_;
-    const auto *end = nodes_ + bucket_count;
+    const auto *end = nodes_ + to_size(bucket_count);
     for (auto *test_node = it + 1; test_node != end; test_node++) {
       if (likely(test_node->empty())) {
         return;
       }
 
-      auto want_node = nodes_ + calc_bucket(test_node->key());
+      auto want_node = nodes_ + to_size(calc_bucket(test_node->key()));
       if (want_node <= it || want_node > test_node) {
         *it = std::move(*test_node);
         it = test_node;
@@ -529,17 +536,17 @@ class FlatHashTable {
     auto empty_bucket = empty_i;
     for (uint32 test_i = bucket_count;; test_i++) {
       auto test_bucket = test_i - bucket_count_;
-      if (nodes_[test_bucket].empty()) {
+      if (nodes_[to_size(test_bucket)].empty()) {
         return;
       }
 
-      auto want_i = calc_bucket(nodes_[test_bucket].key());
+      auto want_i = calc_bucket(nodes_[to_size(test_bucket)].key());
       if (want_i < empty_i) {
         want_i += bucket_count;
       }
 
       if (want_i <= empty_i || want_i > test_i) {
-        nodes_[empty_bucket] = std::move(nodes_[test_bucket]);
+        nodes_[to_size(empty_bucket)] = std::move(nodes_[to_size(test_bucket)]);
         empty_i = test_i;
         empty_bucket = test_bucket;
       }
@@ -547,7 +554,7 @@ class FlatHashTable {
   }
 
   Iterator create_iterator(NodeT *node) {
-    return Iterator(node, nodes_, nodes_ + bucket_count());
+    return Iterator(node, nodes_, nodes_ + to_size(bucket_count()));
   }
 
   void invalidate_iterators() {

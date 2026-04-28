@@ -26,6 +26,8 @@ class TD_TL_writer_cpp : public TD_TL_writer {
   std::string gen_full_store_class_name(const tl::tl_tree_type *tree_type) const;
 
   std::vector<std::string> ext_include;
+  mutable std::string current_fetch_class_name_;
+  mutable std::vector<std::string> current_fetch_case_class_names_;
 
  protected:
   std::string gen_vector_store(const std::string &field_name, const tl::tl_tree_type *t,

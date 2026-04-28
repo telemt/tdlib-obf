@@ -560,6 +560,9 @@ std::string TD_TL_writer_cpp::gen_function_result_type(const tl::tl_tree *result
 std::string TD_TL_writer_cpp::gen_fetch_function_begin(const std::string &parser_name, const std::string &class_name,
                                                        const std::string &parent_class_name, int arity, int field_count,
                                                        std::vector<tl::var_description> &vars, int parser_type) const {
+  current_fetch_class_name_ = class_name;
+  current_fetch_case_class_names_.clear();
+
   for (std::size_t i = 0; i < vars.size(); i++) {
     assert(!vars[i].is_stored);
   }
@@ -680,12 +683,21 @@ std::string TD_TL_writer_cpp::gen_store_function_end(const std::vector<tl::var_d
 }
 
 std::string TD_TL_writer_cpp::gen_fetch_switch_begin() const {
+  if (tl_name == "secret_api" && current_fetch_class_name_ == "Object") {
+    return "  int constructor = p.fetch_int();\n";
+  }
+
   return "  int constructor = p.fetch_int();\n"
          "  switch (constructor) {\n";
 }
 
 std::string TD_TL_writer_cpp::gen_fetch_switch_case(const tl::tl_combinator *t, int arity) const {
   assert(arity == 0);
+  if (tl_name == "secret_api" && current_fetch_class_name_ == "Object") {
+    current_fetch_case_class_names_.push_back(gen_class_name(t->name));
+    return "";
+  }
+
   return "    case " + gen_class_name(t->name) +
          "::ID:\n"
          "      return " +
@@ -693,6 +705,31 @@ std::string TD_TL_writer_cpp::gen_fetch_switch_case(const tl::tl_combinator *t, 
 }
 
 std::string TD_TL_writer_cpp::gen_fetch_switch_end() const {
+  if (tl_name == "secret_api" && current_fetch_class_name_ == "Object") {
+    std::string result =
+        "  using ObjectFetchFunction = object_ptr<Object> (*)(TlParser &);\n"
+        "  struct ObjectDispatchEntry {\n"
+        "    int constructor;\n"
+        "    ObjectFetchFunction fetch;\n"
+        "  };\n"
+        "  static const ObjectDispatchEntry kDispatchTable[] = {\n";
+
+    for (const auto &class_name : current_fetch_case_class_names_) {
+      result += "    {" + class_name + "::ID, [](TlParser &p) -> object_ptr<Object> { return " + class_name +
+                "::fetch(p); }},\n";
+    }
+
+    result +=
+        "  };\n"
+        "  for (const auto &entry : kDispatchTable) {\n"
+        "    if (entry.constructor == constructor) {\n"
+        "      return entry.fetch(p);\n"
+        "    }\n"
+        "  }\n"
+        "  FAIL(PSTRING() << \"Unknown constructor found \" << format::as_hex(constructor));\n";
+    return result;
+  }
+
   return "    default:\n"
          "      FAIL(PSTRING() << \"Unknown constructor found \" << format::as_hex(constructor));\n"
          "  }\n";

@@ -20,6 +20,8 @@
 
 namespace td {
 
+static constexpr char kAsciiCaseBit = static_cast<char>('a' - 'A');
+
 char *str_dup(Slice str);
 
 template <class T>
@@ -110,7 +112,7 @@ inline bool is_space(char c) {
 }
 
 inline bool is_alpha(char c) {
-  c |= 0x20;
+  c |= kAsciiCaseBit;
   return 'a' <= c && c <= 'z';
 }
 
@@ -126,7 +128,7 @@ inline bool is_hex_digit(char c) {
   if (is_digit(c)) {
     return true;
   }
-  c |= 0x20;
+  c |= kAsciiCaseBit;
   return 'a' <= c && c <= 'f';
 }
 
@@ -210,7 +212,7 @@ inline int hex_to_int(char c) {
   if (is_digit(c)) {
     return c - '0';
   }
-  c |= 0x20;
+  c |= kAsciiCaseBit;
   if ('a' <= c && c <= 'f') {
     return c - 'a' + 10;
   }
@@ -341,7 +343,8 @@ Result<R> narrow_cast_safe(const A &a) {
 template <int Alignment, class T>
 bool is_aligned_pointer(const T *pointer) {
   static_assert(Alignment > 0 && (Alignment & (Alignment - 1)) == 0, "Wrong alignment");
-  return (reinterpret_cast<std::uintptr_t>(static_cast<const void *>(pointer)) & (Alignment - 1)) == 0;
+  const auto alignment_mask = static_cast<std::uintptr_t>(Alignment - 1);
+  return (reinterpret_cast<std::uintptr_t>(static_cast<const void *>(pointer)) & alignment_mask) == 0;
 }
 
 string buffer_to_hex(Slice buffer);

@@ -40,8 +40,21 @@
 #ifndef STRIP_LOG
 #define STRIP_LOG VERBOSITY_NAME(DEBUG)
 #endif
-#define LOG_IS_STRIPPED(strip_level) \
-  (::std::integral_constant<int, VERBOSITY_NAME(strip_level)>() > ::std::integral_constant<int, STRIP_LOG>())
+
+namespace td {
+namespace detail {
+
+template <int StripLevel, int BuildStripLevel>
+using IsLogStripped = std::bool_constant<(StripLevel > BuildStripLevel)>;
+
+constexpr bool is_log_stripped(int strip_level, int build_strip_level) {
+  return strip_level > build_strip_level;
+}
+
+}  // namespace detail
+}  // namespace td
+
+#define LOG_IS_STRIPPED(strip_level) (::td::detail::IsLogStripped<VERBOSITY_NAME(strip_level), STRIP_LOG>::value)
 
 #define LOGGER(interface, options, level, comment) ::td::Logger(interface, options, level, __FILE__, __LINE__, comment)
 
