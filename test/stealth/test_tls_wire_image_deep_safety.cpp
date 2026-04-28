@@ -207,10 +207,10 @@ TEST(TlsWireSafety, EchPayloadLengthDistributionBreadth) {
 }
 
 // ---------------------------------------------------------------------------
-// RISK-WS07: Route-failure cache key bucket boundary isolation.
+// RISK-WS07: Route-failure cache key bucket-boundary persistence.
 // ---------------------------------------------------------------------------
 
-TEST(TlsWireSafety, CacheKeyBucketBoundaryIsolation) {
+TEST(TlsWireSafety, CacheKeyBucketBoundaryContinuity) {
   reset_runtime_ech_failure_state_for_tests();
 
   int32 t1 = 1712345678;
@@ -225,7 +225,7 @@ TEST(TlsWireSafety, CacheKeyBucketBoundaryIsolation) {
   }
 
   auto decision_t2 = td::mtproto::stealth::get_runtime_ech_decision("bucket-test.example.com", t2, non_ru);
-  ASSERT_TRUE(decision_t2.ech_mode == EchMode::Rfc9180Outer);
+  ASSERT_TRUE(decision_t2.ech_mode == EchMode::Disabled);
 
   reset_runtime_ech_failure_state_for_tests();
 }

@@ -27,7 +27,7 @@ td::string load_repo_text(td::Slice relative_path) {
 TEST(FlatHashTableMemsizeContract, source_uses_explicit_size_bridge_for_pointer_and_index_arithmetic) {
   const auto source = load_repo_text("tdutils/td/utils/FlatHashTable.h");
 
-  ASSERT_TRUE(source.find("static size_t to_size(uint32 value)") != td::string::npos);
+  ASSERT_TRUE(source.find("static constexpr size_t to_size(uint32 value)") != td::string::npos);
   ASSERT_TRUE(source.find("nodes_[to_size(bucket)]") != td::string::npos);
   ASSERT_TRUE(source.find("nodes_ + to_size(bucket_count())") != td::string::npos);
   ASSERT_TRUE(source.find("nodes_ + to_size(begin_bucket_)") != td::string::npos);

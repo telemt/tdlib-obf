@@ -3585,7 +3585,7 @@ Result<vector<MessageEntity>> parse_html(string &str) {
             }
           }
         } else if (tag_name == "pre") {
-          if (!entities.empty()) {  // V557: guard .back() against empty container
+          if (!entities.empty()) {  //-V557 empty guard present
             auto &last_entity = entities.back();
             if (last_entity.type == MessageEntity::Type::Code && last_entity.offset == entity_offset &&
                 last_entity.length == entity_length && !last_entity.argument.empty()) {
@@ -3597,7 +3597,7 @@ Result<vector<MessageEntity>> parse_html(string &str) {
             entities.emplace_back(MessageEntity::Type::Pre, entity_offset, entity_length);
           }
         } else if (tag_name == "code") {
-          if (!entities.empty()) {  // V557: guard .back() against empty container
+          if (!entities.empty()) {  //-V557 empty guard present
             auto &last_entity = entities.back();
             if (last_entity.type == MessageEntity::Type::Pre && last_entity.offset == entity_offset &&
                 last_entity.length == entity_length && !nested_entities.back().argument.empty()) {

@@ -23,13 +23,10 @@
 //   contract so that an oversized destination cannot carve out a
 //   separate cache bucket that bypasses a circuit-broken shorter key.
 //
-// Threat model C — per-bucket time boundaries:
-//   route_failure_cache_key includes unix_time / kBucketSeconds.  An
-//   adversary who can craft timestamps that straddle a day boundary
-//   gets independent failure state in each bucket, potentially avoiding
-//   the circuit breaker by cycling timestamps.  These tests document
-//   the day-bucket isolation and verify the threshold must be reached
-//   independently in each bucket.
+// Threat model C — day-boundary bypass attempts:
+//   runtime route-failure state is destination-scoped. An adversary who
+//   rotates timestamps across day boundaries must not bypass a tripped
+//   circuit breaker for the same destination.
 
 #include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
 
@@ -113,11 +110,11 @@ TEST(EchRouteFailureCounterAdversarial, LongDestinationNormalisedToSameCacheKey)
 }
 
 // -----------------------------------------------------------------------
-// Day-bucket isolation: failures in one day bucket do not satisfy the
-// threshold for another day bucket.
+// Day-bucket boundary crossing must preserve destination-scoped breaker
+// state while TTL remains active.
 // -----------------------------------------------------------------------
 
-TEST(EchRouteFailureCounterAdversarial, DayBucketIsolationDoesNotLeakStateAcrossBuckets) {
+TEST(EchRouteFailureCounterAdversarial, DayBoundaryDoesNotResetCircuitBreakerForSameDestination) {
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
 
@@ -129,23 +126,25 @@ TEST(EchRouteFailureCounterAdversarial, DayBucketIsolationDoesNotLeakStateAcross
   // Day 1: ts in second bucket.
   const td::int32 ts_day1 = ts_day0 + kBucketSeconds;
 
-  // Trigger exactly (threshold - 1) failures on day 0 → not yet tripped.
-  // We use 5 failures which is below the default threshold of 10.
+  // Trigger enough failures on day 0 to trip the breaker.
   for (int i = 0; i < 5; i++) {
     note_runtime_ech_failure(dest, ts_day0);
   }
 
-  // Day 1's bucket has 0 failures → ECH should still be enabled there.
+  auto decision_day0 = get_runtime_ech_decision(dest, ts_day0, non_ru());
+  ASSERT_TRUE(decision_day0.ech_mode == EchMode::Disabled);
+
+  // Day 1 shares the same destination-scoped failure state.
   auto decision_day1 = get_runtime_ech_decision(dest, ts_day1, non_ru());
-  ASSERT_TRUE(decision_day1.ech_mode == EchMode::Rfc9180Outer);
+  ASSERT_TRUE(decision_day1.ech_mode == EchMode::Disabled);
 }
 
 // -----------------------------------------------------------------------
-// Success on one day bucket must NOT clear the circuit-broken state in
-// a different day bucket.
+// Success for the same destination must clear breaker state regardless of
+// timestamp bucket.
 // -----------------------------------------------------------------------
 
-TEST(EchRouteFailureCounterAdversarial, SuccessOnOneBucketDoesNotClearOtherBucket) {
+TEST(EchRouteFailureCounterAdversarial, SuccessClearsStateAcrossDayBoundaryForSameDestination) {
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
 
@@ -161,11 +160,11 @@ TEST(EchRouteFailureCounterAdversarial, SuccessOnOneBucketDoesNotClearOtherBucke
   }
   ASSERT_TRUE(get_runtime_ech_decision(dest, ts_day0, non_ru()).ech_mode == EchMode::Disabled);
 
-  // Record a success on day 1 — should only clear day 1 bucket.
+  // Record a success on day 1.
   note_runtime_ech_success(dest, ts_day1);
 
-  // Day 0 must still be circuit-broken.
-  ASSERT_TRUE(get_runtime_ech_decision(dest, ts_day0, non_ru()).ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(get_runtime_ech_decision(dest, ts_day0, non_ru()).ech_mode == EchMode::Rfc9180Outer);
+  ASSERT_TRUE(get_runtime_ech_decision(dest, ts_day1, non_ru()).ech_mode == EchMode::Rfc9180Outer);
 }
 
 // -----------------------------------------------------------------------

@@ -237,7 +237,7 @@ TEST(TlsRouteFailureCache, DifferentDestinationMustNotInheritCircuitBreakerState
   ASSERT_TRUE(EchMode::Rfc9180Outer == runtime_ech_mode_for_route(healthy_destination, unix_time, route_hints));
 }
 
-TEST(TlsRouteFailureCache, DifferentDayBucketMustNotInheritCircuitBreakerState) {
+TEST(TlsRouteFailureCache, DifferentDayBucketMustInheritCircuitBreakerStateForSameDestination) {
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
 
@@ -254,10 +254,10 @@ TEST(TlsRouteFailureCache, DifferentDayBucketMustNotInheritCircuitBreakerState) 
   note_runtime_ech_failure(destination, first_day_unix_time);
 
   ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route(destination, first_day_unix_time, route_hints));
-  ASSERT_TRUE(EchMode::Rfc9180Outer == runtime_ech_mode_for_route(destination, second_day_unix_time, route_hints));
+  ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route(destination, second_day_unix_time, route_hints));
 }
 
-TEST(TlsRouteFailureCache, SuccessClearsOnlyMatchingDestinationAndBucket) {
+TEST(TlsRouteFailureCache, SuccessClearsMatchingDestinationAcrossDayBoundaries) {
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
 
@@ -282,7 +282,7 @@ TEST(TlsRouteFailureCache, SuccessClearsOnlyMatchingDestinationAndBucket) {
   note_runtime_ech_success(destination, blocked_unix_time);
 
   ASSERT_TRUE(EchMode::Rfc9180Outer == runtime_ech_mode_for_route(destination, blocked_unix_time, route_hints));
-  ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route(destination, next_bucket_unix_time, route_hints));
+  ASSERT_TRUE(EchMode::Rfc9180Outer == runtime_ech_mode_for_route(destination, next_bucket_unix_time, route_hints));
 }
 
 }  // namespace

@@ -132,8 +132,8 @@ TlsInit create_tls_init(td::SocketFd socket_fd, td::Slice domain, td::int32 unix
 }
 
 void flush_invalid_response_and_expect_error(TlsInit &tls_init, td::SocketFd &peer_fd) {
-  auto response =
-      make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix, kSecondResponsePrefix);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix);
   response[11] ^= 0x01;
 
   ASSERT_TRUE(write_all(peer_fd, response).is_ok());
@@ -143,8 +143,8 @@ void flush_invalid_response_and_expect_error(TlsInit &tls_init, td::SocketFd &pe
 }
 
 void flush_valid_response_and_expect_success(TlsInit &tls_init, td::SocketFd &peer_fd) {
-  auto response =
-      make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init), kFirstResponsePrefix, kSecondResponsePrefix);
+  auto response = make_tls_init_response("0123456789secret", TlsInitTestPeer::hello_rand(tls_init),
+                                         kFirstResponsePrefix, kSecondResponsePrefix);
 
   ASSERT_TRUE(write_all(peer_fd, response).is_ok());
   TlsInitTestPeer::fd(tls_init).get_poll_info().add_flags(td::PollFlags::Read());
@@ -297,7 +297,7 @@ TEST(TlsInitCircuitBreaker, FailuresForOneDestinationMustNotDisableEchForDiffere
   }
 }
 
-TEST(TlsInitCircuitBreaker, FailuresMustNotDisableEchForNextDayBucketOfSameDestination) {
+TEST(TlsInitCircuitBreaker, FailuresMustDisableEchForNextDayBucketOfSameDestination) {
   SKIP_IF_NO_SOCKET_PAIR();
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
@@ -336,7 +336,7 @@ TEST(TlsInitCircuitBreaker, FailuresMustNotDisableEchForNextDayBucketOfSameDesti
     auto wire = flush_client_hello(tls_init, socket_pair.peer);
     auto parsed = parse_tls_client_hello(wire);
     ASSERT_TRUE(parsed.is_ok());
-    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
   }
 }
 

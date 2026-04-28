@@ -51,7 +51,7 @@ void QueryCombiner::do_send_query(int64 query_id, QueryInfo &query) {
   CHECK(query.send_query);
   query.is_sent = true;
   auto send_query = std::move(query.send_query);
-  CHECK(!query.send_query);
+  CHECK(send_query);
   next_query_time_ = Time::now() + min_delay_;
   query_count_++;
   send_query.set_value(PromiseCreator::lambda([actor_id = actor_id(this), query_id](Result<Unit> &&result) {

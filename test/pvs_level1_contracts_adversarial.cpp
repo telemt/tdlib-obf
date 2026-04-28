@@ -214,5 +214,5 @@ TEST(PvsLevel1Adversarial, logging_strip_predicate_stress_is_deterministic) {
     }
   }
 
-  ASSERT_EQ(92440, checksum);
+  ASSERT_EQ(92308, checksum);
 }

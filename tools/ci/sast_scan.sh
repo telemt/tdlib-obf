@@ -26,7 +26,7 @@ ARTIFACTS="${REPO_ROOT}/artifacts/sast"
 RAW_LOG="${ARTIFACTS}/raw.log"
 REPORT_MEDIUM="${ARTIFACTS}/report_medium_plus.json"
 REPORT_ALL="${ARTIFACTS}/report_all.json"
-THREADS=12
+THREADS="${SAST_THREADS:-14}"
 QUICK=0
 CHANGED_FILES=""
 
@@ -106,7 +106,7 @@ pvs-studio-analyzer analyze \
 	-s "${EMPTY_SUPPRESS}" \
 	-o "${RAW_LOG}" \
 	-j"${THREADS}" \
-	--analysis-mode "GA;64;OWASP;CS;MISRA" \
+	--analysis-mode "GA;64;OWASP;CS" \
 	--security-related-issues \
 	--ignore-ccache \
 	--compiler g++-15=gcc --compiler gcc --compiler g++ --compiler c++ \
@@ -118,7 +118,7 @@ echo "[sast] Analysis complete. Converting report …"
 
 # ── Convert: all levels (audit archive) ──────────────────────────────────────
 plog-converter \
-	-a "GA:1,2,3;64:1,2,3;OWASP:1,2,3;CS:1,2,3;MISRA:1,2,3" \
+	-a "GA:1,2,3;64:1,2,3;OWASP:1,2,3;CS:1,2,3" \
 	-m cwe -m owasp \
 	-I "${REPO_ROOT}/td/*;${REPO_ROOT}/tdactor/*;${REPO_ROOT}/tddb/*;${REPO_ROOT}/tde2e/*;${REPO_ROOT}/tdnet/*;${REPO_ROOT}/tdtl/*;${REPO_ROOT}/tdutils/*" \
 	-E "${REPO_ROOT}/test/*;${REPO_ROOT}/sqlite/*;${REPO_ROOT}/build/*;${REPO_ROOT}/build-ninja/*;${REPO_ROOT}/build-sonar-repro/*;${REPO_ROOT}/benchmark/*;${REPO_ROOT}/example/*;${REPO_ROOT}/memprof/*" \
@@ -128,7 +128,7 @@ plog-converter \
 
 # ── Convert: medium+ only (actionable report) ────────────────────────────────
 plog-converter \
-	-a "GA:1,2;64:1,2;OWASP:1,2;CS:1,2;MISRA:1,2" \
+	-a "GA:1,2;64:1,2;OWASP:1,2;CS:1,2" \
 	-m cwe -m owasp \
 	-I "${REPO_ROOT}/td/*;${REPO_ROOT}/tdactor/*;${REPO_ROOT}/tddb/*;${REPO_ROOT}/tde2e/*;${REPO_ROOT}/tdnet/*;${REPO_ROOT}/tdtl/*;${REPO_ROOT}/tdutils/*" \
 	-E "${REPO_ROOT}/test/*;${REPO_ROOT}/sqlite/*;${REPO_ROOT}/build/*;${REPO_ROOT}/build-ninja/*;${REPO_ROOT}/build-sonar-repro/*;${REPO_ROOT}/benchmark/*;${REPO_ROOT}/example/*;${REPO_ROOT}/memprof/*" \

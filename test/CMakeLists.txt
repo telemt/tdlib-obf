@@ -41,6 +41,14 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/poll.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_regressions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_level1_contracts_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_integration.cpp

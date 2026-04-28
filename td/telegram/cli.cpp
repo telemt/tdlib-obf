@@ -2189,7 +2189,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::UserPrivacySetting> as_user_privacy_setting(MutableSlice setting) {
     setting = trim(setting);
-    to_lower_inplace(setting);
+    setting = to_lower_inplace(setting);
     if (setting == "invite") {
       return td_api::make_object<td_api::userPrivacySettingAllowChatInvites>();
     }
@@ -2298,7 +2298,7 @@ class CliClient final : public Actor {
 
   td_api::object_ptr<td_api::ChatMembersFilter> as_chat_members_filter(MutableSlice filter) const {
     filter = trim(filter);
-    to_lower_inplace(filter);
+    filter = to_lower_inplace(filter);
     if (filter == "a" || filter == "admin" || filter == "administrators") {
       return td_api::make_object<td_api::chatMembersFilterAdministrators>();
     }
@@ -2329,7 +2329,7 @@ class CliClient final : public Actor {
   td_api::object_ptr<td_api::SupergroupMembersFilter> as_supergroup_members_filter(MutableSlice filter,
                                                                                    const string &query) const {
     filter = trim(filter);
-    to_lower_inplace(filter);
+    filter = to_lower_inplace(filter);
     if (begins_with(filter, "get")) {
       filter.remove_prefix(3);
     }
@@ -2400,7 +2400,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::TopChatCategory> as_top_chat_category(MutableSlice category) {
     category = trim(category);
-    to_lower_inplace(category);
+    category = to_lower_inplace(category);
     if (!category.empty() && category.back() == 's') {
       category.remove_suffix(1);
     }
@@ -2425,7 +2425,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::ChatAction> as_chat_action(MutableSlice action) {
     action = trim(action);
-    to_lower_inplace(action);
+    action = to_lower_inplace(action);
     if (action == "c" || action == "cancel") {
       return td_api::make_object<td_api::chatActionCancel>();
     }
@@ -2508,7 +2508,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::NetworkType> as_network_type(MutableSlice type) {
     type = trim(type);
-    to_lower_inplace(type);
+    type = to_lower_inplace(type);
     if (type == "none") {
       return td_api::make_object<td_api::networkTypeNone>();
     }
@@ -5058,9 +5058,7 @@ class CliClient final : public Actor {
       int64 limit;
       int32 priority = 0;
       get_args(args, file_id, offset, limit, priority);
-      if (priority <= 0) {
-        priority = 1;
-      }
+      priority = max(priority, 1);
       int32 max_file_id = file_id.file_id;
       int32 min_file_id = (op == "dff" ? 1 : max_file_id);
       for (int32 i = min_file_id; i <= max_file_id; i++) {
@@ -8281,12 +8279,13 @@ class CliClient final : public Actor {
       int64 sound_id;
       string show_preview;
       string mute_stories;
-      int64 story_sound_id = 0;
+      string story_sound_id_str;
       string hide_story_poster;
       string disable_pinned_message_notifications;
       string disable_mention_notifications;
-      get_args(args, scope, mute_for, sound_id, show_preview, mute_stories, story_sound_id, hide_story_poster,
+      get_args(args, scope, mute_for, sound_id, show_preview, mute_stories, story_sound_id_str, hide_story_poster,
                disable_pinned_message_notifications, disable_mention_notifications);
+      int64 story_sound_id = story_sound_id_str.empty() ? -1 : to_integer<int64>(story_sound_id_str);
       if (op == "ssns") {
         send_request(td_api::make_object<td_api::setScopeNotificationSettings>(
             as_notification_settings_scope(scope),
@@ -8894,8 +8893,7 @@ void main(int argc, char **argv) {
     new_verbosity_level = VERBOSITY_NAME(FATAL) + new_verbosity;
   });
   options.add_option('l', "log", "Log to file", [&](Slice file_name) {
-    if (file_log.init(file_name.str()).is_ok() && file_log.init(file_name.str()).is_ok() &&
-        file_log.init(file_name.str(), 1000 << 20).is_ok()) {
+    if (file_log.init(file_name.str()).is_ok() && file_log.init(file_name.str(), 1000 << 20).is_ok()) {
       combined_log.set_first(&ts_log);
     }
   });

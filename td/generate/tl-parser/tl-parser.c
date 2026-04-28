@@ -67,22 +67,38 @@ struct parse parse;
 
 struct tree *tree;
 
+static void tl_parser_fatal_allocation_error(const char *what) {
+  fprintf(stderr, "Fatal: %s allocation failed\n", what);
+  abort();
+}
+
 struct tree *tree_alloc(void) {
   struct tree *T = talloc(sizeof(*T));
-  assert(T);
+  if (!T) {
+    tl_parser_fatal_allocation_error("tree");
+  }
   memset(T, 0, sizeof(*T));
   return T;
 }
 
 void tree_add_child(struct tree *P, struct tree *C) {
+  assert(P);
+  assert(C);
   if (P->nc == P->size) {
-    void **t = talloc(sizeof(void *) * (++P->size));
+    if (P->size == INT_MAX) {
+      tl_parser_fatal_allocation_error("tree child buffer size overflow");
+    }
+    int new_size = P->size + 1;
+    void **t = talloc(sizeof(void *) * (size_t)new_size);
+    if (!t) {
+      tl_parser_fatal_allocation_error("tree child buffer");
+    }
     if (P->c) {
-      memcpy(t, P->c, sizeof(void *) * (P->size - 1));
-      tfree(P->c, sizeof(void *) * (P->size - 1));
+      memcpy(t, P->c, sizeof(void *) * (size_t)P->size);
+      tfree(P->c, sizeof(void *) * (size_t)P->size);
     }
     P->c = (void *)t;
-    assert(P->c);
+    P->size = new_size;
   }
   P->c[P->nc++] = C;
 }
@@ -202,7 +218,12 @@ char *parse_lex(void) {
   parse.lex.flags = 0;
   switch (curch) {
     case '-':
-      if (nextch() != '-' || nextch() != '-') {
+      if (nextch() != '-') {
+        parse_error("Can not parse triple minus");
+        parse.lex.type = lex_error;
+        return (parse.lex.ptr = (void *)-1);
+      }
+      if (nextch() != '-') {
         parse_error("Can not parse triple minus");
         parse.lex.type = lex_error;
         return (parse.lex.ptr = (void *)-1);
@@ -401,7 +422,7 @@ struct parse *tl_init_parse_file(const char *fname) {
     return NULL;
   }
   long size = ftell(f);
-  if (size <= 0 || size > INT_MAX) {
+  if (size <= 0 || size >= INT_MAX) {
     fclose(f);
     fprintf(stderr, "Size is %ld. Too small or too big.\n", size);
     return NULL;
@@ -409,9 +430,12 @@ struct parse *tl_init_parse_file(const char *fname) {
   fseek(f, 0, SEEK_SET);
 
   static struct parse save;
-  save.text = talloc((size_t)size);
-  save.len = fread(save.text, 1, (size_t)size, f);
-  assert(save.len == size);
+  save.text = talloc((size_t)size + 1);
+  assert(save.text);
+  int bytes_read = (int)fread(save.text, 1, (size_t)size, f);
+  assert(bytes_read == size);
+  save.text[bytes_read] = 0;
+  save.len = bytes_read + 1;
   fclose(f);
   save.pos = 0;
   save.line = 0;
@@ -970,6 +994,22 @@ struct tree *parse_fun_declarations(void) {
   }
 }
 
+static int parse_section_marker(char *section_name) {
+  if (parse.lex.type == lex_error) {
+    return -1;
+  }
+  if (expect("---") < 0) {
+    return -1;
+  }
+  if (expect(section_name) < 0) {
+    return -1;
+  }
+  if (expect("---") < 0) {
+    return -1;
+  }
+  return 0;
+}
+
 struct tree *parse_program(void) {
   PARSE_INIT(type_tl_program);
   while (1) {
@@ -977,7 +1017,7 @@ struct tree *parse_program(void) {
     if (parse.lex.type == lex_eof) {
       PARSE_OK;
     }
-    if (parse.lex.type == lex_error || expect("---") < 0 || expect("functions") < 0 || expect("---") < 0) {
+    if (parse_section_marker("functions") < 0) {
       PARSE_FAIL;
     }
 
@@ -985,7 +1025,7 @@ struct tree *parse_program(void) {
     if (parse.lex.type == lex_eof) {
       PARSE_OK;
     }
-    if (parse.lex.type == lex_error || expect("---") < 0 || expect("types") < 0 || expect("---") < 0) {
+    if (parse_section_marker("types") < 0) {
       PARSE_FAIL;
     }
   }
@@ -1796,6 +1836,8 @@ struct tl_combinator_tree *tl_parse_ident(struct tree *T, int s) {
     L->type = v->type ? type_num : type_type;
     if (L->type == type_num && s) {
       TL_ERROR("Nat var can not preceed with %%\n");
+      tfree(L, sizeof(*L));
+      L = 0;
       TL_FAIL;
     } else {
       if (s) {
@@ -2400,7 +2442,9 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
       break;
     }
     if (O->type == type_type) {
-      O = tl_tree_dup(tl_get_var_value(X, O->data));
+      struct tl_combinator_tree *next = tl_tree_dup(tl_get_var_value(X, O->data));
+      tfree(O, sizeof(*O));
+      O = next;
     } else {
       long long n = tl_get_var_value_num(X, O->data);
       struct tl_combinator_tree *T = tl_get_var_value(X, O->data);
@@ -2426,11 +2470,20 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
       return 0;
     }
     if (t == (void *)-1l) {
+      O->left = 0;
+      O->right = 0;
+      tfree(O, sizeof(*O));
       return (void *)-1l;
     }
     if (t != (void *)-2l) {
+      O->left = 0;
+      O->right = 0;
+      tfree(O, sizeof(*O));
       return t;
     }
+    O->left = 0;
+    O->right = 0;
+    tfree(O, sizeof(*O));
     return (void *)-1l;
   }
   if (t != (void *)-2l) {
@@ -2441,7 +2494,11 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
     return 0;
   }
   if (t == (void *)-1l) {
-    return O->left;
+    struct tl_combinator_tree *left = O->left;
+    O->left = 0;
+    O->right = 0;
+    tfree(O, sizeof(*O));
+    return left;
   }
   if (t != (void *)-2l) {
     O->right = t;
@@ -2980,14 +3037,25 @@ struct tl_program *tl_parse(struct tree *T) {
 FILE *__f;
 int num = 0;
 
+static void tl_write_or_die(const void *data, size_t size, size_t count, const char *what) {
+  if (fwrite(data, size, count, __f) != count) {
+    fprintf(stderr, "Fatal: failed to write %s\n", what);
+    abort();
+  }
+}
+
 void wint(int a) {
   //  printf ("%d ", a);
   a = htole32(a);
-  assert(fwrite(&a, 1, 4, __f) == 4);
+  tl_write_or_die(&a, 1, 4, "int32");
 }
 
 void wdata(const void *x, int len) {
-  assert(fwrite(x, 1, len, __f) == len);
+  if (len < 0) {
+    fprintf(stderr, "Fatal: negative data length %d\n", len);
+    abort();
+  }
+  tl_write_or_die(x, 1, (size_t)len, "raw data");
 }
 
 void wstr(const char *s) {
@@ -2996,7 +3064,7 @@ void wstr(const char *s) {
     int x = strlen(s);
     if (x <= 254) {
       unsigned char x_c = (unsigned char)x;
-      assert(fwrite(&x_c, 1, 1, __f) == 1);
+      tl_write_or_die(&x_c, 1, 1, "short string length");
     } else {
       fprintf(stderr, "String is too big...\n");
       assert(0);
@@ -3017,7 +3085,7 @@ void wstr(const char *s) {
 void wll(long long a) {
   //  printf ("%lld ", a);
   a = htole64(a);
-  assert(fwrite(&a, 1, 8, __f) == 8);
+  tl_write_or_die(&a, 1, 8, "int64");
 }
 
 int count_list_size(struct tl_combinator_tree *T) {

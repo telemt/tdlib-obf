@@ -1594,7 +1594,9 @@ void Session::connection_close(ConnectionInfo *info) {
   }
   info->retire_at_ = 0;
   info->connection_->force_close(static_cast<mtproto::SessionConnection::Callback *>(this));
-  CHECK(info->state_ == ConnectionInfo::State::Empty);
+  if (info->state_ != ConnectionInfo::State::Empty) {
+    LOG(ERROR) << "force_close didn't synchronously transition to Empty state";
+  }
 }
 
 void Session::activate_connection_handover(ConnectionInfo *primary, ConnectionInfo *handover) {

@@ -156,18 +156,18 @@ class AdversarialKeyValue : public td::KeyValueSyncInterface {
   SeqNo seq_no_{0};
 };
 
-// Build the store key for a destination + timestamp in the format used
-// internally by TlsHelloProfileRegistry.
-// Format: "stealth_ech_cb#<normalized_dest>|<bucket>"
-// bucket = unix_time / 86400  (kRouteFailureKeyBucketSeconds = 86400)
+// Build the store key for a destination in the format used internally by
+// TlsHelloProfileRegistry.
+// Format: "stealth_ech_cb#<normalized_dest_lowercase>"
 td::string make_store_key(td::Slice dest, td::int32 unix_time) {
-  auto unix_time64 = static_cast<td::int64>(unix_time);
-  if (unix_time64 < 0) {
-    unix_time64 = 0;
-  }
+  (void)unix_time;
   auto norm = dest.substr(0, td::mtproto::ProxySecret::MAX_DOMAIN_LENGTH).str();
-  td::uint32 bucket = static_cast<td::uint32>(unix_time64 / 86400);
-  return "stealth_ech_cb#" + norm + "|" + std::to_string(bucket);
+  for (auto &ch : norm) {
+    if (ch >= 'A' && ch <= 'Z') {
+      ch = static_cast<char>(ch - 'A' + 'a');
+    }
+  }
+  return "stealth_ech_cb#" + norm;
 }
 
 NetworkRouteHints make_non_ru() {

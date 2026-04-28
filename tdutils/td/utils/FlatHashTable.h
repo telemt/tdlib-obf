@@ -215,7 +215,7 @@ class FlatHashTable {
       CHECK(!new_node.empty());
       auto bucket = calc_bucket(new_node.key());
       while (true) {
-        auto &node = nodes_[bucket];
+        auto &node = nodes_[to_size(bucket)];
         if (node.empty()) {
           node.copy_from(new_node);
           used_nodes++;
