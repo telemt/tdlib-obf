@@ -7,17 +7,16 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import datetime as dt
 import hashlib
 import json
 import pathlib
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - subprocess is required for trusted local extractor invocations
 import sys
 import unicodedata
-
+from dataclasses import dataclass
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 TRAFFIC_DUMPS_ROOT = REPO_ROOT / "docs" / "Samples" / "Traffic dumps"
@@ -69,9 +68,12 @@ PLATFORM_LAYOUT = {
     },
 }
 
+YANDEX_BROWSER = "yandex browser"
+AUTO_PREFIX = "auto "
+
 TERM_REPLACEMENTS = {
-    "яндекс.браузер": "yandex browser",
-    "яндекс браузер": "yandex browser",
+    "яндекс.браузер": YANDEX_BROWSER,
+    "яндекс браузер": YANDEX_BROWSER,
     "яндекс": "yandex",
     "андроид": "android",
     "версия": "version",
@@ -146,7 +148,12 @@ class CapturePlan:
 
 
 def utc_now() -> str:
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def repo_relative(path: pathlib.Path) -> str:
@@ -166,7 +173,11 @@ def normalize_free_text(text: str) -> str:
 
 def slugify_ascii(text: str) -> str:
     normalized = normalize_free_text(text)
-    ascii_text = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
+    ascii_text = (
+        unicodedata.normalize("NFKD", normalized)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
     ascii_text = re.sub(r"[^a-z0-9]+", "_", ascii_text).strip("_")
     ascii_text = re.sub(r"_+", "_", ascii_text)
     return ascii_text
@@ -176,22 +187,45 @@ def classify_platform_key(text: str) -> str | None:
     normalized = normalize_free_text(text)
     if not normalized:
         return None
-    for platform_key, patterns in OS_PREFIX_PATTERNS:
-        if any(pattern in normalized for pattern in patterns):
-            return platform_key
-    return None
+    matches = matched_platform_keys(text)
+    if len(matches) != 1:
+        return None
+    return next(iter(matches))
 
 
 def detect_browser_alias(text: str) -> str | None:
     normalized = normalize_free_text(text)
     if not normalized or normalized == "null":
         return None
-    normalized = normalized.replace("auto ", " ")
+    normalized = normalized.replace(AUTO_PREFIX, " ")
+    matches = matched_browser_aliases(text)
+    if len(matches) != 1:
+        return None
+    return next(iter(matches))
+
+
+def matched_platform_keys(text: str) -> set[str]:
+    normalized = normalize_free_text(text)
+    if not normalized:
+        return set()
+    return {
+        platform_key
+        for platform_key, patterns in OS_PREFIX_PATTERNS
+        if any(pattern in normalized for pattern in patterns)
+    }
+
+
+def matched_browser_aliases(text: str) -> set[str]:
+    normalized = normalize_free_text(text)
+    if not normalized or normalized == "null":
+        return set()
+    normalized = normalized.replace(AUTO_PREFIX, " ")
     padded = f" {normalized} "
+    matches: set[str] = set()
     for browser_alias, patterns in BROWSER_PATTERNS:
         if any(pattern in padded or pattern == normalized for pattern in patterns):
-            return browser_alias
-    return None
+            matches.add(browser_alias)
+    return matches
 
 
 def split_capture_fields(stem: str) -> list[str]:
@@ -223,7 +257,11 @@ def compress_version_slug(text: str) -> str:
     slug = slugify_ascii(text)
     if not slug:
         return ""
-    parts = [part for part in slug.split("_") if part and (re.search(r"\d", part) or part not in GENERIC_NOISE_WORDS)]
+    parts = [
+        part
+        for part in slug.split("_")
+        if part and (re.search(r"\d", part) or part not in GENERIC_NOISE_WORDS)
+    ]
     if not parts:
         return ""
     return "_".join(parts)
@@ -250,11 +288,16 @@ def extract_browser_version_slug(token: str, browser_alias: str | None) -> str:
             for pattern in patterns:
                 candidate = pattern.strip()
                 stripped = re.sub(rf"\b{re.escape(candidate)}\b", " ", stripped)
-    stripped = stripped.replace("auto ", " ")
+    stripped = stripped.replace(AUTO_PREFIX, " ")
     return compress_version_slug(stripped)
 
 
-def build_profile_base(browser_alias: str, browser_version_slug: str, platform_key: str, os_version_slug: str) -> str:
+def build_profile_base(
+    browser_alias: str,
+    browser_version_slug: str,
+    platform_key: str,
+    os_version_slug: str,
+) -> str:
     platform_fragment = PLATFORM_LAYOUT[platform_key]["profile_fragment"]
     browser_fragment = browser_alias
     if browser_version_slug:
@@ -265,21 +308,46 @@ def build_profile_base(browser_alias: str, browser_version_slug: str, platform_k
     return slugify_ascii(f"{browser_fragment}_{os_fragment}") or "capture"
 
 
-def derive_capture_plan(capture_path: pathlib.Path) -> CapturePlan:
+def parse_capture_tokens(capture_path: pathlib.Path) -> tuple[str, str, str, str]:
     fields = split_capture_fields(capture_path.stem)
     user_os_token = fields[0] if len(fields) > 0 else ""
     user_browser_token = fields[1] if len(fields) > 1 else ""
     auto_os_token = find_first_auto_field(fields[2:], classify_platform_key)
     auto_browser_token = find_first_auto_field(fields[2:], detect_browser_alias)
+    return user_os_token, user_browser_token, auto_os_token, auto_browser_token
 
+
+def reject_ambiguous_user_tokens(
+    capture_path: pathlib.Path, user_os_token: str, user_browser_token: str
+) -> None:
+    if len(matched_platform_keys(user_os_token)) > 1:
+        raise ValueError(
+            f"unable to classify platform from capture name: {capture_path.name}"
+        )
+    if len(matched_browser_aliases(user_browser_token)) > 1:
+        raise ValueError(
+            f"unable to classify browser from capture name: {capture_path.name}"
+        )
+
+
+def resolve_platform_key(
+    capture_path: pathlib.Path, user_os_token: str, auto_os_token: str
+) -> str:
     platform_key = (
         classify_platform_key(user_os_token)
         or classify_platform_key(auto_os_token)
         or classify_platform_key(capture_path.stem)
     )
     if platform_key is None:
-        raise ValueError(f"unable to classify platform from capture name: {capture_path.name}")
+        raise ValueError(
+            f"unable to classify platform from capture name: {capture_path.name}"
+        )
+    return platform_key
 
+
+def resolve_browser_alias(
+    capture_path: pathlib.Path, user_browser_token: str, auto_browser_token: str
+) -> str:
     browser_alias = (
         detect_browser_alias(user_browser_token)
         or detect_browser_alias(auto_browser_token)
@@ -287,34 +355,86 @@ def derive_capture_plan(capture_path: pathlib.Path) -> CapturePlan:
         or "unknown_browser"
     )
     if browser_alias == "unknown_browser":
-        raise ValueError(f"unable to classify browser from capture name: {capture_path.name}")
+        raise ValueError(
+            f"unable to classify browser from capture name: {capture_path.name}"
+        )
+    return browser_alias
 
-    selected_os_token = user_os_token if classify_platform_key(user_os_token) else auto_os_token or user_os_token or capture_path.stem
-    selected_os_source = "user" if classify_platform_key(user_os_token) else ("auto" if auto_os_token else "fallback")
 
-    selected_browser_token = user_browser_token
-    selected_browser_source = "user"
-    if not detect_browser_alias(user_browser_token):
-        if auto_browser_token:
-            selected_browser_token = auto_browser_token
-            selected_browser_source = "auto"
-        else:
-            selected_browser_token = user_browser_token or capture_path.stem
-            selected_browser_source = "fallback"
+def select_os_token(
+    capture_path: pathlib.Path, user_os_token: str, auto_os_token: str
+) -> tuple[str, str]:
+    if classify_platform_key(user_os_token):
+        return user_os_token, "user"
+    if auto_os_token:
+        return auto_os_token, "auto"
+    return user_os_token or capture_path.stem, "fallback"
 
-    browser_version_slug = extract_browser_version_slug(user_browser_token or selected_browser_token, browser_alias)
+
+def select_browser_token(
+    capture_path: pathlib.Path, user_browser_token: str, auto_browser_token: str
+) -> tuple[str, str]:
+    if detect_browser_alias(user_browser_token):
+        return user_browser_token, "user"
+    if auto_browser_token:
+        return auto_browser_token, "auto"
+    return user_browser_token or capture_path.stem, "fallback"
+
+
+def derive_capture_plan(capture_path: pathlib.Path) -> CapturePlan:
+    (
+        user_os_token,
+        user_browser_token,
+        auto_os_token,
+        auto_browser_token,
+    ) = parse_capture_tokens(capture_path)
+
+    reject_ambiguous_user_tokens(capture_path, user_os_token, user_browser_token)
+
+    platform_key = resolve_platform_key(capture_path, user_os_token, auto_os_token)
+    browser_alias = resolve_browser_alias(
+        capture_path, user_browser_token, auto_browser_token
+    )
+
+    selected_os_token, selected_os_source = select_os_token(
+        capture_path, user_os_token, auto_os_token
+    )
+    selected_browser_token, selected_browser_source = select_browser_token(
+        capture_path, user_browser_token, auto_browser_token
+    )
+
+    browser_version_slug = extract_browser_version_slug(
+        user_browser_token or selected_browser_token, browser_alias
+    )
     if not browser_version_slug and selected_browser_token != user_browser_token:
-        browser_version_slug = extract_browser_version_slug(selected_browser_token, browser_alias)
+        browser_version_slug = extract_browser_version_slug(
+            selected_browser_token, browser_alias
+        )
     os_version_slug = extract_os_version_slug(selected_os_token, platform_key)
 
-    profile_base = build_profile_base(browser_alias, browser_version_slug, platform_key, os_version_slug)
-    suffix = hashlib.sha1(capture_path.stem.encode("utf-8")).hexdigest()[:8]
+    profile_base = build_profile_base(
+        browser_alias, browser_version_slug, platform_key, os_version_slug
+    )
+    # Use SHA-256 for collision-resistant, deterministic profile suffixing.
+    suffix = hashlib.sha256(capture_path.stem.encode("utf-8")).hexdigest()[:12]
     profile_id = f"{profile_base}_{suffix}"
 
     platform_layout = PLATFORM_LAYOUT[platform_key]
-    target_capture_path = TRAFFIC_DUMPS_ROOT / platform_layout["captures_dir"] / capture_path.name
-    clienthello_out = IMPORTED_FIXTURES_ROOT / "clienthello" / platform_layout["fixtures_dir"] / f"{profile_id}.clienthello.json"
-    serverhello_out = IMPORTED_FIXTURES_ROOT / "serverhello" / platform_layout["fixtures_dir"] / f"{profile_id}.serverhello.json"
+    target_capture_path = (
+        TRAFFIC_DUMPS_ROOT / platform_layout["captures_dir"] / capture_path.name
+    )
+    clienthello_out = (
+        IMPORTED_FIXTURES_ROOT
+        / "clienthello"
+        / platform_layout["fixtures_dir"]
+        / f"{profile_id}.clienthello.json"
+    )
+    serverhello_out = (
+        IMPORTED_FIXTURES_ROOT
+        / "serverhello"
+        / platform_layout["fixtures_dir"]
+        / f"{profile_id}.serverhello.json"
+    )
 
     return CapturePlan(
         source_path=str(capture_path),
@@ -347,7 +467,10 @@ def iter_unsorted_captures(unsorted_root: pathlib.Path) -> list[pathlib.Path]:
     return sorted(
         path
         for path in unsorted_root.iterdir()
-        if path.is_file() and path.suffix.lower() in CAPTURE_EXTENSIONS and ":Zone.Identifier" not in path.name
+        if path.is_file()
+        and not path.is_symlink()
+        and path.suffix.lower() in CAPTURE_EXTENSIONS
+        and ":Zone.Identifier" not in path.name
     )
 
 
@@ -356,6 +479,7 @@ def zone_identifier_path(capture_path: pathlib.Path) -> pathlib.Path:
 
 
 def run_command(argv: list[str]) -> tuple[bool, str]:
+    # nosec B603 - argv is passed as a validated argument vector (shell=False) to local tools.
     result = subprocess.run(argv, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -373,15 +497,21 @@ def sha256_prefix(path: pathlib.Path, prefix_len: int = 8) -> str:
     return digest.hexdigest()[:prefix_len]
 
 
-def disambiguate_target_path(source_path: pathlib.Path, target_path: pathlib.Path) -> pathlib.Path:
+def disambiguate_target_path(
+    source_path: pathlib.Path, target_path: pathlib.Path
+) -> pathlib.Path:
     if not target_path.exists():
         return target_path
     suffix = sha256_prefix(source_path)
-    candidate = target_path.with_name(f"{target_path.stem}__{suffix}{target_path.suffix}")
+    candidate = target_path.with_name(
+        f"{target_path.stem}__{suffix}{target_path.suffix}"
+    )
     if candidate == source_path:
         return candidate
     if candidate.exists():
-        raise FileExistsError(f"disambiguated target capture already exists: {candidate}")
+        raise FileExistsError(
+            f"disambiguated target capture already exists: {candidate}"
+        )
     return candidate
 
 
@@ -400,7 +530,9 @@ def move_capture(plan: CapturePlan, dry_run: bool) -> tuple[pathlib.Path, list[s
         )
 
     if dry_run:
-        notes.append(f"dry-run: move {repo_relative(source_path)} -> {repo_relative(resolved_target_path)}")
+        notes.append(
+            f"dry-run: move {repo_relative(source_path)} -> {repo_relative(resolved_target_path)}"
+        )
         return resolved_target_path, notes
 
     resolved_target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -415,7 +547,9 @@ def move_capture(plan: CapturePlan, dry_run: bool) -> tuple[pathlib.Path, list[s
     return resolved_target_path, notes
 
 
-def extract_clienthello(plan: CapturePlan, capture_path: pathlib.Path, route_mode: str, dry_run: bool) -> tuple[bool, str]:
+def extract_clienthello(
+    plan: CapturePlan, capture_path: pathlib.Path, route_mode: str, dry_run: bool
+) -> tuple[bool, str]:
     clienthello_out = pathlib.Path(plan.clienthello_out)
     argv = [
         sys.executable,
@@ -443,7 +577,9 @@ def extract_clienthello(plan: CapturePlan, capture_path: pathlib.Path, route_mod
     return run_command(argv)
 
 
-def extract_serverhello(plan: CapturePlan, capture_path: pathlib.Path, route_mode: str, dry_run: bool) -> tuple[bool, str]:
+def extract_serverhello(
+    plan: CapturePlan, capture_path: pathlib.Path, route_mode: str, dry_run: bool
+) -> tuple[bool, str]:
     serverhello_out = pathlib.Path(plan.serverhello_out)
     argv = [
         sys.executable,
@@ -496,8 +632,12 @@ def build_manifest_entry(
     serverhello_status: tuple[bool, str] | None,
 ) -> dict:
     capture_path_relative = repo_relative(capture_path)
-    clienthello_ok, clienthello_message = clienthello_status if clienthello_status is not None else (False, "not-run")
-    serverhello_ok, serverhello_message = serverhello_status if serverhello_status is not None else (False, "not-run")
+    clienthello_ok, clienthello_message = (
+        clienthello_status if clienthello_status is not None else (False, "not-run")
+    )
+    serverhello_ok, serverhello_message = (
+        serverhello_status if serverhello_status is not None else (False, "not-run")
+    )
     return {
         "capture_path": capture_path_relative,
         "profile_id": plan.profile_id,
@@ -540,7 +680,9 @@ def write_manifest(path: pathlib.Path, entries: dict[str, dict]) -> None:
         "generated_at_utc": utc_now(),
         "entries": [entries[key] for key in sorted(entries)],
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def print_plan(plan: CapturePlan) -> None:
@@ -560,30 +702,125 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Move unsorted traffic dumps into canonical platform directories and generate imported fixtures."
     )
-    parser.add_argument("--unsorted-root", default=str(UNSORTED_ROOT), help="Directory containing unsorted captures")
-    parser.add_argument("--capture", action="append", help="Explicit pcap/pcapng path to import or re-import; can be repeated")
-    parser.add_argument("--route-mode", default="non_ru_egress", help="Route mode for generated imported fixtures")
-    parser.add_argument("--dry-run", action="store_true", help="Print the import plan without moving files or generating fixtures")
-    parser.add_argument("--skip-serverhello", action="store_true", help="Generate only ClientHello fixtures")
-    parser.add_argument("--limit", type=int, default=0, help="Optional max number of captures to process")
+    parser.add_argument(
+        "--unsorted-root",
+        default=str(UNSORTED_ROOT),
+        help="Directory containing unsorted captures",
+    )
+    parser.add_argument(
+        "--capture",
+        action="append",
+        help="Explicit pcap/pcapng path to import or re-import; can be repeated",
+    )
+    parser.add_argument(
+        "--route-mode",
+        default="non_ru_egress",
+        help="Route mode for generated imported fixtures",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the import plan without moving files or generating fixtures",
+    )
+    parser.add_argument(
+        "--skip-serverhello",
+        action="store_true",
+        help="Generate only ClientHello fixtures",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Optional max number of captures to process",
+    )
     return parser.parse_args()
+
+
+def resolve_captures(args: argparse.Namespace) -> list[pathlib.Path]:
+    if args.capture:
+        captures: list[pathlib.Path] = []
+        for capture_value in args.capture:
+            capture_input_path = pathlib.Path(capture_value)
+            if capture_input_path.is_symlink():
+                raise SystemExit(
+                    f"explicit capture symlink is not allowed: {capture_input_path}"
+                )
+            capture_path = capture_input_path.resolve()
+            if not capture_path.exists():
+                raise SystemExit(f"explicit capture does not exist: {capture_path}")
+            if not capture_path.is_file():
+                raise SystemExit(
+                    f"explicit capture must be a regular file: {capture_path}"
+                )
+            if capture_path.suffix.lower() not in CAPTURE_EXTENSIONS:
+                raise SystemExit(
+                    f"explicit capture must be a pcap/pcapng file: {capture_path}"
+                )
+            captures.append(capture_path)
+        return captures
+
+    unsorted_root = pathlib.Path(args.unsorted_root).resolve()
+    if not unsorted_root.exists():
+        raise SystemExit(f"unsorted root does not exist: {unsorted_root}")
+    return iter_unsorted_captures(unsorted_root)
+
+
+def process_capture(
+    capture_path: pathlib.Path, args: argparse.Namespace
+) -> tuple[dict | None, list[str]]:
+    failures: list[str] = []
+
+    try:
+        plan = derive_capture_plan(capture_path)
+    except Exception as exc:
+        failures.append(f"plan[{capture_path.name}]: {exc}")
+        return None, failures
+
+    print_plan(plan)
+
+    try:
+        target_capture_path, _ = move_capture(plan, args.dry_run)
+    except Exception as exc:
+        failures.append(f"move[{capture_path.name}]: {exc}")
+        return None, failures
+
+    try:
+        effective_plan = derive_capture_plan(target_capture_path)
+    except Exception as exc:
+        failures.append(f"effective-plan[{target_capture_path.name}]: {exc}")
+        return None, failures
+
+    clienthello_status = extract_clienthello(
+        effective_plan, target_capture_path, args.route_mode, args.dry_run
+    )
+    if not clienthello_status[0]:
+        failures.append(
+            f"clienthello[{target_capture_path.name}]: {clienthello_status[1]}"
+        )
+
+    serverhello_status: tuple[bool, str] | None = None
+    if not args.skip_serverhello and clienthello_status[0]:
+        serverhello_status = extract_serverhello(
+            effective_plan, target_capture_path, args.route_mode, args.dry_run
+        )
+        if not serverhello_status[0]:
+            failures.append(
+                f"serverhello[{target_capture_path.name}]: {serverhello_status[1]}"
+            )
+
+    manifest_entry = build_manifest_entry(
+        effective_plan,
+        target_capture_path,
+        args.route_mode,
+        clienthello_status,
+        serverhello_status,
+    )
+    return manifest_entry, failures
 
 
 def main() -> int:
     args = parse_args()
-    captures: list[pathlib.Path] = []
-    if args.capture:
-        captures = [pathlib.Path(value).resolve() for value in args.capture]
-        for capture_path in captures:
-            if not capture_path.exists():
-                raise SystemExit(f"explicit capture does not exist: {capture_path}")
-            if capture_path.suffix.lower() not in CAPTURE_EXTENSIONS:
-                raise SystemExit(f"explicit capture must be a pcap/pcapng file: {capture_path}")
-    else:
-        unsorted_root = pathlib.Path(args.unsorted_root).resolve()
-        if not unsorted_root.exists():
-            raise SystemExit(f"unsorted root does not exist: {unsorted_root}")
-        captures = iter_unsorted_captures(unsorted_root)
+    captures = resolve_captures(args)
 
     if args.limit > 0:
         captures = captures[: args.limit]
@@ -596,44 +833,10 @@ def main() -> int:
     failures: list[str] = []
 
     for capture_path in captures:
-        try:
-            plan = derive_capture_plan(capture_path)
-        except Exception as exc:
-            failures.append(f"plan[{capture_path.name}]: {exc}")
-            continue
-
-        print_plan(plan)
-
-        try:
-            target_capture_path, _ = move_capture(plan, args.dry_run)
-        except Exception as exc:
-            failures.append(f"move[{capture_path.name}]: {exc}")
-            continue
-
-        try:
-            effective_plan = derive_capture_plan(target_capture_path)
-        except Exception as exc:
-            failures.append(f"effective-plan[{target_capture_path.name}]: {exc}")
-            continue
-
-        clienthello_status = extract_clienthello(effective_plan, target_capture_path, args.route_mode, args.dry_run)
-        if not clienthello_status[0]:
-            failures.append(f"clienthello[{target_capture_path.name}]: {clienthello_status[1]}")
-
-        serverhello_status: tuple[bool, str] | None = None
-        if not args.skip_serverhello and clienthello_status[0]:
-            serverhello_status = extract_serverhello(effective_plan, target_capture_path, args.route_mode, args.dry_run)
-            if not serverhello_status[0]:
-                failures.append(f"serverhello[{target_capture_path.name}]: {serverhello_status[1]}")
-
-        manifest_entry = build_manifest_entry(
-            effective_plan,
-            target_capture_path,
-            args.route_mode,
-            clienthello_status,
-            serverhello_status,
-        )
-        manifest_entries[manifest_entry["capture_path"]] = manifest_entry
+        manifest_entry, capture_failures = process_capture(capture_path, args)
+        failures.extend(capture_failures)
+        if manifest_entry is not None:
+            manifest_entries[manifest_entry["capture_path"]] = manifest_entry
 
     if not args.dry_run:
         write_manifest(IMPORT_MANIFEST_PATH, manifest_entries)

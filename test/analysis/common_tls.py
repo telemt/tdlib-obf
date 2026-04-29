@@ -6,13 +6,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import pathlib
 import re
+from dataclasses import dataclass
 from typing import Any
-
 
 CANONICAL_ROUTE_MODES = {"unknown", "ru_egress", "non_ru_egress"}
 CANONICAL_DEVICE_CLASSES = {"desktop", "mobile", "tablet", "unknown"}
@@ -145,7 +144,9 @@ def _parse_extensions(sample: dict[str, Any]) -> list[ParsedExtension]:
     extensions: list[ParsedExtension] = []
     for entry in sample.get("extensions", []):
         body_hex = entry.get("body_hex", "")
-        extensions.append(ParsedExtension(type=int(entry["type"], 16), body=bytes.fromhex(body_hex)))
+        extensions.append(
+            ParsedExtension(type=int(entry["type"], 16), body=bytes.fromhex(body_hex))
+        )
     return extensions
 
 
@@ -189,7 +190,9 @@ def _validate_sha256_hex(field_name: str, value: str) -> None:
         raise ValueError(f"{field_name} must be a 64-character lowercase hex digest")
 
 
-def _parse_bounded_positive_int(field_name: str, value: Any, *, max_value: int | None = None) -> int:
+def _parse_bounded_positive_int(
+    field_name: str, value: Any, *, max_value: int | None = None
+) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError) as exc:
@@ -201,7 +204,9 @@ def _parse_bounded_positive_int(field_name: str, value: Any, *, max_value: int |
     return parsed
 
 
-def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_index: int) -> None:
+def _validate_clienthello_record_metadata(
+    sample: dict[str, Any], *, sample_index: int
+) -> None:
     raw_record_lengths = sample.get("record_lengths")
     raw_record_count = sample.get("record_count")
     raw_record_length = sample.get("record_length")
@@ -225,9 +230,13 @@ def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_inde
         return
 
     if raw_record_lengths is None:
-        raise ValueError(f"sample[{sample_index}].record_lengths must be present when record metadata is provided")
+        raise ValueError(
+            f"sample[{sample_index}].record_lengths must be present when record metadata is provided"
+        )
     if not isinstance(raw_record_lengths, list) or not raw_record_lengths:
-        raise ValueError(f"sample[{sample_index}].record_lengths must be a non-empty list")
+        raise ValueError(
+            f"sample[{sample_index}].record_lengths must be a non-empty list"
+        )
 
     record_lengths = [
         _parse_bounded_positive_int(
@@ -239,9 +248,13 @@ def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_inde
     ]
 
     if raw_record_count is not None:
-        record_count = _parse_bounded_positive_int(f"sample[{sample_index}].record_count", raw_record_count)
+        record_count = _parse_bounded_positive_int(
+            f"sample[{sample_index}].record_count", raw_record_count
+        )
         if record_count != len(record_lengths):
-            raise ValueError(f"sample[{sample_index}].record_count must match record_lengths length")
+            raise ValueError(
+                f"sample[{sample_index}].record_count must match record_lengths length"
+            )
 
     if raw_record_length is not None:
         record_length = _parse_bounded_positive_int(
@@ -250,7 +263,9 @@ def _validate_clienthello_record_metadata(sample: dict[str, Any], *, sample_inde
             max_value=65535 * len(record_lengths),
         )
         if record_length != sum(record_lengths):
-            raise ValueError(f"sample[{sample_index}].record_length must equal the sum of record_lengths")
+            raise ValueError(
+                f"sample[{sample_index}].record_length must equal the sum of record_lengths"
+            )
 
 
 def _parse_server_endpoint(field_name: str, value: Any) -> ServerEndpoint:
@@ -259,21 +274,29 @@ def _parse_server_endpoint(field_name: str, value: Any) -> ServerEndpoint:
     ip = str(value.get("ip", "")).strip()
     if not ip:
         raise ValueError(f"{field_name}.ip must be non-empty")
-    port = _parse_bounded_positive_int(f"{field_name}.port", value.get("port", 0), max_value=65535)
+    port = _parse_bounded_positive_int(
+        f"{field_name}.port", value.get("port", 0), max_value=65535
+    )
     return ServerEndpoint(ip=ip, port=port)
 
 
-def _parse_observed_server_endpoints(artifact: dict[str, Any]) -> set[tuple[str, int]] | None:
+def _parse_observed_server_endpoints(
+    artifact: dict[str, Any],
+) -> set[tuple[str, int]] | None:
     if "observed_server_endpoints" not in artifact:
         return None
 
     raw_endpoints = artifact.get("observed_server_endpoints")
     if not isinstance(raw_endpoints, list) or not raw_endpoints:
-        raise ValueError("observed_server_endpoints must be a non-empty list when present")
+        raise ValueError(
+            "observed_server_endpoints must be a non-empty list when present"
+        )
 
     parsed_endpoints: set[tuple[str, int]] = set()
     for index, raw_endpoint in enumerate(raw_endpoints):
-        endpoint = _parse_server_endpoint(f"observed_server_endpoints[{index}]", raw_endpoint)
+        endpoint = _parse_server_endpoint(
+            f"observed_server_endpoints[{index}]", raw_endpoint
+        )
         key = (endpoint.ip, endpoint.port)
         if key in parsed_endpoints:
             raise ValueError("observed_server_endpoints must not contain duplicates")
@@ -315,12 +338,17 @@ def load_clienthello_artifact(path: str | pathlib.Path) -> list[ClientHello]:
 
     route_mode = normalize_route_mode(str(artifact.get("route_mode", "")))
     profile = _require_string_field(artifact, "profile_id")
-    scenario_id = str(artifact.get("scenario_id", artifact_path.stem)).strip() or artifact_path.stem
+    scenario_id = (
+        str(artifact.get("scenario_id", artifact_path.stem)).strip()
+        or artifact_path.stem
+    )
     device_class = normalize_device_class(str(artifact.get("device_class", "desktop")))
     os_family = normalize_os_family(str(artifact.get("os_family", "unknown")))
     transport = _require_string_field(artifact, "transport")
     source_kind = _require_string_field(artifact, "source_kind")
-    fixture_family_id = str(artifact.get("fixture_family_id", artifact.get("family", "")))
+    fixture_family_id = str(
+        artifact.get("fixture_family_id", artifact.get("family", ""))
+    )
     source_path = _require_string_field(artifact, "source_path")
     source_sha256 = _require_string_field(artifact, "source_sha256").lower()
     _validate_sha256_hex("source_sha256", source_sha256)
@@ -345,7 +373,9 @@ def load_clienthello_artifact(path: str | pathlib.Path) -> list[ClientHello]:
             raise ValueError(f"duplicate fixture_id in artifact: {fixture_id}")
         seen_fixture_ids.add(fixture_id)
         key_share_groups = [
-            int(entry["group"], 16) for entry in sample.get("key_share_entries", []) if isinstance(entry, dict)
+            int(entry["group"], 16)
+            for entry in sample.get("key_share_entries", [])
+            if isinstance(entry, dict)
         ]
         meta = SampleMeta(
             route_mode=route_mode,
@@ -353,8 +383,14 @@ def load_clienthello_artifact(path: str | pathlib.Path) -> list[ClientHello]:
             os_family=os_family,
             transport=transport,
             source_kind=source_kind,
-            tls_gen=_infer_tls_gen(sample) if not artifact.get("tls_gen") else str(artifact.get("tls_gen")),
-            fixture_family_id=str(sample.get("fixture_family_id", sample.get("family", fixture_family_id))),
+            tls_gen=(
+                _infer_tls_gen(sample)
+                if not artifact.get("tls_gen")
+                else str(artifact.get("tls_gen"))
+            ),
+            fixture_family_id=str(
+                sample.get("fixture_family_id", sample.get("family", fixture_family_id))
+            ),
             source_path=source_path,
             source_sha256=source_sha256,
             scenario_id=scenario_id,
@@ -380,15 +416,14 @@ def load_clienthello_artifact(path: str | pathlib.Path) -> list[ClientHello]:
     return samples
 
 
-def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
-    artifact_path = pathlib.Path(path)
-    with artifact_path.open("r", encoding="utf-8") as infile:
-        artifact = json.load(infile)
-
-    _validate_serverhello_artifact_header(artifact)
-
+def _load_serverhello_common_metadata(
+    artifact: dict[str, Any], artifact_path: pathlib.Path
+) -> tuple[str, str, str, str, str, str, str, str, set[tuple[str, int]] | None]:
     route_mode = normalize_route_mode(str(artifact.get("route_mode", "")))
-    scenario_id = str(artifact.get("scenario_id", artifact_path.stem)).strip() or artifact_path.stem
+    scenario_id = (
+        str(artifact.get("scenario_id", artifact_path.stem)).strip()
+        or artifact_path.stem
+    )
     source_path = _require_string_field(artifact, "source_path")
     source_sha256 = _require_string_field(artifact, "source_sha256").lower()
     _validate_sha256_hex("source_sha256", source_sha256)
@@ -402,60 +437,148 @@ def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
     if not client_profile_id:
         raise ValueError("capture_provenance.client_profile_id must be non-empty")
     observed_server_endpoints = _parse_observed_server_endpoints(artifact)
+    return (
+        route_mode,
+        scenario_id,
+        source_path,
+        source_sha256,
+        parser_version,
+        transport,
+        source_kind,
+        client_profile_id,
+        observed_server_endpoints,
+    )
 
+
+def _extract_serverhello_raw_samples(artifact: dict[str, Any]) -> list[dict[str, Any]]:
     raw_samples = artifact.get("samples")
     if not isinstance(raw_samples, list):
         raise ValueError("artifact must contain a samples list")
     if not raw_samples:
         raise ValueError("artifact must contain at least one sample")
+    for sample in raw_samples:
+        if not isinstance(sample, dict):
+            raise ValueError("sample entry must be an object")
+    return raw_samples
+
+
+def _parse_serverhello_sample(
+    *,
+    sample: dict[str, Any],
+    sample_index: int,
+    artifact: dict[str, Any],
+    route_mode: str,
+    source_path: str,
+    source_sha256: str,
+    scenario_id: str,
+    parser_version: str,
+    transport: str,
+    source_kind: str,
+    client_profile_id: str,
+) -> tuple[str, tuple[str, int] | None, ServerHello]:
+    fixture_id = str(sample.get("fixture_id", "")).strip()
+    if not fixture_id:
+        raise ValueError("server hello sample must contain fixture_id")
+
+    fixture_family_id = str(
+        sample.get(
+            "fixture_family_id", sample.get("family", artifact.get("family", ""))
+        )
+    )
+    if not fixture_family_id:
+        raise ValueError("server hello sample must contain fixture family")
+
+    raw_endpoint = sample.get("server_endpoint")
+    server_endpoint: ServerEndpoint | None = None
+    endpoint_key: tuple[str, int] | None = None
+    if raw_endpoint is not None:
+        server_endpoint = _parse_server_endpoint(
+            f"samples[{sample_index}].server_endpoint", raw_endpoint
+        )
+        endpoint_key = (server_endpoint.ip, server_endpoint.port)
+
+    server_hello = ServerHello(
+        selected_version=(
+            int(sample["selected_version"], 16)
+            if isinstance(sample.get("selected_version"), str)
+            else int(sample["selected_version"])
+        ),
+        cipher_suite=(
+            int(sample["cipher_suite"], 16)
+            if isinstance(sample.get("cipher_suite"), str)
+            else int(sample["cipher_suite"])
+        ),
+        extensions=_parse_u16_sequence(sample.get("extensions", [])),
+        record_layout_signature=[
+            int(value) for value in sample.get("record_layout_signature", [])
+        ],
+        metadata=ServerHelloMeta(
+            route_mode=route_mode,
+            fixture_id=fixture_id,
+            fixture_family_id=fixture_family_id,
+            source_path=source_path,
+            source_sha256=source_sha256,
+            scenario_id=scenario_id,
+            parser_version=parser_version,
+            transport=transport,
+            source_kind=source_kind,
+            client_profile_id=client_profile_id,
+        ),
+        server_endpoint=server_endpoint,
+    )
+    return fixture_id, endpoint_key, server_hello
+
+
+def load_server_hello_artifact(path: str | pathlib.Path) -> list[ServerHello]:
+    artifact_path = pathlib.Path(path)
+    with artifact_path.open("r", encoding="utf-8") as infile:
+        artifact = json.load(infile)
+
+    _validate_serverhello_artifact_header(artifact)
+
+    (
+        route_mode,
+        scenario_id,
+        source_path,
+        source_sha256,
+        parser_version,
+        transport,
+        source_kind,
+        client_profile_id,
+        observed_server_endpoints,
+    ) = _load_serverhello_common_metadata(artifact, artifact_path)
+    raw_samples = _extract_serverhello_raw_samples(artifact)
 
     samples: list[ServerHello] = []
     seen_fixture_ids: set[str] = set()
     seen_sample_endpoints: set[tuple[str, int]] = set()
     for sample_index, sample in enumerate(raw_samples):
-        if not isinstance(sample, dict):
-            raise ValueError("sample entry must be an object")
-        fixture_id = str(sample.get("fixture_id", "")).strip()
-        fixture_family_id = str(sample.get("fixture_family_id", sample.get("family", artifact.get("family", ""))))
-        raw_endpoint = sample.get("server_endpoint")
-        server_endpoint: ServerEndpoint | None = None
-        if raw_endpoint is not None:
-            server_endpoint = _parse_server_endpoint(f"samples[{sample_index}].server_endpoint", raw_endpoint)
-            seen_sample_endpoints.add((server_endpoint.ip, server_endpoint.port))
-        if not fixture_id:
-            raise ValueError("server hello sample must contain fixture_id")
+        fixture_id, endpoint_key, parsed_sample = _parse_serverhello_sample(
+            sample=sample,
+            sample_index=sample_index,
+            artifact=artifact,
+            route_mode=route_mode,
+            source_path=source_path,
+            source_sha256=source_sha256,
+            scenario_id=scenario_id,
+            parser_version=parser_version,
+            transport=transport,
+            source_kind=source_kind,
+            client_profile_id=client_profile_id,
+        )
+        if endpoint_key is not None:
+            seen_sample_endpoints.add(endpoint_key)
         if fixture_id in seen_fixture_ids:
             raise ValueError(f"duplicate fixture_id in artifact: {fixture_id}")
         seen_fixture_ids.add(fixture_id)
-        if not fixture_family_id:
-            raise ValueError("server hello sample must contain fixture family")
-        samples.append(
-            ServerHello(
-                selected_version=int(sample["selected_version"], 16)
-                if isinstance(sample.get("selected_version"), str)
-                else int(sample["selected_version"]),
-                cipher_suite=int(sample["cipher_suite"], 16)
-                if isinstance(sample.get("cipher_suite"), str)
-                else int(sample["cipher_suite"]),
-                extensions=_parse_u16_sequence(sample.get("extensions", [])),
-                record_layout_signature=[int(value) for value in sample.get("record_layout_signature", [])],
-                metadata=ServerHelloMeta(
-                    route_mode=route_mode,
-                    fixture_id=fixture_id,
-                    fixture_family_id=fixture_family_id,
-                    source_path=source_path,
-                    source_sha256=source_sha256,
-                    scenario_id=scenario_id,
-                    parser_version=parser_version,
-                    transport=transport,
-                    source_kind=source_kind,
-                    client_profile_id=client_profile_id,
-                ),
-                server_endpoint=server_endpoint,
-            )
+        samples.append(parsed_sample)
+    if (
+        observed_server_endpoints is not None
+        and seen_sample_endpoints != observed_server_endpoints
+    ):
+        raise ValueError(
+            "observed_server_endpoints must exactly match the set of sample.server_endpoint values"
         )
-    if observed_server_endpoints is not None and seen_sample_endpoints != observed_server_endpoints:
-        raise ValueError("observed_server_endpoints must exactly match the set of sample.server_endpoint values")
     return samples
 
 

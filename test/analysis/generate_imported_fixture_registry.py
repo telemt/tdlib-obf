@@ -9,11 +9,15 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import sys
 from typing import Any
 
-from common_tls import ClientHello, ServerHello, has_extension, load_clienthello_artifact, load_server_hello_artifact
-
+from common_tls import (
+    ClientHello,
+    ServerHello,
+    has_extension,
+    load_clienthello_artifact,
+    load_server_hello_artifact,
+)
 
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parent.parent
@@ -38,7 +42,9 @@ def load_json(path: pathlib.Path) -> Any:
 
 def write_json(path: pathlib.Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def normalize_artifact_route_mode(path: pathlib.Path, route_mode: str) -> None:
@@ -72,13 +78,17 @@ def manifest_entry_index(manifest_payload: dict[str, Any]) -> dict[str, dict[str
     return index
 
 
-def normalize_manifest_route_mode(manifest_payload: dict[str, Any], route_mode: str) -> None:
+def normalize_manifest_route_mode(
+    manifest_payload: dict[str, Any], route_mode: str
+) -> None:
     for entry in manifest_payload.get("entries", []):
         if isinstance(entry, dict):
             entry["route_mode"] = route_mode
 
 
-def parse_capture_browser_alias(profile_id: str, manifest_entry: dict[str, Any] | None) -> str:
+def parse_capture_browser_alias(
+    profile_id: str, manifest_entry: dict[str, Any] | None
+) -> str:
     if isinstance(manifest_entry, dict):
         browser_alias = manifest_entry.get("browser_alias")
         if isinstance(browser_alias, str) and browser_alias:
@@ -121,7 +131,11 @@ def derive_optional_u16_policy(observed_sets: list[set[int]], *, key: str) -> An
 
 def derive_alps_policy(samples: list[ClientHello]) -> Any:
     observed_sets = [
-        {extension.type for extension in sample.extensions if extension.type in ALPS_EXTENSION_TYPES}
+        {
+            extension.type
+            for extension in sample.extensions
+            if extension.type in ALPS_EXTENSION_TYPES
+        }
         for sample in samples
     ]
     return derive_optional_u16_policy(observed_sets, key="allowed_types")
@@ -134,7 +148,9 @@ def derive_pq_policy(samples: list[ClientHello]) -> Any:
             {
                 group
                 for group in sample.supported_groups
-                if group in sample.key_share_groups and group >= 0x1000 and (group & 0x0F0F) != 0x0A0A
+                if group in sample.key_share_groups
+                and group >= 0x1000
+                and (group & 0x0F0F) != 0x0A0A
             }
         )
     return derive_optional_u16_policy(observed_sets, key="allowed_groups")
@@ -151,25 +167,63 @@ def build_fixture_entry(sample: ClientHello) -> dict[str, Any]:
         "platform_class": sample.metadata.device_class,
         "os_family": sample.metadata.os_family,
         "tls_gen": sample.metadata.tls_gen,
-        "non_grease_extensions_without_padding": [_encode_u16(value) for value in sample.non_grease_extensions_without_padding],
+        "non_grease_extensions_without_padding": [
+            _encode_u16(value) for value in sample.non_grease_extensions_without_padding
+        ],
         "supported_groups": [_encode_u16(value) for value in sample.supported_groups],
         "key_share_groups": [_encode_u16(value) for value in sample.key_share_groups],
         "route_mode": sample.metadata.route_mode,
     }
 
 
-def build_profile_entry(samples: list[ClientHello], browser_alias: str) -> dict[str, Any]:
+def build_profile_entry(
+    samples: list[ClientHello], browser_alias: str
+) -> dict[str, Any]:
     first = samples[0]
     return {
         "release_gating": False,
-        "include_fixture_ids": [sample.metadata.fixture_id for sample in samples if sample.metadata.fixture_id],
+        "include_fixture_ids": [
+            sample.metadata.fixture_id
+            for sample in samples
+            if sample.metadata.fixture_id
+        ],
         "allowed_tags": {
-            "source_kind": sorted({sample.metadata.source_kind for sample in samples if sample.metadata.source_kind}),
+            "source_kind": sorted(
+                {
+                    sample.metadata.source_kind
+                    for sample in samples
+                    if sample.metadata.source_kind
+                }
+            ),
             "family": [first.profile],
-            "platform_class": sorted({sample.metadata.device_class for sample in samples if sample.metadata.device_class}),
-            "os_family": sorted({sample.metadata.os_family for sample in samples if sample.metadata.os_family}),
-            "tls_gen": sorted({sample.metadata.tls_gen for sample in samples if sample.metadata.tls_gen}),
-            "transport": sorted({sample.metadata.transport for sample in samples if sample.metadata.transport}),
+            "platform_class": sorted(
+                {
+                    sample.metadata.device_class
+                    for sample in samples
+                    if sample.metadata.device_class
+                }
+            ),
+            "os_family": sorted(
+                {
+                    sample.metadata.os_family
+                    for sample in samples
+                    if sample.metadata.os_family
+                }
+            ),
+            "tls_gen": sorted(
+                {
+                    sample.metadata.tls_gen
+                    for sample in samples
+                    if sample.metadata.tls_gen
+                }
+            ),
+            "transport": sorted(
+                {
+                    sample.metadata.transport
+                    for sample in samples
+                    if sample.metadata.transport
+                }
+            ),
         },
         "ech_type": derive_ech_policy(samples),
         "pq_group": derive_pq_policy(samples),
@@ -183,6 +237,68 @@ def build_profile_entry(samples: list[ClientHello], browser_alias: str) -> dict[
             "require_noncollapsed_randomized_hashes": False,
         },
     }
+
+
+def validate_clienthello_profile_family(
+    samples: list[ClientHello], profile_id: str
+) -> str:
+    observed_families = {
+        sample.metadata.fixture_family_id.strip()
+        for sample in samples
+        if sample.metadata.fixture_family_id.strip()
+    }
+    if not observed_families:
+        raise ValueError(f"profile '{profile_id}' is missing fixture_family_id")
+    if len(observed_families) != 1:
+        raise ValueError(
+            f"profile '{profile_id}' contains mixed fixture_family_id values: {sorted(observed_families)}"
+        )
+    family = next(iter(observed_families))
+    if family != profile_id:
+        raise ValueError(
+            f"profile '{profile_id}' fixture_family_id must match profile_id; got '{family}'"
+        )
+    return family
+
+
+def validate_serverhello_profile_family(
+    samples: list[ServerHello], known_profiles: set[str]
+) -> str:
+    observed_families = {
+        sample.metadata.fixture_family_id.strip()
+        for sample in samples
+        if sample.metadata.fixture_family_id.strip()
+    }
+    if not observed_families:
+        raise ValueError("server hello artifact is missing fixture family")
+    if len(observed_families) != 1:
+        raise ValueError(
+            f"server hello artifact contains mixed fixture_family_id values: {sorted(observed_families)}"
+        )
+    family = next(iter(observed_families))
+
+    observed_client_profiles = {
+        sample.metadata.client_profile_id.strip()
+        for sample in samples
+        if sample.metadata.client_profile_id.strip()
+    }
+    if len(observed_client_profiles) > 1:
+        raise ValueError(
+            "server hello artifact contains mixed capture_provenance.client_profile_id values: "
+            f"{sorted(observed_client_profiles)}"
+        )
+    if observed_client_profiles:
+        client_profile_id = next(iter(observed_client_profiles))
+        if family != client_profile_id:
+            raise ValueError(
+                "server hello family '"
+                f"{family}' does not match capture_provenance.client_profile_id '{client_profile_id}'"
+            )
+    if family not in known_profiles:
+        raise ValueError(
+            f"server hello family '{family}' does not match any imported client profile"
+        )
+    return family
 
 
 def build_server_hello_policy(samples: list[ServerHello]) -> dict[str, Any]:
@@ -222,6 +338,89 @@ def discover_artifact_paths(root: pathlib.Path) -> list[pathlib.Path]:
     return sorted(path for path in root.rglob("*.json") if path.is_file())
 
 
+def add_fixture_entries(
+    samples: list[ClientHello],
+    fixtures: dict[str, dict[str, Any]],
+    fixture_sources: dict[str, str],
+) -> None:
+    for sample in samples:
+        if not sample.metadata.fixture_id:
+            continue
+        fixture_id = sample.metadata.fixture_id
+        source_path = sample.metadata.source_path
+        existing_source = fixture_sources.get(fixture_id)
+        if existing_source is not None:
+            raise ValueError(
+                f"duplicate fixture_id '{fixture_id}' declared by both "
+                f"'{existing_source}' and '{source_path}'"
+            )
+        fixture_sources[fixture_id] = source_path
+        fixtures[fixture_id] = build_fixture_entry(sample)
+
+
+def collect_clienthello_registry_data(
+    clienthello_root: pathlib.Path,
+    route_mode: str,
+    manifest_index: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    fixtures: dict[str, dict[str, Any]] = {}
+    fixture_sources: dict[str, str] = {}
+    profile_samples: dict[str, list[ClientHello]] = {}
+    profile_browser_alias: dict[str, str] = {}
+
+    for artifact_path in discover_artifact_paths(clienthello_root):
+        normalize_artifact_route_mode(artifact_path, route_mode)
+        samples = load_clienthello_artifact(artifact_path)
+        if not samples:
+            continue
+
+        profile_id = samples[0].profile
+        validate_clienthello_profile_family(samples, profile_id)
+        capture_key = repo_relative(pathlib.Path(samples[0].metadata.source_path))
+        manifest_entry = manifest_index.get(capture_key)
+        browser_alias = parse_capture_browser_alias(profile_id, manifest_entry)
+        if browser_alias == "unknown_browser":
+            continue
+
+        add_fixture_entries(samples, fixtures, fixture_sources)
+        existing_alias = profile_browser_alias.get(profile_id)
+        if existing_alias is None:
+            profile_browser_alias[profile_id] = browser_alias
+        elif existing_alias != browser_alias:
+            raise ValueError(
+                f"profile '{profile_id}' has conflicting browser aliases: "
+                f"'{existing_alias}' vs '{browser_alias}'"
+            )
+
+        profile_samples.setdefault(profile_id, []).extend(samples)
+
+    profiles: dict[str, dict[str, Any]] = {
+        profile_id: build_profile_entry(samples, profile_browser_alias[profile_id])
+        for profile_id, samples in profile_samples.items()
+    }
+
+    return fixtures, profiles
+
+
+def collect_server_hello_matrix(
+    serverhello_root: pathlib.Path,
+    route_mode: str,
+    profiles: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    server_hello_matrix: dict[str, Any] = {}
+
+    for artifact_path in discover_artifact_paths(serverhello_root):
+        normalize_artifact_route_mode(artifact_path, route_mode)
+        samples = load_server_hello_artifact(artifact_path)
+        if not samples:
+            continue
+
+        family = validate_serverhello_profile_family(samples, set(profiles))
+        server_hello_matrix[family] = build_server_hello_policy(samples)
+
+    return server_hello_matrix
+
+
 def refresh_imported_candidate_corpus(
     clienthello_root: pathlib.Path,
     serverhello_root: pathlib.Path,
@@ -233,41 +432,12 @@ def refresh_imported_candidate_corpus(
     normalize_manifest_route_mode(manifest_payload, route_mode)
     manifest_index = manifest_entry_index(manifest_payload)
 
-    fixtures: dict[str, dict[str, Any]] = {}
-    profiles: dict[str, dict[str, Any]] = {}
-    seen_profiles: set[str] = set()
-
-    clienthello_paths = discover_artifact_paths(clienthello_root)
-    for artifact_path in clienthello_paths:
-        normalize_artifact_route_mode(artifact_path, route_mode)
-        samples = load_clienthello_artifact(artifact_path)
-        if not samples:
-            continue
-        profile_id = samples[0].profile
-        capture_key = repo_relative(pathlib.Path(samples[0].metadata.source_path))
-        manifest_entry = manifest_index.get(capture_key)
-        browser_alias = parse_capture_browser_alias(profile_id, manifest_entry)
-        if browser_alias == "unknown_browser":
-            continue
-        for sample in samples:
-            if not sample.metadata.fixture_id:
-                continue
-            fixtures[sample.metadata.fixture_id] = build_fixture_entry(sample)
-        if profile_id in seen_profiles:
-            continue
-        profiles[profile_id] = build_profile_entry(samples, browser_alias)
-        seen_profiles.add(profile_id)
-
-    server_hello_matrix: dict[str, Any] = {}
-    for artifact_path in discover_artifact_paths(serverhello_root):
-        normalize_artifact_route_mode(artifact_path, route_mode)
-        samples = load_server_hello_artifact(artifact_path)
-        if not samples:
-            continue
-        family = samples[0].metadata.fixture_family_id
-        if family not in profiles:
-            continue
-        server_hello_matrix[family] = build_server_hello_policy(samples)
+    fixtures, profiles = collect_clienthello_registry_data(
+        clienthello_root, route_mode, manifest_index
+    )
+    server_hello_matrix = collect_server_hello_matrix(
+        serverhello_root, route_mode, profiles
+    )
 
     write_json(manifest_path, manifest_payload)
     registry = {
@@ -289,11 +459,29 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Normalize imported candidate fixture metadata and generate a dedicated imported-corpus registry."
     )
-    parser.add_argument("--clienthello-root", default=str(DEFAULT_CLIENTHELLO_ROOT), help="Imported ClientHello artifact root")
-    parser.add_argument("--serverhello-root", default=str(DEFAULT_SERVERHELLO_ROOT), help="Imported ServerHello artifact root")
-    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH), help="Imported manifest JSON path")
-    parser.add_argument("--out", default=str(DEFAULT_REGISTRY_PATH), help="Output registry JSON path")
-    parser.add_argument("--route-mode", default="non_ru_egress", help="Route mode to stamp onto imported artifacts and manifest entries")
+    parser.add_argument(
+        "--clienthello-root",
+        default=str(DEFAULT_CLIENTHELLO_ROOT),
+        help="Imported ClientHello artifact root",
+    )
+    parser.add_argument(
+        "--serverhello-root",
+        default=str(DEFAULT_SERVERHELLO_ROOT),
+        help="Imported ServerHello artifact root",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=str(DEFAULT_MANIFEST_PATH),
+        help="Imported manifest JSON path",
+    )
+    parser.add_argument(
+        "--out", default=str(DEFAULT_REGISTRY_PATH), help="Output registry JSON path"
+    )
+    parser.add_argument(
+        "--route-mode",
+        default="non_ru_egress",
+        help="Route mode to stamp onto imported artifacts and manifest entries",
+    )
     return parser.parse_args()
 
 

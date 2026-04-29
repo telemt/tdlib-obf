@@ -261,4 +261,22 @@ TEST(TlsRecordPaddingBudgetInteractions, IdleChaffHonorsRollingSmallRecordBudget
   ASSERT_EQ(256, fixture.inner->emitted_targets.back());
 }
 
+TEST(TlsRecordPaddingBudgetInteractions, GreetingCamouflageRespectsBudgetAndThenReturnsToDrsCap) {
+  auto config = make_budget_interaction_config(false);
+  config.greeting_camouflage_policy.greeting_record_count = 2;
+  config.greeting_camouflage_policy.record_models[0] = make_exact_phase(180);
+  config.greeting_camouflage_policy.record_models[1] = make_exact_phase(220);
+
+  auto fixture = Fixture::create(std::move(config));
+
+  for (int i = 0; i < 7; i++) {
+    queue_write(fixture, 8 + static_cast<size_t>(i), TrafficHint::Interactive);
+    flush_ready(fixture);
+  }
+
+  std::vector<td::int32> expected_targets = {180, 400, 400, 400, 400, 400, 256};
+  ASSERT_EQ(expected_targets, fixture.inner->emitted_targets);
+  ASSERT_EQ(7, fixture.inner->write_calls);
+}
+
 }  // namespace

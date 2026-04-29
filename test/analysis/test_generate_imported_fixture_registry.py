@@ -9,15 +9,23 @@ import sys
 import tempfile
 import unittest
 
-
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 if str(THIS_DIR) not in sys.path:
     sys.path.insert(0, str(THIS_DIR))
 
-from generate_imported_fixture_registry import refresh_imported_candidate_corpus
+from generate_imported_fixture_registry import (  # noqa: E402
+    refresh_imported_candidate_corpus,
+)
 
 
-def write_clienthello_artifact(path: pathlib.Path, *, profile_id: str, source_path: pathlib.Path, route_mode: str, samples: list[dict]) -> None:
+def write_clienthello_artifact(
+    path: pathlib.Path,
+    *,
+    profile_id: str,
+    source_path: pathlib.Path,
+    route_mode: str,
+    samples: list[dict],
+) -> None:
     normalized_samples = []
     for index, sample in enumerate(samples, start=1):
         normalized_sample = dict(sample)
@@ -42,7 +50,9 @@ def write_clienthello_artifact(path: pathlib.Path, *, profile_id: str, source_pa
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def write_serverhello_artifact(path: pathlib.Path, *, family: str, source_path: pathlib.Path, route_mode: str) -> None:
+def write_serverhello_artifact(
+    path: pathlib.Path, *, family: str, source_path: pathlib.Path, route_mode: str
+) -> None:
     payload = {
         "artifact_type": "tls_serverhello_fixtures",
         "route_mode": route_mode,
@@ -97,9 +107,16 @@ class GenerateImportedFixtureRegistryTest(unittest.TestCase):
                         "cipher_suites": ["0x1301"],
                         "supported_groups": ["0x001D", "0x11EC"],
                         "key_share_entries": [{"group": "0x001D"}, {"group": "0x11EC"}],
-                        "non_grease_extensions_without_padding": ["0x000D", "0x002B", "0x44CD"],
+                        "non_grease_extensions_without_padding": [
+                            "0x000D",
+                            "0x002B",
+                            "0x44CD",
+                        ],
                         "alpn_protocols": ["h2"],
-                        "extensions": [{"type": "0xFE0D", "body_hex": ""}, {"type": "0x44CD", "body_hex": ""}],
+                        "extensions": [
+                            {"type": "0xFE0D", "body_hex": ""},
+                            {"type": "0x44CD", "body_hex": ""},
+                        ],
                         "ech": {"payload_length": 208},
                     },
                     {
@@ -176,7 +193,9 @@ class GenerateImportedFixtureRegistryTest(unittest.TestCase):
             self.assertIn("chrome146_windows_test", registry["profiles"])
             self.assertEqual(
                 "ChromeShuffleAnchored",
-                registry["profiles"]["chrome146_windows_test"]["extension_order_policy"],
+                registry["profiles"]["chrome146_windows_test"][
+                    "extension_order_policy"
+                ],
             )
             self.assertEqual(
                 {"allow_present": True, "allow_absent": True},
@@ -196,12 +215,21 @@ class GenerateImportedFixtureRegistryTest(unittest.TestCase):
             )
             self.assertIn("chrome146_windows_test", registry["server_hello_matrix"])
 
-            rewritten_clienthello = json.loads((clienthello_root / "windows" / "chrome.clienthello.json").read_text())
-            rewritten_serverhello = json.loads((serverhello_root / "windows" / "chrome.serverhello.json").read_text())
+            rewritten_clienthello = json.loads(
+                (clienthello_root / "windows" / "chrome.clienthello.json").read_text()
+            )
+            rewritten_serverhello = json.loads(
+                (serverhello_root / "windows" / "chrome.serverhello.json").read_text()
+            )
             rewritten_manifest = json.loads(manifest_path.read_text())
             self.assertEqual("non_ru_egress", rewritten_clienthello["route_mode"])
             self.assertEqual("non_ru_egress", rewritten_serverhello["route_mode"])
-            self.assertTrue(all(entry["route_mode"] == "non_ru_egress" for entry in rewritten_manifest["entries"]))
+            self.assertTrue(
+                all(
+                    entry["route_mode"] == "non_ru_egress"
+                    for entry in rewritten_manifest["entries"]
+                )
+            )
             self.assertTrue(registry_path.exists())
 
 

@@ -4,12 +4,19 @@
 # Distributed under the Boost Software License, Version 1.0. (See accompanying
 # file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 #
-import os
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256, HMAC, SHA512, SHA256
 import binascii
-import random
+import os
 import struct
+
+from Crypto.Cipher import (  # nosec B413 - test-vector generator relies on legacy-compatible API
+    AES,
+)
+from Crypto.Hash import (  # nosec B413 - test-vector generator relies on legacy-compatible API
+    HMAC,
+    SHA256,
+    SHA512,
+)
+
 
 def generate_deterministic_padding(data_size, min_padding):
     # Calculate padding size to make total size multiple of 16
@@ -25,30 +32,35 @@ def generate_deterministic_padding(data_size, min_padding):
 def hmac_sha512(a, b):
     # Combine two secrets using HMAC-SHA512
     if isinstance(a, str):
-        a = a.encode('utf-8')
+        a = a.encode("utf-8")
     if isinstance(b, str):
-        b = b.encode('utf-8')
+        b = b.encode("utf-8")
     hmac = HMAC.new(a, b, SHA512)
     return hmac.digest()
+
 
 def hmac_sha256(a, b):
     # Combine two secrets using HMAC-SHA512
     if isinstance(a, str):
-        a = a.encode('utf-8')
+        a = a.encode("utf-8")
     if isinstance(b, str):
-        b = b.encode('utf-8')
+        b = b.encode("utf-8")
     hmac = HMAC.new(a, b, SHA256)
     return hmac.digest()
+
 
 def kdf(key, info):
     return hmac_sha512(key, info)
 
+
 def encode_len(extra):
-    return struct.pack('<i', len(extra))
+    return struct.pack("<i", len(extra))
+
 
 def encrypt_data_with_prefix(data, secret, extra=b""):
     # Ensure data is multiple of 16 bytes
-    assert len(data) % 16 == 0
+    if len(data) % 16 != 0:
+        raise ValueError("Data size must be a multiple of 16 bytes")
 
     # Generate encryption and HMAC secrets
     large_secret = kdf(secret, "tde2e_encrypt_data")
@@ -69,11 +81,13 @@ def encrypt_data_with_prefix(data, secret, extra=b""):
     iv = encryption_secret[32:48]
 
     # Encrypt data
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    encrypted = cipher.encrypt(data)
+    # Legacy deterministic vector format required by compatibility tests.
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # NOSONAR
+    encrypted = cipher.encrypt(data)  # NOSONAR
     result[16:] = encrypted
 
     return bytes(result)
+
 
 def encrypt_data_with_deterministic_padding(data, secret, extra):
     # Generate deterministic padding
@@ -81,16 +95,19 @@ def encrypt_data_with_deterministic_padding(data, secret, extra):
 
     # Combine padding and data
     combined = bytearray(len(padding) + len(data))
-    combined[0:len(padding)] = padding
-    combined[len(padding):] = data
+    combined[0 : len(padding)] = padding
+    combined[len(padding) :] = data
 
     # Encrypt the combined data
     return encrypt_data_with_prefix(combined, secret, extra)
 
+
 def encrypt_header(header, encrypted_message, secret):
     # Verify inputs
-    assert len(header) == 32
-    assert len(encrypted_message) >= 16
+    if len(header) != 32:
+        raise ValueError("Failed to encrypt: invalid header size")
+    if len(encrypted_message) < 16:
+        raise ValueError("Failed to encrypt: invalid message size")
 
     # Get msg_id from the beginning of encrypted message
     msg_id = encrypted_message[0:16]
@@ -103,10 +120,12 @@ def encrypt_header(header, encrypted_message, secret):
     iv = encryption_secret[32:48]
 
     # Encrypt header with AES-CBC
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    encrypted_header = cipher.encrypt(header)
+    # Legacy deterministic vector format required by compatibility tests.
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # NOSONAR
+    encrypted_header = cipher.encrypt(header)  # NOSONAR
 
     return encrypted_header
+
 
 def decrypt_data(encrypted_data, secret, extra=b""):
     # Verify input size
@@ -130,7 +149,8 @@ def decrypt_data(encrypted_data, secret, extra=b""):
     iv = encryption_secret[32:48]
 
     # Decrypt with AES-CBC
-    cipher = AES.new(key, AES.MODE_CBC, iv)
+    # Legacy deterministic vector format required by compatibility tests.
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # NOSONAR
     decrypted_data = cipher.decrypt(encrypted_part)
 
     # Verify msg_id
@@ -145,6 +165,7 @@ def decrypt_data(encrypted_data, secret, extra=b""):
         raise ValueError("Failed to decrypt: invalid prefix size")
 
     return decrypted_data[prefix_size:]
+
 
 def decrypt_header(encrypted_header, encrypted_message, secret):
     # Verify inputs
@@ -163,13 +184,16 @@ def decrypt_header(encrypted_header, encrypted_message, secret):
     iv = encryption_secret[32:48]
 
     # Decrypt header with AES-CBC
-    cipher = AES.new(key, AES.MODE_CBC, iv)
+    # Legacy deterministic vector format required by compatibility tests.
+    cipher = AES.new(key, AES.MODE_CBC, iv)  # NOSONAR
     decrypted_header = cipher.decrypt(encrypted_header)
 
     return decrypted_header
 
+
 def generate_random_bytes(length):
-    return bytes(random.getrandbits(8) for _ in range(length))
+    return os.urandom(length)
+
 
 def generate_test_vectors():
     # Generate random secrets and headers for each test
@@ -180,52 +204,52 @@ def generate_test_vectors():
     test_vectors = [
         {
             "name": "empty_message",
-            "secret": binascii.hexlify(secret).decode('ascii'),
+            "secret": binascii.hexlify(secret).decode("ascii"),
             "data": "",
             "extra": "",
-            "header": binascii.hexlify(header).decode('ascii')
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "simple_message",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify(b"Hello, World!").decode('ascii'),
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify(b"Hello, World!").decode("ascii"),
             "extra": "",
-            "header": binascii.hexlify(header).decode('ascii')
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "long_message",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify(b"x" * 200).decode('ascii'),
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify(b"x" * 200).decode("ascii"),
             "extra": "",
-            "header": binascii.hexlify(header).decode('ascii')
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "random_message",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify(generate_random_bytes(64)).decode('ascii'),
-            "extra": binascii.hexlify(b"small extra").decode('ascii'),
-            "header": binascii.hexlify(header).decode('ascii')
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify(generate_random_bytes(64)).decode("ascii"),
+            "extra": binascii.hexlify(b"small extra").decode("ascii"),
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "very_long_message",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify(generate_random_bytes(300)).decode('ascii'),
-            "extra": binascii.hexlify(generate_random_bytes(300)).decode('ascii'),
-            "header": binascii.hexlify(header).decode('ascii')
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify(generate_random_bytes(300)).decode("ascii"),
+            "extra": binascii.hexlify(generate_random_bytes(300)).decode("ascii"),
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "message_with_special_chars",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify(bytes([i for i in range(33, 64)])).decode('ascii'),
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify(bytes(range(33, 64))).decode("ascii"),
             "extra": "",
-            "header": binascii.hexlify(header).decode('ascii')
+            "header": binascii.hexlify(header).decode("ascii"),
         },
         {
             "name": "message_with_unicode",
-            "secret": binascii.hexlify(secret).decode('ascii'),
-            "data": binascii.hexlify("Hello, 世界!".encode('utf-8')).decode('ascii'),
+            "secret": binascii.hexlify(secret).decode("ascii"),
+            "data": binascii.hexlify("Hello, 世界!".encode("utf-8")).decode("ascii"),
             "extra": "",
-            "header": binascii.hexlify(header).decode('ascii')
+            "header": binascii.hexlify(header).decode("ascii"),
         },
     ]
 
@@ -249,16 +273,21 @@ def generate_test_vectors():
         if decrypted_header != header:
             raise ValueError(f"Header decryption failed for test vector: {vec['name']}")
 
-        vec["encrypted"] = binascii.hexlify(encrypted).decode('ascii')
-        vec["encrypted_header"] = binascii.hexlify(encrypted_header).decode('ascii')
+        vec["encrypted"] = binascii.hexlify(encrypted).decode("ascii")
+        vec["encrypted_header"] = binascii.hexlify(encrypted_header).decode("ascii")
 
     return test_vectors
 
+
 def print_cpp_header(test_vectors):
     print("//")
-    print("// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2026")
+    print(
+        "// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2026"
+    )
     print("//")
-    print("// Distributed under the Boost Software License, Version 1.0. (See accompanying")
+    print(
+        "// Distributed under the Boost Software License, Version 1.0. (See accompanying"
+    )
     print("// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)")
     print("//")
     print("#pragma once")
@@ -292,6 +321,7 @@ def print_cpp_header(test_vectors):
     print("}")
     print("\n} // namespace tde2e_core")
 
+
 if __name__ == "__main__":
     test_vectors = generate_test_vectors()
 
@@ -308,6 +338,7 @@ if __name__ == "__main__":
     with open(header_path, "w") as f:
         # Redirect print output to the file
         import sys
+
         old_stdout = sys.stdout
         sys.stdout = f
         print_cpp_header(test_vectors)

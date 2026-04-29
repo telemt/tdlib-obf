@@ -118,6 +118,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_record_order_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_leftover_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_multi_record_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_multirecord_rejection_matrix_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_route_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profiles.cpp
@@ -126,7 +127,10 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_darwin_ech_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_darwin_profile_hardcoding_bug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_imported_corpus_runtime_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_sni_boundary_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_sni_boundary_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_reload_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry_provenance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_platform_coherence.cpp
@@ -265,6 +269,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_release_profile_gating_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_gate_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_cross_os_profile_rejection.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_lane_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_and_transport_gate_matrix.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_proxy_alpn_semantics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
@@ -326,6 +331,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_retry_failure_log_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_connection_creator_ping_proxy_log_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_sni_boundary_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_tls_domain_validation_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_input_validation_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_contract_mutation_smoke.cpp
@@ -339,6 +345,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ping_proxy_inheritance_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_setup_error_emitters_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_harness_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_classification_matrix_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_classification_determinism.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_rejection_retry_soak.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_lane_contract.cpp
@@ -397,6 +404,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_inner_composition.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_partial_drain_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_drs.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_drs_hint_lifecycle_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_drs_distribution.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_drs_jitter_distribution.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_drs_seed_matrix.cpp
@@ -869,7 +877,10 @@ if(NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN)
       add_test(run_all_tests run_all_tests)
     endif()
   else()
-    message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")
+    message(
+      STATUS
+        "run_all_tests executable is not available during configure; registering umbrella CTest entry"
+    )
     add_test(run_all_tests run_all_tests)
   endif()
 endif()

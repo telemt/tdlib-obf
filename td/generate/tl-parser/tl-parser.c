@@ -25,7 +25,6 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "crc32.h"
-#include "portable_endian.h"
 #include "tl-parser-tree.h"
 #include "tl-parser.h"
 #include "tl-tl.h"
