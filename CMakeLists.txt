@@ -1,8 +1,7 @@
-# SPDX-FileCopyrightText: Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2026
-# SPDX-FileCopyrightText: Copyright 2026 telemt community
-# SPDX-License-Identifier: BSL-1.0 AND MIT
-# telemt: https://github.com/telemt
-# telemt: https://t.me/telemtrs
+# SPDX-FileCopyrightText: Copyright Aliaksei Levin (levlam@telegram.org), Arseny
+# Smirnov (arseny30@gmail.com) 2014-2026 SPDX-FileCopyrightText: Copyright 2026
+# telemt community SPDX-License-Identifier: BSL-1.0 AND MIT telemt:
+# https://github.com/telemt telemt: https://t.me/telemtrs
 
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
@@ -343,7 +342,7 @@ set(TDDB_ENABLE_INSTALL
     CACHE BOOL "" FORCE)
 add_subdirectory(tddb)
 
-if(BUILD_TESTING)
+if (BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
