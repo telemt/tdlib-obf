@@ -34,8 +34,8 @@ struct KeyboardButton {
     WebView,
     RequestDialog
   };
-  Type type;
-  KeyboardButtonStyle style;
+  Type type = Type::Text;
+  KeyboardButtonStyle style{};
   string text;
   string url;                                             // WebView only
   unique_ptr<RequestedDialogType> requested_dialog_type;  // RequestDialog only
@@ -57,11 +57,11 @@ struct InlineKeyboardButton {
     Copy
   };
 
-  Type type;
-  int64 id = 0;    // UrlAuth: button_id or (2 * request_write_access - 1) * bot_user_id
-                   // SwitchInline: mask of allowed target chats; 0 if any
-  UserId user_id;  // User only
-  KeyboardButtonStyle style;
+  Type type = Type::Url;
+  int64 id = 0;      // UrlAuth: button_id or (2 * request_write_access - 1) * bot_user_id
+                     // SwitchInline: mask of allowed target chats; 0 if any
+  UserId user_id{};  // User only
+  KeyboardButtonStyle style{};
   string text;
   string forward_text;  // UrlAuth only
   string data;
@@ -70,7 +70,7 @@ struct InlineKeyboardButton {
 struct ReplyMarkup {
   // append only
   enum class Type : int32 { InlineKeyboard, ShowKeyboard, RemoveKeyboard, ForceReply };
-  Type type;
+  Type type = Type::InlineKeyboard;
 
   bool is_personal = false;  // for ShowKeyboard, RemoveKeyboard, ForceReply
 

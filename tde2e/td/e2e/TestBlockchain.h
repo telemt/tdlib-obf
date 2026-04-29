@@ -201,9 +201,9 @@ struct CallTester {
 
  private:
   struct User {
-    tde2e_api::UserId user_id;
-    tde2e_api::PrivateKeyId private_key_id;
-    tde2e_api::PublicKeyId public_key_id;
+    tde2e_api::UserId user_id{0};
+    tde2e_api::PrivateKeyId private_key_id{0};
+    tde2e_api::PublicKeyId public_key_id{0};
     tde2e_api::CallId call_id{};
 
     bool in_call{false};

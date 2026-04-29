@@ -43,8 +43,8 @@ namespace td {
 
 class GetPinnedSavedDialogsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  uint32 generation_;
-  int32 limit_;
+  uint32 generation_ = 0;
+  int32 limit_ = 0;
 
  public:
   explicit GetPinnedSavedDialogsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -76,8 +76,8 @@ class GetPinnedSavedDialogsQuery final : public Td::ResultHandler {
 class GetSavedDialogsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  uint32 generation_;
-  int32 limit_;
+  uint32 generation_ = 0;
+  int32 limit_ = 0;
 
  public:
   explicit GetSavedDialogsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -124,7 +124,7 @@ class GetSavedDialogsQuery final : public Td::ResultHandler {
 class GetSavedDialogsByIdQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  uint32 generation_;
+  uint32 generation_ = 0;
   SavedMessagesTopicId saved_messages_topic_id_;
 
  public:

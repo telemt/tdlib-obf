@@ -846,7 +846,7 @@ class TransferBusinessStarsQuery final : public Td::ResultHandler {
 class GetBusinessStarTransferPaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   BusinessConnectionId business_connection_id_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit GetBusinessStarTransferPaymentFormQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {

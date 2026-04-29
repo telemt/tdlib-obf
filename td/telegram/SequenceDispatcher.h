@@ -36,10 +36,10 @@ class SequenceDispatcher final : public NetQueryCallback {
  private:
   enum class State : int32 { Start, Wait, Finish, Dummy };
   struct Data {
-    State state_;
-    NetQueryRef net_query_ref_;
-    NetQueryPtr query_;
-    ActorShared<NetQueryCallback> callback_;
+    State state_ = State::Start;
+    NetQueryRef net_query_ref_{};
+    NetQueryPtr query_{};
+    ActorShared<NetQueryCallback> callback_{};
     uint64 generation_{0};
     int32 total_timeout_{0};
     int32 last_timeout_{0};

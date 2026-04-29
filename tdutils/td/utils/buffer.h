@@ -19,7 +19,7 @@ namespace td {
 struct BufferRaw {
   explicit BufferRaw(size_t size) : data_size_(size) {
   }
-  size_t data_size_;
+  size_t data_size_{0};
 
   // Constant after first reader is created.
   // May be change by writer before it.

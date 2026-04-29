@@ -512,7 +512,7 @@ class GetDialogListQuery final : public Td::ResultHandler {
 class GetDialogMessageByDateQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::message>> promise_;
   DialogId dialog_id_;
-  int32 date_;
+  int32 date_ = 0;
 
  public:
   explicit GetDialogMessageByDateQuery(Promise<td_api::object_ptr<td_api::message>> &&promise)
@@ -567,9 +567,9 @@ class GetHistoryQuery final : public Td::ResultHandler {
   DialogId dialog_id_;
   MessageId from_message_id_;
   MessageId old_last_new_message_id_;
-  int32 offset_;
-  int32 limit_;
-  bool from_the_end_;
+  int32 offset_ = 0;
+  int32 limit_ = 0;
+  bool from_the_end_ = false;
 
  public:
   explicit GetHistoryQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -761,7 +761,7 @@ class GetSearchResultCalendarQuery final : public Td::ResultHandler {
   DialogId dialog_id_;
   MessageTopic message_topic_;
   MessageId from_message_id_;
-  MessageSearchFilter filter_;
+  MessageSearchFilter filter_{};
 
  public:
   explicit GetSearchResultCalendarQuery(Promise<td_api::object_ptr<td_api::messageCalendar>> &&promise)
@@ -838,11 +838,11 @@ class SearchMessagesQuery final : public Td::ResultHandler {
   string query_;
   DialogId sender_dialog_id_;
   MessageId from_message_id_;
-  int32 offset_;
-  int32 limit_;
-  MessageSearchFilter filter_;
+  int32 offset_ = 0;
+  int32 limit_ = 0;
+  MessageSearchFilter filter_{};
   ReactionType tag_;
-  int64 random_id_;
+  int64 random_id_ = 0;
   bool handle_errors_ = true;
 
  public:
@@ -985,8 +985,8 @@ class SearchMessagesQuery final : public Td::ResultHandler {
 class SearchCallMessagesQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::foundMessages>> promise_;
   MessageId from_message_id_;
-  int32 limit_;
-  MessageSearchFilter filter_;
+  int32 limit_ = 0;
+  MessageSearchFilter filter_{};
 
  public:
   explicit SearchCallMessagesQuery(Promise<td_api::object_ptr<td_api::foundMessages>> &&promise)
@@ -1037,7 +1037,7 @@ class GetSearchResultPositionsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::messagePositions>> promise_;
   DialogId dialog_id_;
   SavedMessagesTopicId saved_messages_topic_id_;
-  MessageSearchFilter filter_;
+  MessageSearchFilter filter_{};
 
  public:
   explicit GetSearchResultPositionsQuery(Promise<td_api::object_ptr<td_api::messagePositions>> &&promise)
@@ -1086,7 +1086,7 @@ class GetSearchCountersQuery final : public Td::ResultHandler {
   Promise<int32> promise_;
   DialogId dialog_id_;
   MessageTopic message_topic_;
-  MessageSearchFilter filter_;
+  MessageSearchFilter filter_{};
 
  public:
   explicit GetSearchCountersQuery(Promise<int32> &&promise) : promise_(std::move(promise)) {
@@ -1149,7 +1149,7 @@ class GetSearchCountersQuery final : public Td::ResultHandler {
 class GetAllScheduledMessagesQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  uint32 generation_;
+  uint32 generation_{0};
 
  public:
   explicit GetAllScheduledMessagesQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1822,7 +1822,7 @@ class EditMessageQuery final : public Td::ResultHandler {
   Promise<int32> promise_;
   DialogId dialog_id_;
   MessageId message_id_;
-  bool is_media_;
+  bool is_media_ = false;
 
  public:
   explicit EditMessageQuery(Promise<Unit> &&promise) {
@@ -2159,7 +2159,7 @@ class SendQuickReplyMessagesQuery final : public Td::ResultHandler {
 
 class SendScreenshotNotificationQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 random_id_;
+  int64 random_id_ = 0;
   DialogId dialog_id_;
 
  public:

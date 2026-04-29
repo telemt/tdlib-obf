@@ -864,7 +864,7 @@ class CliClient final : public Actor {
   };
 
   void get_args(string &args, InputCall &arg) const {
-    arg.input_call = std::move(args);
+    arg.input_call = args;  // Copy, not move (fixes V1030)
     auto message_full_id = autosplit(arg.input_call);
     if (message_full_id.size() == 2) {
       arg.is_message = true;
@@ -964,7 +964,7 @@ class CliClient final : public Actor {
 
   static void get_args(string &args, string &arg) {
     if (&args != &arg) {
-      arg = std::move(args);
+      arg = args;  // Copy, not move: preserves args for subsequent dispatch chains (fixes V1030)
     }
   }
 
@@ -985,9 +985,8 @@ class CliClient final : public Actor {
       arg.limit = r_limit.ok();
     } else {
       arg.limit = 10;
-      arg.query = std::move(args);
+      arg.query = args;  // Copy, not move (fixes V1030)
     }
-    args.clear();
   }
 
   static void get_args(string &args, int32 &arg) {
@@ -1221,7 +1220,7 @@ class CliClient final : public Actor {
   };
 
   void get_args(string &args, ReportReason &arg) const {
-    arg.report_reason = std::move(args);
+    arg.report_reason = args;  // Copy, not move (fixes V1030)
   }
 
   struct InputInvoice {
@@ -1502,7 +1501,7 @@ class CliClient final : public Actor {
   };
 
   void get_args(string &args, SuggestedPostPrice &arg) const {
-    arg.price = std::move(args);
+    arg.price = args;  // Copy, not move (fixes V1030)
   }
 
   struct GiftResalePrice {
@@ -1520,7 +1519,7 @@ class CliClient final : public Actor {
   };
 
   void get_args(string &args, GiftResalePrice &arg) const {
-    arg.price = std::move(args);
+    arg.price = args;  // Copy, not move (fixes V1030)
   }
 
   struct InputBackground {
@@ -1554,7 +1553,7 @@ class CliClient final : public Actor {
     } else if (args.back() == 's' && to_integer_safe<int32>(args.substr(0, args.size() - 1)).is_ok()) {
       arg.message_id = as_message_id(args);
     } else {
-      arg.background_file = std::move(args);
+      arg.background_file = args;  // Copy, not move (fixes V1030)
     }
   }
 
@@ -2189,7 +2188,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::UserPrivacySetting> as_user_privacy_setting(MutableSlice setting) {
     setting = trim(setting);
-    setting = to_lower_inplace(setting);
+    to_lower_inplace(setting);
     if (setting == "invite") {
       return td_api::make_object<td_api::userPrivacySettingAllowChatInvites>();
     }
@@ -2298,7 +2297,7 @@ class CliClient final : public Actor {
 
   td_api::object_ptr<td_api::ChatMembersFilter> as_chat_members_filter(MutableSlice filter) const {
     filter = trim(filter);
-    filter = to_lower_inplace(filter);
+    to_lower_inplace(filter);
     if (filter == "a" || filter == "admin" || filter == "administrators") {
       return td_api::make_object<td_api::chatMembersFilterAdministrators>();
     }
@@ -2329,7 +2328,7 @@ class CliClient final : public Actor {
   td_api::object_ptr<td_api::SupergroupMembersFilter> as_supergroup_members_filter(MutableSlice filter,
                                                                                    const string &query) const {
     filter = trim(filter);
-    filter = to_lower_inplace(filter);
+    to_lower_inplace(filter);
     if (begins_with(filter, "get")) {
       filter.remove_prefix(3);
     }
@@ -2400,7 +2399,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::TopChatCategory> as_top_chat_category(MutableSlice category) {
     category = trim(category);
-    category = to_lower_inplace(category);
+    to_lower_inplace(category);
     if (!category.empty() && category.back() == 's') {
       category.remove_suffix(1);
     }
@@ -2425,7 +2424,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::ChatAction> as_chat_action(MutableSlice action) {
     action = trim(action);
-    action = to_lower_inplace(action);
+    to_lower_inplace(action);
     if (action == "c" || action == "cancel") {
       return td_api::make_object<td_api::chatActionCancel>();
     }
@@ -2508,7 +2507,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::NetworkType> as_network_type(MutableSlice type) {
     type = trim(type);
-    type = to_lower_inplace(type);
+    to_lower_inplace(type);
     if (type == "none") {
       return td_api::make_object<td_api::networkTypeNone>();
     }
@@ -6162,7 +6161,7 @@ class CliClient final : public Actor {
       send_request(td_api::make_object<td_api::searchSecretMessages>(chat_id, query.query, offset, query.limit,
                                                                      as_search_messages_filter(filter)));
     } else if (op == "ssd") {
-      schedule_date_ = std::move(args);
+      schedule_date_ = args;  // Copy, not move (fixes V1030)
     } else if (op == "ssrp") {
       schedule_repeat_period_ = to_integer<int32>(args);
     } else if (op == "smei") {
@@ -8893,7 +8892,7 @@ void main(int argc, char **argv) {
     new_verbosity_level = VERBOSITY_NAME(FATAL) + new_verbosity;
   });
   options.add_option('l', "log", "Log to file", [&](Slice file_name) {
-    if (file_log.init(file_name.str()).is_ok() && file_log.init(file_name.str(), 1000 << 20).is_ok()) {
+    if (file_log.init(file_name.str(), 1000 << 20).is_ok()) {
       combined_log.set_first(&ts_log);
     }
   });

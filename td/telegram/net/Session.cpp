@@ -1384,19 +1384,12 @@ void Session::connection_send_query(ConnectionInfo *info, NetQueryPtr &&net_quer
   }
 
   auto now = Time::now();
-  const bool immediately_fail_query = false;
-  if (!immediately_fail_query) {
-    net_query->debug(PSTRING() << get_name() << ": send to " << info->connection_->get_debug_str());
-    message_id = info->connection_->send_query(
-        net_query->query().clone(), net_query->gzip_flag() == NetQuery::GzipFlag::On, message_id,
-        invoke_after_message_ids, static_cast<bool>(net_query->quick_ack_promise_));
+  net_query->debug(PSTRING() << get_name() << ": send to " << info->connection_->get_debug_str());
+  message_id = info->connection_->send_query(
+      net_query->query().clone(), net_query->gzip_flag() == NetQuery::GzipFlag::On, message_id,
+      invoke_after_message_ids, static_cast<bool>(net_query->quick_ack_promise_));
 
-    net_query->on_net_write(net_query->query().size());
-  } else {
-    if (message_id == mtproto::MessageId()) {
-      message_id = auth_data_.next_message_id(now);
-    }
-  }
+  net_query->on_net_write(net_query->query().size());
   net_query->set_message_id(message_id.get());
   VLOG(net_query) << "Send query to connection " << net_query << tag("invoke_after", invoke_after_message_ids);
   {
@@ -1411,9 +1404,6 @@ void Session::connection_send_query(ConnectionInfo *info, NetQueryPtr &&net_quer
   auto status = sent_queries_.emplace(message_id, Query{message_id, std::move(net_query), info->socket_id_, now});
   LOG_CHECK(status.second) << message_id;
   sent_query_list_.put(status.first->second.get_list_node());
-  if (immediately_fail_query) {
-    on_message_result_error(message_id, 401, "TEST_ERROR");
-  }
 }
 
 void Session::connection_open(ConnectionInfo *info, double now, bool ask_info) {
@@ -1615,7 +1605,7 @@ void Session::maybe_prepare_connection_handover(ConnectionInfo *primary, Connect
   input.now_ms = to_connection_lifecycle_ms(now);
   input.has_inflight_queries = connection_has_inflight_queries(primary);
   input.auth_in_progress = handshake_info_[MainAuthKeyHandshake].flag_ || handshake_info_[TmpAuthKeyHandshake].flag_;
-  input.shutdown_requested = close_flag_ || logging_out_flag_;
+  input.shutdown_requested = logging_out_flag_;
   auto gate_snapshot = callback_->get_rotation_gate_snapshot();
   input.destination_budget_allows_overlap =
       handover->state_ == ConnectionInfo::State::Empty && gate_snapshot.destination_budget_allows_overlap;

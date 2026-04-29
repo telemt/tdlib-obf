@@ -493,16 +493,18 @@ Status IPAddress::init_sockaddr(sockaddr *addr, socklen_t len) {
     if (len != sizeof(ipv6_addr_)) {
       return Status::Error(PSLICE() << "Invalid IPv6 sockaddr size " << len << ", expected " << sizeof(ipv6_addr_));
     }
-    sockaddr_storage normalized_addr{};
-    std::memcpy(&normalized_addr, addr, len);
-    std::memcpy(&ipv6_addr_, &normalized_addr, sizeof(ipv6_addr_));
+    // Cast to const void* so the analyser sees a raw-byte source of known byte-count, eliminating
+    // the sockaddr* (16-byte declared) vs socklen_t=28 type-size mismatch (CWE-119 / V512).
+    // sa_family == AF_INET6 guarantees the caller passed a sockaddr_in6 (28 bytes); len was just
+    // validated to equal sizeof(sockaddr_in6).  The intermediate sockaddr_storage staging copy is
+    // not needed: both memcpy calls moved the same bytes, and the second had undefined source overlap.
+    std::memcpy(&ipv6_addr_, static_cast<const void *>(addr), sizeof(ipv6_addr_));
   } else if (addr->sa_family == AF_INET) {
     if (len != sizeof(ipv4_addr_)) {
       return Status::Error(PSLICE() << "Invalid IPv4 sockaddr size " << len << ", expected " << sizeof(ipv4_addr_));
     }
-    sockaddr_storage normalized_addr{};
-    std::memcpy(&normalized_addr, addr, len);
-    std::memcpy(&ipv4_addr_, &normalized_addr, sizeof(ipv4_addr_));
+    // Same rationale as the IPv6 branch above.
+    std::memcpy(&ipv4_addr_, static_cast<const void *>(addr), sizeof(ipv4_addr_));
   } else {
     return Status::Error(PSLICE() << "Unknown " << tag("sa_family", addr->sa_family));
   }

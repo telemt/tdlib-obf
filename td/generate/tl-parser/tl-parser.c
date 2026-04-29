@@ -202,8 +202,8 @@ char *parse_lex(void) {
       nextch();
     }
     if (curch == '/' && nextch() == '/') {
-      while (nextch() != 10)
-        ;
+      while (curch && nextch() != 10) {
+      }
       nextch();
     } else {
       break;
@@ -1760,6 +1760,7 @@ struct tl_combinator_tree *tl_parse_type_term(struct tree *T, int s) {
   if (!Z || Z->type != type_type) {
     if (Z) {
       TL_ERROR("type_term: found type %s\n", TL_TYPE(Z->type));
+      tfree(Z, sizeof(*Z));
     }
     TL_FAIL;
   }
@@ -1773,6 +1774,7 @@ struct tl_combinator_tree *tl_parse_nat_term(struct tree *T, int s) {
   if (!Z || (Z->type != type_num && Z->type != type_num_value)) {
     if (Z) {
       TL_ERROR("nat_term: found type %s\n", TL_TYPE(Z->type));
+      tfree(Z, sizeof(*Z));
     }
     TL_FAIL;
   }
@@ -2462,11 +2464,17 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
   struct tl_combinator_tree *t;
   t = change_value_var(O->left, X);
   if (!t) {
+    O->left = 0;
+    O->right = 0;
+    tfree(O, sizeof(*O));
     return 0;
   }
   if (t == (void *)-1l) {
     t = change_value_var(O->right, X);
     if (!t) {
+      O->left = 0;
+      O->right = 0;
+      tfree(O, sizeof(*O));
       return 0;
     }
     if (t == (void *)-1l) {
@@ -2491,6 +2499,9 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
   }
   t = change_value_var(O->right, X);
   if (!t) {
+    O->left = 0;
+    O->right = 0;
+    tfree(O, sizeof(*O));
     return 0;
   }
   if (t == (void *)-1l) {

@@ -1071,10 +1071,10 @@ class ToggleGroupCallSettingsQuery final : public Td::ResultHandler {
 class SendGroupCallMessageQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   InputGroupCallId input_group_call_id_;
-  int32 message_id_;
+  int32 message_id_ = 0;
   DialogId as_dialog_id_;
-  int64 paid_message_star_count_;
-  bool is_live_story_;
+  int64 paid_message_star_count_ = 0;
+  bool is_live_story_ = false;
 
  public:
   explicit SendGroupCallMessageQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {

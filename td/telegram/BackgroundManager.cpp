@@ -200,7 +200,7 @@ class UploadBackgroundQuery final : public Td::ResultHandler {
   FileUploadId file_upload_id_;
   BackgroundType type_;
   DialogId dialog_id_;
-  bool for_dark_theme_;
+  bool for_dark_theme_ = false;
 
  public:
   explicit UploadBackgroundQuery(Promise<td_api::object_ptr<td_api::background>> &&promise)

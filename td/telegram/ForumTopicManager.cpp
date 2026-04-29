@@ -45,7 +45,7 @@ class CreateForumTopicQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::forumTopicInfo>> promise_;
   DialogId dialog_id_;
   DialogId creator_dialog_id_;
-  int64 random_id_;
+  int64 random_id_ = 0;
 
  public:
   explicit CreateForumTopicQuery(Promise<td_api::object_ptr<td_api::forumTopicInfo>> &&promise)

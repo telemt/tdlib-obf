@@ -177,7 +177,7 @@ class CheckCanSendGiftQuery final : public Td::ResultHandler {
 
 class SendGiftQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit SendGiftQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -224,7 +224,7 @@ class SendGiftQuery final : public Td::ResultHandler {
 
 class GetGiftPaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGift> send_input_invoice_;
 
  public:
@@ -286,7 +286,7 @@ class GetGiftPaymentFormQuery final : public Td::ResultHandler {
 
 class PutGiftAuctionBidQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit PutGiftAuctionBidQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -334,8 +334,8 @@ class PutGiftAuctionBidQuery final : public Td::ResultHandler {
 
 class GetGiftAuctionBidPaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
-  int64 old_star_count_;
+  int64 star_count_ = 0;
+  int64 old_star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGiftAuctionBid> send_input_invoice_;
 
  public:
@@ -533,7 +533,7 @@ class ConvertStarGiftQuery final : public Td::ResultHandler {
 class SaveStarGiftQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  bool is_saved_;
+  bool is_saved_ = false;
 
  public:
   explicit SaveStarGiftQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -704,8 +704,8 @@ class GetUpgradeGiftPreviewQuery final : public Td::ResultHandler {
 
 class GetStarGiftUpgradeAttributesQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::giftUpgradeVariants>> promise_;
-  bool return_upgrade_models_;
-  bool return_craft_models_;
+  bool return_upgrade_models_ = false;
+  bool return_craft_models_ = false;
 
  public:
   explicit GetStarGiftUpgradeAttributesQuery(Promise<td_api::object_ptr<td_api::giftUpgradeVariants>> &&promise)
@@ -858,7 +858,7 @@ class UpgradeStarGiftQuery final : public Td::ResultHandler {
 
 class UpgradeGiftQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::upgradeGiftResult>> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit UpgradeGiftQuery(Promise<td_api::object_ptr<td_api::upgradeGiftResult>> &&promise)
@@ -912,7 +912,7 @@ class UpgradeGiftQuery final : public Td::ResultHandler {
 class GetGiftUpgradePaymentFormQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::upgradeGiftResult>> promise_;
   BusinessConnectionId business_connection_id_;
-  int64 star_count_;
+  int64 star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGiftUpgrade> upgrade_input_invoice_;
 
  public:
@@ -977,7 +977,7 @@ class GetGiftUpgradePaymentFormQuery final : public Td::ResultHandler {
 
 class PrepaidUpgradeGiftQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit PrepaidUpgradeGiftQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1025,7 +1025,7 @@ class PrepaidUpgradeGiftQuery final : public Td::ResultHandler {
 
 class GetGiftPrepaidUpgradePaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGiftPrepaidUpgrade> upgrade_input_invoice_;
 
  public:
@@ -1195,7 +1195,7 @@ class TransferStarGiftQuery final : public Td::ResultHandler {
 
 class TransferGiftQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit TransferGiftQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1247,7 +1247,7 @@ class TransferGiftQuery final : public Td::ResultHandler {
 class GetGiftTransferPaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   BusinessConnectionId business_connection_id_;
-  int64 star_count_;
+  int64 star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGiftTransfer> transfer_input_invoice_;
 
  public:
@@ -1307,7 +1307,7 @@ class GetGiftTransferPaymentFormQuery final : public Td::ResultHandler {
 
 class DropGiftOriginalDetailsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit DropGiftOriginalDetailsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1354,7 +1354,7 @@ class DropGiftOriginalDetailsQuery final : public Td::ResultHandler {
 
 class GetGiftDropOriginalDetailsPaymentFormQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  int64 star_count_;
+  int64 star_count_ = 0;
   telegram_api::object_ptr<telegram_api::inputInvoiceStarGiftDropOriginalDetails> drop_original_details_input_invoice_;
 
  public:
@@ -1575,7 +1575,7 @@ class SendStarGiftOfferQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
   StarGiftResalePrice price_;
-  int64 paid_message_star_count_;
+  int64 paid_message_star_count_ = 0;
 
  public:
   explicit SendStarGiftOfferQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {

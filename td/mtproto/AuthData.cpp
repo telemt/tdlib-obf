@@ -56,7 +56,7 @@ Status check_message_id_duplicates(MessageId *saved_message_ids, size_t max_size
   return Status::OK();
 }
 
-AuthData::AuthData() {
+AuthData::AuthData() : duplicate_checker_{}, updates_duplicate_checker_{}, updates_duplicate_rechecker_{} {
   server_salt_.salt = Random::secure_int64();
   server_salt_.valid_since = -1e10;
   server_salt_.valid_until = -1e10;

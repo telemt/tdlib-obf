@@ -58,7 +58,7 @@ struct MpmcStat {
     int alloc_error_cnt{0};
     int push_loop_ok_cnt{0};
     int push_loop_error_cnt{0};
-    char pad[TD_CONCURRENCY_PAD - sizeof(int) * 4];
+    char pad[TD_CONCURRENCY_PAD - sizeof(int) * 4] = {};
   };
   std::array<ThreadStat, 1024> arr;
   ThreadStat &s(size_t thread_id) {
@@ -195,11 +195,11 @@ class MpmcQueueBlock {
     OneValue<T> one_value;
   };
   std::atomic<uint64> write_pos_{0};
-  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)];
+  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)] = {};
   std::atomic<uint64> read_pos_{0};
-  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)];
+  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)] = {};
   std::vector<Node> nodes_;
-  char pad3[TD_CONCURRENCY_PAD - sizeof(std::vector<Node>)];
+  char pad3[TD_CONCURRENCY_PAD - sizeof(std::vector<Node>)] = {};
 };
 
 template <class T>
@@ -314,14 +314,14 @@ class MpmcQueueOld {
     explicit Node(size_t block_size) : block{block_size} {
     }
     std::atomic<Node *> next_{nullptr};
-    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
     MpmcQueueBlock<T> block;
     // MpmcQueueBlock is already padded
   };
   std::atomic<Node *> write_pos_{nullptr};
-  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
   std::atomic<Node *> read_pos_{nullptr};
-  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
   size_t block_size_;
   HazardPointers<Node, 1> hazard_pointers_;
   // HazardPointers class is already padded
@@ -436,23 +436,23 @@ class MpmcQueue {
  private:
   struct Block {
     std::atomic<uint64> write_pos{0};
-    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)];
+    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)] = {};
     std::atomic<uint64> read_pos{0};
-    char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)];
+    char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<uint64>)] = {};
     std::array<OneValue<T>, 1024> data;
-    char pad3[TD_CONCURRENCY_PAD];
+    char pad3[TD_CONCURRENCY_PAD] = {};
   };
   struct Node {
     Node() = default;
 
     Block block;
     std::atomic<Node *> next{nullptr};
-    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+    char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
   };
   std::atomic<Node *> write_pos_{nullptr};
-  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+  char pad[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
   std::atomic<Node *> read_pos_{nullptr};
-  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)];
+  char pad2[TD_CONCURRENCY_PAD - sizeof(std::atomic<Node *>)] = {};
   HazardPointers<Node, 1> hazard_pointers_;
   // HazardPointers class is already padded
 };

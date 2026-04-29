@@ -196,7 +196,7 @@ class ToggleChannelUsernameQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
   string username_;
-  bool is_active_;
+  bool is_active_ = false;
 
  public:
   explicit ToggleChannelUsernameQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -510,7 +510,7 @@ class SetChannelEmojiStickerSetQuery final : public Td::ResultHandler {
 class SetChannelBoostsToUnblockRestrictionsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  int32 unrestrict_boost_count_;
+  int32 unrestrict_boost_count_ = 0;
 
  public:
   explicit SetChannelBoostsToUnblockRestrictionsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -715,7 +715,7 @@ class ToggleChannelJoinRequestQuery final : public Td::ResultHandler {
 class TogglePrehistoryHiddenQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  bool is_all_history_available_;
+  bool is_all_history_available_ = false;
 
  public:
   explicit TogglePrehistoryHiddenQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -766,7 +766,7 @@ class TogglePrehistoryHiddenQuery final : public Td::ResultHandler {
 class RestrictSponsoredMessagesQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  bool can_have_sponsored_messages_;
+  bool can_have_sponsored_messages_ = false;
 
  public:
   explicit RestrictSponsoredMessagesQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -817,7 +817,7 @@ class RestrictSponsoredMessagesQuery final : public Td::ResultHandler {
 class ToggleAutotranslationQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  bool has_automatic_translation_;
+  bool has_automatic_translation_ = false;
 
  public:
   explicit ToggleAutotranslationQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -862,7 +862,7 @@ class ToggleAutotranslationQuery final : public Td::ResultHandler {
 class ToggleParticipantsHiddenQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  bool has_hidden_participants_;
+  bool has_hidden_participants_ = false;
 
  public:
   explicit ToggleParticipantsHiddenQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -913,7 +913,7 @@ class ToggleParticipantsHiddenQuery final : public Td::ResultHandler {
 class ToggleAntiSpamQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   ChannelId channel_id_;
-  bool has_aggressive_anti_spam_enabled_;
+  bool has_aggressive_anti_spam_enabled_ = false;
 
  public:
   explicit ToggleAntiSpamQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -1422,7 +1422,7 @@ class DeleteChannelQuery final : public Td::ResultHandler {
 
 class GetCreatedPublicChannelsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  PublicDialogType type_;
+  PublicDialogType type_ = PublicDialogType::ForPersonalDialog;
 
  public:
   explicit GetCreatedPublicChannelsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {

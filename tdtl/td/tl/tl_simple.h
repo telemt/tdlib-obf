@@ -39,7 +39,7 @@ inline std::string gen_cpp_field_name(std::string name) {
 
 struct CustomType;
 struct Type {
-  enum { Int32, Int53, Int64, Double, String, Bytes, Vector, Bool, Custom } type;
+  enum { Int32, Int53, Int64, Double, String, Bytes, Vector, Bool, Custom } type = Int32;
 
   // type == Custom
   bool is_bare{false};
@@ -50,15 +50,15 @@ struct Type {
 };
 
 struct Arg {
-  const Type *type;
+  const Type *type{nullptr};
   std::string name;
 };
 
 struct Constructor {
   std::string name;
-  std::int32_t id;
+  std::int32_t id{0};
   std::vector<Arg> args;
-  const CustomType *type;
+  const CustomType *type{nullptr};
 };
 
 struct CustomType {
@@ -71,9 +71,9 @@ struct CustomType {
 
 struct Function {
   std::string name;
-  std::int32_t id;
+  std::int32_t id{0};
   std::vector<Arg> args;
-  const Type *type;
+  const Type *type{nullptr};
 };
 
 class Schema {

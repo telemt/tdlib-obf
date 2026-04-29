@@ -340,7 +340,7 @@ class GetStoryNotifySettingsExceptionsQuery final : public Td::ResultHandler {
 
 class GetScopeNotifySettingsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  NotificationSettingsScope scope_;
+  NotificationSettingsScope scope_ = NotificationSettingsScope::Private;
 
  public:
   explicit GetScopeNotifySettingsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
@@ -452,7 +452,7 @@ class UpdateDialogNotifySettingsQuery final : public Td::ResultHandler {
 
 class UpdateScopeNotifySettingsQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
-  NotificationSettingsScope scope_;
+  NotificationSettingsScope scope_ = NotificationSettingsScope::Private;
 
  public:
   explicit UpdateScopeNotifySettingsQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {

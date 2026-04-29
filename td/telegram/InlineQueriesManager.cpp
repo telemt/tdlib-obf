@@ -67,7 +67,7 @@ class GetInlineBotResultsQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::inlineQueryResults>> promise_;
   DialogId dialog_id_;
   UserId bot_user_id_;
-  uint64 query_hash_;
+  uint64 query_hash_ = 0;
 
  public:
   explicit GetInlineBotResultsQuery(Promise<td_api::object_ptr<td_api::inlineQueryResults>> &&promise)
@@ -201,7 +201,7 @@ class SavePreparedInlineMessageQuery final : public Td::ResultHandler {
 class GetPreparedInlineMessageQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::preparedInlineMessage>> promise_;
   UserId bot_user_id_;
-  uint64 query_hash_;
+  uint64 query_hash_ = 0;
 
  public:
   explicit GetPreparedInlineMessageQuery(Promise<td_api::object_ptr<td_api::preparedInlineMessage>> &&promise)

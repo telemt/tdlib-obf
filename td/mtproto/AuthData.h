@@ -298,9 +298,9 @@ class AuthData {
 
   std::vector<ServerSalt> future_salts_;
 
-  MessageIdDuplicateChecker<1000> duplicate_checker_;
-  MessageIdDuplicateChecker<1000> updates_duplicate_checker_;
-  MessageIdDuplicateChecker<100> updates_duplicate_rechecker_;
+  MessageIdDuplicateChecker<1000> duplicate_checker_{};
+  MessageIdDuplicateChecker<1000> updates_duplicate_checker_{};
+  MessageIdDuplicateChecker<100> updates_duplicate_rechecker_{};
 
   void update_salt(double now);
 };

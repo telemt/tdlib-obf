@@ -37,16 +37,23 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/mtproto.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/dns_resolver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ip_address_security.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/buffer_initialization_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog_filter_icon_mapping_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/poll.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_regressions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pvs_level1_contracts_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tl_simple_struct_init_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tl_simple_struct_init_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tl_parser_memory_leak_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cli_get_args_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cli_get_args_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_report_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/security_core_true_issues_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_contract.cpp

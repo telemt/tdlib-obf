@@ -113,8 +113,8 @@ class TranslateTextQuery final : public Td::ResultHandler {
 
 class ComposeMessageWithAiQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::formattedText>> promise_;
-  bool skip_bot_commands_;
-  int32 max_media_timestamp_;
+  bool skip_bot_commands_ = false;
+  int32 max_media_timestamp_ = -1;
 
  public:
   explicit ComposeMessageWithAiQuery(Promise<td_api::object_ptr<td_api::formattedText>> &&promise)
@@ -160,8 +160,8 @@ class ComposeMessageWithAiQuery final : public Td::ResultHandler {
 
 class ProofreadMessageWithAiQuery final : public Td::ResultHandler {
   Promise<td_api::object_ptr<td_api::fixedText>> promise_;
-  bool skip_bot_commands_;
-  int32 max_media_timestamp_;
+  bool skip_bot_commands_ = false;
+  int32 max_media_timestamp_ = -1;
 
  public:
   explicit ProofreadMessageWithAiQuery(Promise<td_api::object_ptr<td_api::fixedText>> &&promise)

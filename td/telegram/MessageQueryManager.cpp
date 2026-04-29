@@ -390,7 +390,7 @@ class SearchMessagesGlobalQuery final : public Td::ResultHandler {
   DialogId offset_dialog_id_;
   MessageId offset_message_id_;
   int32 limit_{0};
-  MessageSearchFilter filter_;
+  MessageSearchFilter filter_{};
   int32 min_date_{0};
   int32 max_date_{0};
 
@@ -745,7 +745,7 @@ class GetMessagePositionQuery final : public Td::ResultHandler {
   Promise<int32> promise_;
   DialogId dialog_id_;
   MessageId message_id_;
-  MessageSearchFilter filter_;
+  MessageSearchFilter filter_{};
   MessageTopic message_topic_;
 
  public:

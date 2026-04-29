@@ -63,7 +63,8 @@ struct NetworkStats {
 
 class NetStatsManager final : public Actor {
  public:
-  explicit NetStatsManager(ActorShared<> parent) : parent_(std::move(parent)) {
+  explicit NetStatsManager(ActorShared<> parent)
+      : parent_(std::move(parent)), common_net_stats_{}, media_net_stats_{}, call_net_stats_{} {
   }
   // Call init just after actor is registered and before getting callbacks
   void init();
@@ -102,7 +103,7 @@ class NetStatsManager final : public Actor {
   struct NetStatsInfo {
     string key;
     NetStats stats;
-    NetStatsData last_sync_stats;
+    NetStatsData last_sync_stats{};
     NetType net_type = NetType::None;
 
     struct TypeStats {
@@ -110,15 +111,15 @@ class NetStatsManager final : public Actor {
       NetStatsData mem_stats;
       NetStatsData db_stats;
     };
-    std::array<TypeStats, 5 /*NetStatsManager::net_type_size()*/> stats_by_type;
+    std::array<TypeStats, 5 /*NetStatsManager::net_type_size()*/> stats_by_type{};
   };
 
   int32 since_total_{0};
   int32 since_current_{0};
-  NetStatsInfo common_net_stats_;
-  NetStatsInfo media_net_stats_;
+  NetStatsInfo common_net_stats_{};
+  NetStatsInfo media_net_stats_{};
   std::array<NetStatsInfo, MAX_FILE_TYPE> files_stats_;
-  NetStatsInfo call_net_stats_;
+  NetStatsInfo call_net_stats_{};
   static constexpr int32 CALL_NET_STATS_ID{MAX_FILE_TYPE + 2};
 
   template <class F>

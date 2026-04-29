@@ -45,7 +45,7 @@ class TsFileLog final : public LogInterface {
   struct Info {
     FileLog log;
     std::atomic<bool> is_inited{false};
-    size_t id;
+    size_t id{0};
   };
 
   static constexpr size_t MAX_THREAD_ID = 128;

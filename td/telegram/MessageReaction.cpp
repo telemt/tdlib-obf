@@ -93,7 +93,7 @@ class SendReactionQuery final : public Td::ResultHandler {
 class SendPaidReactionQuery final : public Td::ResultHandler {
   Promise<Unit> promise_;
   DialogId dialog_id_;
-  int64 star_count_;
+  int64 star_count_ = 0;
 
  public:
   explicit SendPaidReactionQuery(Promise<Unit> &&promise) : promise_(std::move(promise)) {
