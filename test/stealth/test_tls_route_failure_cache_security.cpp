@@ -111,6 +111,14 @@ class ScopedRuntimeEchStore final {
   }
 };
 
+td::string canonical_store_key(td::Slice destination) {
+  return "stealth_ech_cb#" + destination.str();
+}
+
+td::string dotted_canonical_store_key(td::Slice destination) {
+  return "stealth_ech_cb#" + destination.str() + ".";
+}
+
 TEST(TlsRouteFailureCacheSecurity, MalformedPersistentStateFailsClosedForKnownNonRuRoute) {
   auto store = std::make_shared<MemoryKeyValue>();
   ScopedRuntimeEchStore scoped_store(store);
@@ -126,6 +134,43 @@ TEST(TlsRouteFailureCacheSecurity, MalformedPersistentStateFailsClosedForKnownNo
   store->set(key, "not-a-valid-cache-entry");
 
   ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route("persist.example.com", 1712345678, route_hints));
+}
+
+TEST(TlsRouteFailureCacheSecurity, MalformedCurrentCanonicalStateFailsClosedForKnownNonRuRoute) {
+  auto store = std::make_shared<MemoryKeyValue>();
+  ScopedRuntimeEchStore scoped_store(store);
+
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+
+  NetworkRouteHints route_hints;
+  route_hints.is_known = true;
+  route_hints.is_ru = false;
+
+  const td::string key = canonical_store_key("persist.example.com");
+  store->set(key, "not-a-valid-current-entry");
+
+  ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route("persist.example.com", 1712345678, route_hints));
+}
+
+TEST(TlsRouteFailureCacheSecurity, MalformedDottedCurrentAliasFailsClosedAndRewritesCanonicalState) {
+  auto store = std::make_shared<MemoryKeyValue>();
+  ScopedRuntimeEchStore scoped_store(store);
+
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+
+  NetworkRouteHints route_hints;
+  route_hints.is_known = true;
+  route_hints.is_ru = false;
+
+  const td::string dotted_key = dotted_canonical_store_key("persist.example.com");
+  const td::string canonical_key = canonical_store_key("persist.example.com");
+  store->set(dotted_key, "broken-current-alias");
+
+  ASSERT_TRUE(EchMode::Disabled == runtime_ech_mode_for_route("persist.example.com", 1712345678, route_hints));
+  ASSERT_TRUE(store->get(dotted_key).empty());
+  ASSERT_FALSE(store->get(canonical_key).empty());
 }
 
 TEST(TlsRouteFailureCacheSecurity, NegativePersistentTimingFieldsFailClosedForKnownNonRuRoute) {

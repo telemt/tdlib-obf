@@ -2188,7 +2188,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::UserPrivacySetting> as_user_privacy_setting(MutableSlice setting) {
     setting = trim(setting);
-    to_lower_inplace(setting);
+    setting = to_lower_inplace(setting);
     if (setting == "invite") {
       return td_api::make_object<td_api::userPrivacySettingAllowChatInvites>();
     }
@@ -2297,7 +2297,7 @@ class CliClient final : public Actor {
 
   td_api::object_ptr<td_api::ChatMembersFilter> as_chat_members_filter(MutableSlice filter) const {
     filter = trim(filter);
-    to_lower_inplace(filter);
+    filter = to_lower_inplace(filter);
     if (filter == "a" || filter == "admin" || filter == "administrators") {
       return td_api::make_object<td_api::chatMembersFilterAdministrators>();
     }
@@ -2328,7 +2328,7 @@ class CliClient final : public Actor {
   td_api::object_ptr<td_api::SupergroupMembersFilter> as_supergroup_members_filter(MutableSlice filter,
                                                                                    const string &query) const {
     filter = trim(filter);
-    to_lower_inplace(filter);
+    filter = to_lower_inplace(filter);
     if (begins_with(filter, "get")) {
       filter.remove_prefix(3);
     }
@@ -2399,7 +2399,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::TopChatCategory> as_top_chat_category(MutableSlice category) {
     category = trim(category);
-    to_lower_inplace(category);
+    category = to_lower_inplace(category);
     if (!category.empty() && category.back() == 's') {
       category.remove_suffix(1);
     }
@@ -2424,7 +2424,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::ChatAction> as_chat_action(MutableSlice action) {
     action = trim(action);
-    to_lower_inplace(action);
+    action = to_lower_inplace(action);
     if (action == "c" || action == "cancel") {
       return td_api::make_object<td_api::chatActionCancel>();
     }
@@ -2507,7 +2507,7 @@ class CliClient final : public Actor {
 
   static td_api::object_ptr<td_api::NetworkType> as_network_type(MutableSlice type) {
     type = trim(type);
-    to_lower_inplace(type);
+    type = to_lower_inplace(type);
     if (type == "none") {
       return td_api::make_object<td_api::networkTypeNone>();
     }

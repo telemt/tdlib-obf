@@ -47,3 +47,24 @@ TEST(SecurityCoreReportLightFuzz, parser_and_cli_invariants_survive_randomized_p
     ASSERT_EQ(td::string::npos, cli_source.find(pattern));
   }
 }
+
+TEST(SecurityCoreReportLightFuzz, cli_mutableslice_helpers_keep_required_assigned_lowering_patterns) {
+  const auto cli_source = normalize_no_space(td::mtproto::test::read_repo_text_file("td/telegram/cli.cpp"));
+
+  const td::string required_patterns[] = {
+      "as_user_privacy_setting(MutableSlicesetting){setting=trim(setting);setting=to_lower_inplace(setting);",
+      "as_chat_members_filter(MutableSlicefilter)const{filter=trim(filter);filter=to_lower_inplace(filter);",
+      "as_supergroup_members_filter(MutableSlicefilter,conststring&query)const{filter=trim(filter);filter=to_lower_"
+      "inplace(filter);",
+      "as_top_chat_category(MutableSlicecategory){category=trim(category);category=to_lower_inplace(category);",
+      "as_chat_action(MutableSliceaction){action=trim(action);action=to_lower_inplace(action);",
+      "as_network_type(MutableSlicetype){type=trim(type);type=to_lower_inplace(type);",
+  };
+
+  for (int i = 0; i < 12000; i++) {
+    auto idx = static_cast<size_t>(
+        td::Random::fast(0, static_cast<int>(sizeof(required_patterns) / sizeof(required_patterns[0])) - 1));
+    const auto &pattern = required_patterns[idx];
+    ASSERT_NE(td::string::npos, cli_source.find(pattern));
+  }
+}

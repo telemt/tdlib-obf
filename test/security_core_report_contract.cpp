@@ -58,6 +58,31 @@ TEST(SecurityCoreReportContracts, cli_lowercase_transform_result_is_used) {
   ASSERT_TRUE(normalized.find("type=to_lower_inplace(type);") != td::string::npos);
 }
 
+TEST(SecurityCoreReportContracts, cli_mutableslice_helpers_keep_trim_then_assigned_lowering_sequence) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/cli.cpp");
+  auto normalized = normalize_no_space(source);
+
+  ASSERT_TRUE(
+      normalized.find(
+          "as_user_privacy_setting(MutableSlicesetting){setting=trim(setting);setting=to_lower_inplace(setting);") !=
+      td::string::npos);
+  ASSERT_TRUE(
+      normalized.find(
+          "as_chat_members_filter(MutableSlicefilter)const{filter=trim(filter);filter=to_lower_inplace(filter);") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find("as_supergroup_members_filter(MutableSlicefilter,conststring&query)const{filter=trim("
+                              "filter);filter=to_lower_inplace(filter);") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find(
+          "as_top_chat_category(MutableSlicecategory){category=trim(category);category=to_lower_inplace(category);") !=
+      td::string::npos);
+  ASSERT_TRUE(
+      normalized.find("as_chat_action(MutableSliceaction){action=trim(action);action=to_lower_inplace(action);") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find("as_network_type(MutableSlicetype){type=trim(type);type=to_lower_inplace(type);") !=
+              td::string::npos);
+}
+
 TEST(SecurityCoreReportContracts, cli_log_option_avoids_duplicate_identical_init_check) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/cli.cpp");
   auto normalized = normalize_no_space(source);

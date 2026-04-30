@@ -16,6 +16,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_rotation_gate_snapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_controller_rotation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_destination_budget_joint_gate_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_lifecycle_report.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_lifecycle_report_rotation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/active_connection_lifecycle_state_machine.cpp
@@ -441,6 +442,8 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_zero_length_chaff_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_response_jitter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_response_jitter_queue_edges.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_response_jitter_keepalive_interleave_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_response_jitter_non_head_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_response_jitter_zero_length_edges.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_bidirectional_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_traffic.cpp
@@ -624,6 +627,15 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_bucket_boundary_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_counter_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_case_alias_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_fqdn_alias_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_fqdn_alias_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_store_key_helper_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_migration_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_migration_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_migration_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_migration_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_migration_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_legacy_precedence_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_box_muller_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_hints_country_boundary_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_fingerprint_classifier_blackhat.cpp
