@@ -267,8 +267,19 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_destination_key_case_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_case_alias_fixture_blackbox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_selection_source_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_builder_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_release_profile_gating_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_gate_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_unknown_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_unknown_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_unknown_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_unknown_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_transport_confidence_unknown_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_weight_gate_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_weight_gate_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_weight_gate_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_weight_gate_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_weight_gate_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_cross_os_profile_rejection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_platform_lane_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_route_and_transport_gate_matrix.cpp
@@ -276,9 +287,18 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_plan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_multiloader_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_multiloader_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_multiloader_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_multiloader_light_fuzz.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_platform_drift_multiloader_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_cooldown.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_security.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_ancestor_security_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_filesystem_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_reload_log_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_seam.cpp
@@ -400,6 +420,9 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_record_padding_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_runtime_params.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_source_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_hint_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_inner_composition.cpp
@@ -453,6 +476,9 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_traffic_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_traffic_seed_matrix.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_traffic_wakeup_edges.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_budget_oversized_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_small_record_budget_integration_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_payload_overhead_budget_integration_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_budget_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_time_fail_closed_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_fail_closed.cpp
@@ -461,6 +487,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_record_padding_budget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_padding_budget_interactions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_wakeup_edge_cases.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_clock_anomaly_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_contract_edges.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_overflow_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller.cpp
@@ -645,6 +672,10 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_anchor_overflow_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_cb_success_reset_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_ech_downstream_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_profile_weight_bridge_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_profile_weight_bridge_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_profile_weight_bridge_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_profile_weight_bridge_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_profile_sticky_rotation_reload_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_tls_init_profile_temporal_divergence.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_proxy_alpn_all_profiles_adversarial.cpp
@@ -889,7 +920,10 @@ if(NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN)
       add_test(run_all_tests run_all_tests)
     endif()
   else()
-    message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")
+    message(
+      STATUS
+        "run_all_tests executable is not available during configure; registering umbrella CTest entry"
+    )
     add_test(run_all_tests run_all_tests)
   endif()
 endif()

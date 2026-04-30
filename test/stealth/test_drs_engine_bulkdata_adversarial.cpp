@@ -50,4 +50,27 @@ TEST(DrsEngineBulkDataAdversarial, BulkDataUsesSteadyStateCapBeforePhasePromotio
   ASSERT_EQ(900, drs.next_payload_cap(TrafficHint::Interactive));
 }
 
+TEST(DrsEngineBulkDataAdversarial, BulkDataSamplingDoesNotPoisonCongestionTransitionAnchor) {
+  MockRng rng(14);
+
+  DrsPolicy policy;
+  policy.slow_start = make_phase({{900, 900, 1}});
+  policy.congestion_open = make_phase({{1400, 1400, 1}});
+  policy.steady_state = make_phase({{12000, 12000, 1}});
+  policy.slow_start_records = 1;
+  policy.congestion_bytes = 1 << 20;
+  policy.idle_reset_ms_min = 100;
+  policy.idle_reset_ms_max = 100;
+  policy.min_payload_cap = 900;
+  policy.max_payload_cap = 12000;
+
+  DrsEngine drs(policy, rng);
+
+  ASSERT_EQ(12000, drs.next_payload_cap(TrafficHint::BulkData));
+  drs.notify_bytes_written(1);
+  ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::CongestionOpen);
+
+  ASSERT_EQ(1400, drs.next_payload_cap(TrafficHint::Interactive));
+}
+
 }  // namespace

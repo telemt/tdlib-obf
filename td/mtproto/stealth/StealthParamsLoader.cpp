@@ -25,6 +25,21 @@ namespace mtproto {
 namespace stealth {
 namespace {
 
+bool platform_hints_equal(const RuntimePlatformHints &lhs, const RuntimePlatformHints &rhs) {
+  return lhs.device_class == rhs.device_class && lhs.mobile_os == rhs.mobile_os && lhs.desktop_os == rhs.desktop_os;
+}
+
+Status validate_platform_hints_stability_across_reload(const StealthRuntimeParams &current,
+                                                       const StealthRuntimeParams &next, bool has_successful_reload) {
+  if (!has_successful_reload) {
+    return Status::OK();
+  }
+  if (platform_hints_equal(current.platform_hints, next.platform_hints)) {
+    return Status::OK();
+  }
+  return Status::Error("platform_hints cannot change after initial stealth params publication");
+}
+
 bool is_missing_config_path(const string &path) {
 #if TD_PORT_POSIX
   struct ::stat st;
@@ -55,18 +70,49 @@ Status validate_secure_parent_directory(const string &path) {
   auto pos = path.rfind('/');
   string parent = pos == string::npos ? string(".") : (pos == 0 ? string("/") : path.substr(0, pos));
 
-  struct ::stat st;
-  if (::lstat(parent.c_str(), &st) != 0) {
-    return Status::PosixError(errno, "Failed to stat stealth params parent directory");
-  }
-  if (!S_ISDIR(st.st_mode)) {
-    return Status::Error("Stealth params parent path must be a directory");
-  }
-  if (st.st_uid != ::geteuid()) {
-    return Status::Error("Stealth params parent directory must be owned by the current user");
-  }
-  if ((st.st_mode & S_IWGRP) != 0 || (st.st_mode & S_IWOTH) != 0) {
-    return Status::Error("Stealth params parent directory must not be writable by group or others");
+  auto validate_directory_component = [](Slice directory_path, bool require_owner, bool is_parent) -> Status {
+    struct ::stat st;
+    auto directory = directory_path.str();
+    if (::lstat(directory.c_str(), &st) != 0) {
+      return Status::PosixError(errno, "Failed to stat stealth params directory component");
+    }
+    if (!S_ISDIR(st.st_mode)) {
+      return Status::Error("Stealth params path component must be a directory");
+    }
+    if (require_owner && st.st_uid != ::geteuid()) {
+      return Status::Error("Stealth params parent directory must be owned by the current user");
+    }
+
+    auto writable_by_group_or_others = (st.st_mode & S_IWGRP) != 0 || (st.st_mode & S_IWOTH) != 0;
+    if (!writable_by_group_or_others) {
+      return Status::OK();
+    }
+
+    // Sticky writable ancestors (for example /tmp) are acceptable because
+    // non-owners cannot replace entries they do not own.
+    if ((st.st_mode & S_ISVTX) != 0) {
+      return Status::OK();
+    }
+
+    if (is_parent) {
+      return Status::Error("Stealth params parent directory must not be writable by group or others");
+    }
+    return Status::Error("Stealth params ancestor directory must not be writable by group or others unless sticky");
+  };
+
+  TRY_STATUS(validate_directory_component(parent, true, true));
+
+  // Walk ancestor chain up to root/current directory to prevent path hijacking
+  // through non-sticky writable intermediate directories.
+  string current = parent;
+  while (current != "/" && current != ".") {
+    auto slash = current.rfind('/');
+    string ancestor = slash == string::npos ? string(".") : (slash == 0 ? string("/") : current.substr(0, slash));
+    TRY_STATUS(validate_directory_component(ancestor, false, false));
+    if (ancestor == current) {
+      break;
+    }
+    current = std::move(ancestor);
   }
 #else
   (void)path;
@@ -113,6 +159,13 @@ Result<uint8> parse_weight_field(const JsonObject &object, Slice field_name) {
     return Status::Error("profile_weights." + field_name.str() + " must be within [0, 100]");
   }
   return static_cast<uint8>(value);
+}
+
+Result<uint8> parse_optional_weight_field(const JsonObject &object, Slice field_name, uint8 fallback) {
+  if (!object.has_field(field_name)) {
+    return fallback;
+  }
+  return parse_weight_field(object, field_name);
 }
 
 Result<DeviceClass> parse_device_class(Slice value) {
@@ -360,6 +413,15 @@ ProfileWeights flatten_profile_selection(const RuntimeProfileSelectionPolicy &po
   weights.chrome133 = desktop_weights->chrome133;
   weights.chrome131 = desktop_weights->chrome131;
   weights.chrome120 = desktop_weights->chrome120;
+  // Plan-style policy keeps desktop_non_darwin as the cross-platform desktop
+  // source of truth. Bridge it into Windows-specific runtime slots so
+  // platform-gated profile selection remains coherent on DesktopOs::Windows
+  // instead of silently falling back to the first allowed profile.
+  weights.chrome147_windows = policy.desktop_non_darwin.chrome133;
+  weights.firefox149_windows = policy.desktop_non_darwin.firefox148;
+  // Legacy plan-style mobile schema has no dedicated iOS Chromium lane.
+  // Keep it disabled unless explicitly provided through flat profile_weights.
+  weights.chrome147_ios_chromium = 0;
   weights.firefox148 = desktop_weights->firefox148;
   weights.safari26_3 = desktop_weights->safari26_3;
   weights.ios14 = policy.mobile.ios14;
@@ -372,9 +434,11 @@ Result<ProfileWeights> parse_flat_profile_weights(JsonValue value) {
     return Status::Error("profile_weights must be an object");
   }
   auto &object = value.get_object();
-  TRY_STATUS(ensure_exact_object_shape("profile_weights", object,
-                                       {Slice("chrome133"), Slice("chrome131"), Slice("chrome120"), Slice("firefox148"),
-                                        Slice("safari26_3"), Slice("ios14"), Slice("android11_okhttp_advisory")}));
+  TRY_STATUS(
+      ensure_exact_object_shape("profile_weights", object,
+                                {Slice("chrome133"), Slice("chrome131"), Slice("chrome120"), Slice("chrome147_windows"),
+                                 Slice("chrome147_ios_chromium"), Slice("firefox148"), Slice("firefox149_windows"),
+                                 Slice("safari26_3"), Slice("ios14"), Slice("android11_okhttp_advisory")}));
 
   ProfileWeights weights;
   TRY_RESULT(chrome133, parse_weight_field(object, "chrome133"));
@@ -384,10 +448,17 @@ Result<ProfileWeights> parse_flat_profile_weights(JsonValue value) {
   TRY_RESULT(safari26_3, parse_weight_field(object, "safari26_3"));
   TRY_RESULT(ios14, parse_weight_field(object, "ios14"));
   TRY_RESULT(android11_okhttp_advisory, parse_weight_field(object, "android11_okhttp_advisory"));
+  TRY_RESULT(chrome147_windows, parse_optional_weight_field(object, "chrome147_windows", chrome133));
+  TRY_RESULT(chrome147_ios_chromium,
+             parse_optional_weight_field(object, "chrome147_ios_chromium", static_cast<uint8>(0)));
+  TRY_RESULT(firefox149_windows, parse_optional_weight_field(object, "firefox149_windows", firefox148));
   weights.chrome133 = chrome133;
   weights.chrome131 = chrome131;
   weights.chrome120 = chrome120;
+  weights.chrome147_windows = chrome147_windows;
+  weights.chrome147_ios_chromium = chrome147_ios_chromium;
   weights.firefox148 = firefox148;
+  weights.firefox149_windows = firefox149_windows;
   weights.safari26_3 = safari26_3;
   weights.ios14 = ios14;
   weights.android11_okhttp_advisory = android11_okhttp_advisory;
@@ -726,6 +797,16 @@ bool StealthParamsLoader::try_reload() noexcept {
     return false;
   }
   auto params = result.move_as_ok();
+  auto runtime_snapshot = get_runtime_stealth_params_snapshot();
+  auto default_snapshot = default_runtime_stealth_params();
+  auto platform_hints_locked =
+      has_successful_reload_ || !platform_hints_equal(runtime_snapshot.platform_hints, default_snapshot.platform_hints);
+  auto stability_status =
+      validate_platform_hints_stability_across_reload(runtime_snapshot, params, platform_hints_locked);
+  if (stability_status.is_error()) {
+    note_reload_failure("platform_hints_stability", stability_status);
+    return false;
+  }
   auto publish_status = set_runtime_stealth_params(params);
   if (publish_status.is_error()) {
     note_reload_failure("publish_runtime", publish_status);
@@ -738,6 +819,7 @@ bool StealthParamsLoader::try_reload() noexcept {
     auto current_lock = std::lock_guard<std::mutex>(current_mu_);
     current_ = std::make_shared<const StealthRuntimeParams>(params);
   }
+  has_successful_reload_ = true;
   if (previous_failures > 0) {
     LOG(INFO) << "Stealth params reload succeeded " << tag("path", config_path_)
               << tag("previous_failures", previous_failures)

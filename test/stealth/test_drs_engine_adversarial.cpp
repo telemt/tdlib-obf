@@ -10,6 +10,8 @@
 
 #include "td/utils/tests.h"
 
+#include <limits>
+
 namespace {
 
 using td::mtproto::stealth::DrsEngine;
@@ -59,6 +61,28 @@ TEST(DrsEngineAdversarial, SingleValuePhaseRemainsStableUnderRepeatGuard) {
   for (int i = 0; i < 16; i++) {
     ASSERT_EQ(1337, drs.next_payload_cap(TrafficHint::Interactive));
   }
+}
+
+TEST(DrsEngineAdversarial, CongestionByteAccumulatorDoesNotWrapOnHostileHugeWrite) {
+  MockRng rng(13);
+  auto policy = make_policy();
+  policy.slow_start_records = 1;
+  policy.congestion_bytes = std::numeric_limits<td::int32>::max();
+  DrsEngine drs(policy, rng);
+
+  ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::SlowStart);
+  drs.next_payload_cap(TrafficHint::Interactive);
+  drs.notify_bytes_written(1);
+  ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::CongestionOpen);
+
+  drs.next_payload_cap(TrafficHint::Interactive);
+  drs.notify_bytes_written(1);
+  ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::CongestionOpen);
+
+  drs.next_payload_cap(TrafficHint::Interactive);
+  drs.notify_bytes_written(std::numeric_limits<size_t>::max());
+
+  ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::SteadyState);
 }
 
 }  // namespace

@@ -47,33 +47,37 @@ class SystemClock final : public IClock {
   }
 };
 
+Status error_from_owned_message(std::string message) {
+  return Status::Error(Slice(message.data(), message.size()));
+}
+
 Status validate_range(const char *name, int32 min_value, int32 max_value, int32 lower_bound, int32 upper_bound) {
   if (min_value < lower_bound || max_value > upper_bound) {
-    return Status::Error(std::string(name) + " is out of allowed bounds");
+    return error_from_owned_message(std::string(name) + " is out of allowed bounds");
   }
   if (min_value > max_value) {
-    return Status::Error(std::string(name) + " min must not exceed max");
+    return error_from_owned_message(std::string(name) + " min must not exceed max");
   }
   return Status::OK();
 }
 
 Status validate_non_negative_finite(const char *name, double value) {
   if (!std::isfinite(value) || value < 0.0) {
-    return Status::Error(std::string(name) + " must be finite and non-negative");
+    return error_from_owned_message(std::string(name) + " must be finite and non-negative");
   }
   return Status::OK();
 }
 
 Status validate_finite(const char *name, double value) {
   if (!std::isfinite(value)) {
-    return Status::Error(std::string(name) + " must be finite");
+    return error_from_owned_message(std::string(name) + " must be finite");
   }
   return Status::OK();
 }
 
 Status validate_probability(const char *name, double value) {
   if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
-    return Status::Error(std::string(name) + " must be within [0, 1]");
+    return error_from_owned_message(std::string(name) + " must be within [0, 1]");
   }
   return Status::OK();
 }
@@ -81,7 +85,7 @@ Status validate_probability(const char *name, double value) {
 Status validate_microsecond_delay_cap(const char *name, double value_ms) {
   constexpr double kMaxRepresentableDelayMs = static_cast<double>(std::numeric_limits<uint64>::max()) / 1000.0;
   if (value_ms > kMaxRepresentableDelayMs) {
-    return Status::Error(std::string(name) + " must fit into uint64 microseconds");
+    return error_from_owned_message(std::string(name) + " must fit into uint64 microseconds");
   }
   return Status::OK();
 }
@@ -89,20 +93,20 @@ Status validate_microsecond_delay_cap(const char *name, double value_ms) {
 Status validate_positive_range(const char *name, int32 min_value, int32 max_value, int32 lower_bound,
                                int32 upper_bound) {
   if (min_value < lower_bound || max_value > upper_bound) {
-    return Status::Error(std::string(name) + " is out of allowed bounds");
+    return error_from_owned_message(std::string(name) + " is out of allowed bounds");
   }
   if (min_value <= 0 || max_value <= 0) {
-    return Status::Error(std::string(name) + " must be positive");
+    return error_from_owned_message(std::string(name) + " must be positive");
   }
   if (min_value > max_value) {
-    return Status::Error(std::string(name) + " min must not exceed max");
+    return error_from_owned_message(std::string(name) + " min must not exceed max");
   }
   return Status::OK();
 }
 
 Status validate_size_t_range(const char *name, size_t value, size_t lower_bound, size_t upper_bound) {
   if (value < lower_bound || value > upper_bound) {
-    return Status::Error(std::string(name) + " is out of allowed bounds");
+    return error_from_owned_message(std::string(name) + " is out of allowed bounds");
   }
   return Status::OK();
 }
@@ -112,29 +116,29 @@ Status validate_drs_phase_model(const char *name, const DrsPhaseModel &model, in
   constexpr int32 kMaxSafeLocalJitter = (std::numeric_limits<int32>::max() - 1) / 2;
 
   if (model.bins.empty()) {
-    return Status::Error(std::string(name) + " must not be empty");
+    return error_from_owned_message(std::string(name) + " must not be empty");
   }
   if (model.max_repeat_run <= 0) {
-    return Status::Error(std::string(name) + " max_repeat_run must be positive");
+    return error_from_owned_message(std::string(name) + " max_repeat_run must be positive");
   }
   if (model.local_jitter < 0) {
-    return Status::Error(std::string(name) + " local_jitter must be non-negative");
+    return error_from_owned_message(std::string(name) + " local_jitter must be non-negative");
   }
   if (model.local_jitter > kMaxSafeLocalJitter) {
-    return Status::Error(std::string(name) + " local_jitter exceeds supported range");
+    return error_from_owned_message(std::string(name) + " local_jitter exceeds supported range");
   }
   uint64 total_weight = 0;
   for (size_t i = 0; i < model.bins.size(); i++) {
     const auto &bin = model.bins[i];
     if (bin.weight == 0) {
-      return Status::Error(std::string(name) + " bins must have positive weight");
+      return error_from_owned_message(std::string(name) + " bins must have positive weight");
     }
     if (bin.lo < min_payload_cap || bin.hi > max_payload_cap || bin.lo > bin.hi) {
-      return Status::Error(std::string(name) + " bins must stay within payload bounds");
+      return error_from_owned_message(std::string(name) + " bins must stay within payload bounds");
     }
     total_weight += bin.weight;
     if (total_weight > std::numeric_limits<uint32>::max()) {
-      return Status::Error(std::string(name) + " total bin weight exceeds selection accumulator");
+      return error_from_owned_message(std::string(name) + " total bin weight exceeds selection accumulator");
     }
   }
   return Status::OK();
@@ -387,10 +391,8 @@ StealthConfig StealthConfig::from_secret(const ProxySecret &secret, IRng &rng, i
                                          const RuntimePlatformHints &platform) {
   auto config = default_config(rng);
   if (secret.emulate_tls()) {
-#if !TD_DARWIN
     config.profile = pick_runtime_profile(secret.get_domain(), unix_time, platform);
     apply_profile_record_size_limit(config);
-#endif
     config.padding_policy.enabled = false;
     config.greeting_camouflage_policy = make_default_greeting_camouflage_policy();
     config.chaff_policy.enabled = true;

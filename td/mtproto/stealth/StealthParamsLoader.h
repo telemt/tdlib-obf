@@ -41,6 +41,7 @@ class StealthParamsLoader final {
   mutable std::mutex reload_mu_;
   Timestamp reload_cooldown_until_;
   size_t consecutive_reload_failures_{0};
+  bool has_successful_reload_{false};
 };
 
 }  // namespace stealth

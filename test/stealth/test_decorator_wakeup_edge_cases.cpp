@@ -75,4 +75,24 @@ TEST(DecoratorWakeupEdgeCases, ZeroDeadlineFromRingIsNotTreatedAsEmptyWakeupSent
   ASSERT_EQ(1, fixture.inner->write_calls);
 }
 
+TEST(DecoratorWakeupEdgeCases, NegativeInnerWakeupDoesNotStarveQueuedWritesAcrossRepeatedFlushes) {
+  auto fixture = make_test_decorator();
+  fixture.inner->shaping_wakeup_result = -1.0;
+
+  for (size_t i = 0; i < 16; i++) {
+    fixture.decorator->set_traffic_hint(td::mtproto::stealth::TrafficHint::BulkData);
+    fixture.decorator->write(make_test_buffer(32 + i), false);
+  }
+
+  ASSERT_EQ(0, fixture.inner->write_calls);
+
+  for (size_t iteration = 0; iteration < 64 && fixture.inner->write_calls == 0; iteration++) {
+    auto wakeup = fixture.decorator->get_shaping_wakeup();
+    fixture.decorator->pre_flush_write(wakeup);
+  }
+
+  ASSERT_TRUE(fixture.inner->write_calls > 0);
+  ASSERT_TRUE(fixture.decorator->get_shaping_wakeup() >= 0.0);
+}
+
 }  // namespace

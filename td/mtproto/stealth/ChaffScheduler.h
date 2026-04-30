@@ -23,7 +23,9 @@ class ChaffScheduler final {
   void note_chaff_emitted(double now, size_t bytes);
 
   bool should_emit(double now, bool has_pending_data, bool can_write) const;
+  bool should_emit_for_target(double now, bool has_pending_data, bool can_write, size_t target_bytes) const;
   double get_wakeup(double now, bool has_pending_data, bool can_write) const;
+  double get_wakeup_for_target(double now, bool has_pending_data, bool can_write, size_t target_bytes) const;
   int32 current_target_bytes() const;
 
  private:
@@ -39,7 +41,9 @@ class ChaffScheduler final {
   void disarm_due_to_invalid_time();
   void prune_budget_window(double now);
   double budget_resume_at(double now) const;
+  double budget_resume_at_for_target(double now, uint64 target_bytes) const;
   bool budget_allows(double now) const;
+  bool budget_allows_for_target(double now, uint64 target_bytes) const;
   int32 sample_target_bytes();
   double sample_interval_seconds();
 

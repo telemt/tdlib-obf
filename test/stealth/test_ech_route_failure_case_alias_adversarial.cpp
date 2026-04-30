@@ -193,4 +193,43 @@ TEST(EchRouteFailureCaseAliasAdversarial, PersistedFailureStateReloadsAcrossCase
   ASSERT_TRUE(decision.disabled_by_circuit_breaker);
 }
 
+TEST(EchRouteFailureCaseAliasAdversarial, LegacyUppercasePersistedKeyReloadsForLowercaseAlias) {
+  RuntimeCaseAliasGuard guard;
+  configure_threshold_one();
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  const td::int32 unix_time = 1712345678;
+  const td::string legacy_uppercase_key = "stealth_ech_cb#MIXED.CASE.EXAMPLE.COM";
+  store->set(legacy_uppercase_key, "3|1|300000|9223372036854770000");
+
+  auto decision = get_runtime_ech_decision("mixed.case.example.com", unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(decision.disabled_by_circuit_breaker);
+
+  ASSERT_TRUE(store->get(legacy_uppercase_key).empty());
+  ASSERT_FALSE(store->get("stealth_ech_cb#mixed.case.example.com").empty());
+}
+
+TEST(EchRouteFailureCaseAliasAdversarial, LegacyMixedCasePersistedKeyReloadsForMixedCaseAlias) {
+  RuntimeCaseAliasGuard guard;
+  configure_threshold_one();
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  const td::int32 unix_time = 1712345678;
+  const td::string mixed_case_destination = "MiXeD.Case.Example.com";
+  const td::string legacy_mixed_case_key = "stealth_ech_cb#" + mixed_case_destination;
+  store->set(legacy_mixed_case_key, "3|1|300000|9223372036854770000");
+
+  auto decision = get_runtime_ech_decision(mixed_case_destination, unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(decision.disabled_by_circuit_breaker);
+
+  ASSERT_TRUE(store->get(legacy_mixed_case_key).empty());
+  ASSERT_FALSE(store->get("stealth_ech_cb#mixed.case.example.com").empty());
+}
+
 }  // namespace

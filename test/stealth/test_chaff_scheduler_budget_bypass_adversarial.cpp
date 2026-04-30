@@ -3,15 +3,13 @@
 // telemt: https://github.com/telemt
 // telemt: https://t.me/telemtrs
 //
-// Adversarial tests: ChaffScheduler budget bypass and time-anomaly scenarios
+// Adversarial tests: ChaffScheduler budget hardening and time-anomaly scenarios
 //
-// Threat model 1 — record-size-exceeds-budget bypass:
-//   If pending_target_bytes_ > max_bytes_per_minute, budget_resume_at() can
-//   return 0.0 (allow immediate send) even though the single packet overshoots
-//   the per-minute limit.  An adversary who can inject a crafted runtime config
-//   (e.g. max_bytes_per_minute=1, record_size=16384) can effectively eliminate
-//   budget throttling for every first packet in a window.  These tests document
-//   and bound this behaviour.
+// Threat model 1 — record-size-exceeds-budget fail-open risk:
+//   If pending_target_bytes_ > max_bytes_per_minute and the budget window is
+//   empty, the scheduler must fail closed (block emission), not permit an
+//   oversized first packet. Otherwise a crafted config
+//   (e.g. max_bytes_per_minute=1, record_size=16384) can bypass throttling.
 //
 // Threat model 2 — backwards/non-monotone now:
 //   If the system clock jumps backwards (NTP correction, VM migration), earlier
@@ -56,25 +54,25 @@ StealthConfig make_chaff_config(size_t max_bytes_per_minute, td::int32 record_by
 }
 
 // -----------------------------------------------------------------------
-// Budget bypass: record_size > max_bytes_per_minute.  The scheduler allows
-// a single oversized packet through if the window is empty (by design), but
-// MUST NOT allow a second emission without waiting for the window to slide.
+// Oversized target hardening: record_size > max_bytes_per_minute must not be
+// emitted even on an empty budget window.
 // -----------------------------------------------------------------------
 
-TEST(ChaffSchedulerBudgetBypassAdversarial, SingleOversizedPacketAllowedWhenWindowEmpty) {
+TEST(ChaffSchedulerBudgetBypassAdversarial, SingleOversizedPacketBlockedWhenWindowEmpty) {
   // max_bytes_per_minute = 10, record_size = 5000 → record_size >> limit.
-  // The budget check: pending_bytes (5000) > byte_limit (10) → returns
-  // earliest_resume = 0.0 (window is empty) → budget_allows = true.
-  // This is documented bypass behaviour; the test pins the contract.
+  // Hardened contract: fail closed and defer emission instead of allowing
+  // an oversized first packet on an empty window.
   MockRng rng(1);
   auto config = make_chaff_config(10, 5000);
   IptController ipt(config.ipt_params, rng);
   ChaffScheduler sched(config, ipt, rng, 0.0);
 
   sched.note_activity(1.0);
-  // Get wakeup time (should schedule)
-  double wakeup = sched.get_wakeup(1.0, false, true);
-  ASSERT_TRUE(wakeup >= 0.0);
+  ASSERT_FALSE(sched.should_emit(120.0, false, true));
+
+  double wakeup = sched.get_wakeup(120.0, false, true);
+  ASSERT_TRUE(wakeup > 120.0);
+  ASSERT_TRUE(wakeup >= 180.0 - 1e-6);
   ASSERT_TRUE(std::isfinite(wakeup));
 }
 

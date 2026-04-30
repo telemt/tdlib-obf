@@ -65,6 +65,12 @@ ProfileWeights effective_profile_weights_for_platform(const RuntimeProfileSelect
   weights.chrome133 = desktop_weights->chrome133;
   weights.chrome131 = desktop_weights->chrome131;
   weights.chrome120 = desktop_weights->chrome120;
+  // Keep platform-specific lanes populated from the policy source of truth.
+  // Windows lanes inherit desktop_non_darwin desktop-family ratios.
+  weights.chrome147_windows = policy.desktop_non_darwin.chrome133;
+  weights.firefox149_windows = policy.desktop_non_darwin.firefox148;
+  // Legacy policy schema has no dedicated iOS Chromium slot.
+  weights.chrome147_ios_chromium = 0;
   weights.firefox148 = desktop_weights->firefox148;
   weights.safari26_3 = desktop_weights->safari26_3;
   weights.ios14 = policy.mobile.ios14;
@@ -165,15 +171,23 @@ std::mutex &runtime_params_storage_mutex() {
   return mu;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+Status
+error_from_owned_message(std::string message) {
+  return Status::Error(Slice(message.data(), message.size()));
+}
+
 Status validate_route_entry(Slice name, const RuntimeRoutePolicyEntry &entry, bool must_disable_ech) {
   if (entry.allow_quic) {
-    return Status::Error(name.str() + " must keep QUIC disabled");
+    return error_from_owned_message(name.str() + " must keep QUIC disabled");
   }
   if (must_disable_ech && entry.ech_mode != EchMode::Disabled) {
-    return Status::Error(name.str() + " must disable ECH");
+    return error_from_owned_message(name.str() + " must disable ECH");
   }
   if (!must_disable_ech && entry.ech_mode != EchMode::Disabled && entry.ech_mode != EchMode::Rfc9180Outer) {
-    return Status::Error(name.str() + " has unsupported ECH mode");
+    return error_from_owned_message(name.str() + " has unsupported ECH mode");
   }
   return Status::OK();
 }
@@ -201,18 +215,20 @@ Status validate_allowed_profile_weights_for_platform(const ProfileWeights &weigh
   if (platform.device_class == DeviceClass::Mobile) {
     switch (platform.mobile_os) {
       case MobileOs::IOS:
-        allowed_total = weights.ios14;
+        allowed_total = weights.ios14 + weights.chrome147_ios_chromium;
         break;
       case MobileOs::Android:
         allowed_total = weights.android11_okhttp_advisory;
         break;
       case MobileOs::None:
       default:
-        allowed_total = weights.ios14 + weights.android11_okhttp_advisory;
+        allowed_total = weights.ios14 + weights.chrome147_ios_chromium + weights.android11_okhttp_advisory;
         break;
     }
   } else if (platform.desktop_os == DesktopOs::Darwin) {
     allowed_total = weights.chrome133 + weights.chrome131 + weights.chrome120 + weights.firefox148 + weights.safari26_3;
+  } else if (platform.desktop_os == DesktopOs::Windows) {
+    allowed_total = weights.chrome147_windows + weights.firefox149_windows;
   } else {
     allowed_total = weights.chrome133 + weights.chrome131 + weights.chrome120 + weights.firefox148;
   }
@@ -250,6 +266,27 @@ uint8 profile_weight_for_runtime_validation(const ProfileWeights &weights, Brows
       UNREACHABLE();
       return 0;
   }
+}
+
+Status validate_transport_confidence_profile_coverage(const StealthRuntimeParams &params) {
+  if (params.transport_confidence != TransportConfidence::Unknown) {
+    return Status::OK();
+  }
+
+  uint32 tls_only_allowed_total = 0;
+  auto allowed_profiles = allowed_profiles_for_platform(params.platform_hints);
+  for (auto profile : allowed_profiles) {
+    if (profile_fixture_metadata(profile).transport_claim_level != TransportClaimLevel::TlsOnly) {
+      continue;
+    }
+    tls_only_allowed_total += profile_weight_for_runtime_validation(params.profile_weights, profile);
+  }
+
+  if (tls_only_allowed_total == 0) {
+    return Status::Error(
+        "transport_confidence.unknown requires at least one tls-only profile weight for platform_hints");
+  }
+  return Status::OK();
 }
 
 Status validate_release_mode_profile_gating(const StealthRuntimeParams &params) {
@@ -296,6 +333,7 @@ Status validate_runtime_stealth_params(const StealthRuntimeParams &params) noexc
   TRY_STATUS(validate_runtime_profile_selection_policy(params.profile_selection));
   TRY_STATUS(validate_profile_weights(params.profile_weights));
   TRY_STATUS(validate_allowed_profile_weights_for_platform(params.profile_weights, params.platform_hints));
+  TRY_STATUS(validate_transport_confidence_profile_coverage(params));
   TRY_STATUS(validate_release_mode_profile_gating(params));
   TRY_STATUS(validate_route_entry("route_policy.unknown", params.route_policy.unknown, true));
   TRY_STATUS(validate_route_entry("route_policy.ru", params.route_policy.ru, true));

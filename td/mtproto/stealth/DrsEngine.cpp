@@ -7,6 +7,8 @@
 #include "td/mtproto/stealth/DrsEngine.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace td {
 namespace mtproto {
@@ -57,7 +59,9 @@ int32 DrsEngine::next_payload_cap(TrafficHint hint) {
     return policy_.min_payload_cap;
   }
   if (normalized_hint == TrafficHint::BulkData) {
-    return sample_from_phase(policy_.steady_state);
+    // Bulk path intentionally bypasses interactive run/transition state so
+    // large steady-state samples cannot poison subsequent interactive anchors.
+    return sample_weighted_bin_value(policy_.steady_state);
   }
   return sample_from_phase(phase_model());
 }
@@ -66,8 +70,15 @@ void DrsEngine::notify_bytes_written(size_t bytes) {
   if (bytes == 0) {
     return;
   }
-  records_in_phase_++;
-  bytes_in_phase_ += bytes;
+  if (records_in_phase_ < std::numeric_limits<size_t>::max()) {
+    records_in_phase_++;
+  }
+  auto max_size = std::numeric_limits<size_t>::max();
+  if (bytes_in_phase_ > max_size - bytes) {
+    bytes_in_phase_ = max_size;
+  } else {
+    bytes_in_phase_ += bytes;
+  }
   maybe_advance_phase();
 }
 
@@ -89,6 +100,9 @@ void DrsEngine::prime_with_payload_cap(int32 payload_cap) noexcept {
 }
 
 bool DrsEngine::should_reset_after_idle(double idle_seconds) const noexcept {
+  if (!std::isfinite(idle_seconds) || idle_seconds < 0.0) {
+    return true;
+  }
   return idle_seconds * 1000.0 >= static_cast<double>(sampled_idle_reset_ms_);
 }
 

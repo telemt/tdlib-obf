@@ -59,23 +59,35 @@ void ChaffScheduler::note_chaff_emitted(double now, size_t bytes) {
 }
 
 bool ChaffScheduler::should_emit(double now, bool has_pending_data, bool can_write) const {
-  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || pending_target_bytes_ <= 0 ||
-      !is_finite_time(now) || !is_finite_time(next_send_at_)) {
+  auto target_bytes = pending_target_bytes_ > 0 ? static_cast<size_t>(pending_target_bytes_) : 0;
+  return should_emit_for_target(now, has_pending_data, can_write, target_bytes);
+}
+
+bool ChaffScheduler::should_emit_for_target(double now, bool has_pending_data, bool can_write,
+                                            size_t target_bytes) const {
+  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || target_bytes == 0 || !is_finite_time(now) ||
+      !is_finite_time(next_send_at_)) {
     return false;
   }
   if (next_send_at_ == 0.0 || now + 1e-9 < next_send_at_) {
     return false;
   }
-  return budget_allows(now);
+  return budget_allows_for_target(now, static_cast<uint64>(target_bytes));
 }
 
 double ChaffScheduler::get_wakeup(double now, bool has_pending_data, bool can_write) const {
-  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || pending_target_bytes_ <= 0 ||
-      next_send_at_ == 0.0 || !is_finite_time(now) || !is_finite_time(next_send_at_)) {
+  auto target_bytes = pending_target_bytes_ > 0 ? static_cast<size_t>(pending_target_bytes_) : 0;
+  return get_wakeup_for_target(now, has_pending_data, can_write, target_bytes);
+}
+
+double ChaffScheduler::get_wakeup_for_target(double now, bool has_pending_data, bool can_write,
+                                             size_t target_bytes) const {
+  if (!config_.chaff_policy.enabled || has_pending_data || !can_write || target_bytes == 0 || next_send_at_ == 0.0 ||
+      !is_finite_time(now) || !is_finite_time(next_send_at_)) {
     return 0.0;
   }
   auto wakeup = next_send_at_;
-  auto resume_at = budget_resume_at(now);
+  auto resume_at = budget_resume_at_for_target(now, static_cast<uint64>(target_bytes));
   if (resume_at != 0.0) {
     wakeup = max_double(wakeup, resume_at);
   }
@@ -126,6 +138,11 @@ void ChaffScheduler::prune_budget_window(double now) {
 }
 
 double ChaffScheduler::budget_resume_at(double now) const {
+  auto pending_target = pending_target_bytes_ > 0 ? static_cast<uint64>(pending_target_bytes_) : uint64{0};
+  return budget_resume_at_for_target(now, pending_target);
+}
+
+double ChaffScheduler::budget_resume_at_for_target(double now, uint64 target_bytes) const {
   uint64 bytes = 0;
   double earliest_resume = 0.0;
   const auto max_uint64 = std::numeric_limits<uint64>::max();
@@ -143,21 +160,33 @@ double ChaffScheduler::budget_resume_at(double now) const {
       earliest_resume = sample.at + kBudgetWindowSeconds;
     }
   }
-  if (pending_target_bytes_ <= 0) {
+  if (target_bytes == 0) {
     return 0.0;
   }
-  const auto pending_bytes = static_cast<uint64>(pending_target_bytes_);
-  if (pending_bytes > byte_limit) {
+  if (target_bytes > byte_limit) {
+    if (earliest_resume == 0.0) {
+      // Unsatisfiable target on an empty window: fail closed and defer retry.
+      auto deferred_resume = now + kBudgetWindowSeconds;
+      if (!is_finite_time(deferred_resume) || deferred_resume <= now) {
+        deferred_resume = std::numeric_limits<double>::max();
+      }
+      return deferred_resume;
+    }
     return earliest_resume;
   }
-  if (bytes <= byte_limit && pending_bytes <= byte_limit - bytes) {
+  if (bytes <= byte_limit && target_bytes <= byte_limit - bytes) {
     return 0.0;
   }
   return earliest_resume;
 }
 
 bool ChaffScheduler::budget_allows(double now) const {
-  return budget_resume_at(now) == 0.0;
+  auto pending_target = pending_target_bytes_ > 0 ? static_cast<uint64>(pending_target_bytes_) : uint64{0};
+  return budget_allows_for_target(now, pending_target);
+}
+
+bool ChaffScheduler::budget_allows_for_target(double now, uint64 target_bytes) const {
+  return budget_resume_at_for_target(now, target_bytes) == 0.0;
 }
 
 int32 ChaffScheduler::sample_target_bytes() {

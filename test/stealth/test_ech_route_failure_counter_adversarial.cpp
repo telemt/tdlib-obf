@@ -32,7 +32,11 @@
 
 #include "td/mtproto/ProxySecret.h"
 
+#include "test/stealth/ech_route_failure_store_test_utils.h"
+
 #include "td/utils/tests.h"
+
+#include <limits>
 
 namespace {
 
@@ -79,6 +83,36 @@ TEST(EchRouteFailureCounterAdversarial, CounterSaturationNeverReenablesEch) {
   // After 20 failures the circuit breaker must be tripped.
   auto final_decision = get_runtime_ech_decision(dest, ts, non_ru());
   ASSERT_TRUE(final_decision.ech_mode == EchMode::Disabled);
+}
+
+// -----------------------------------------------------------------------
+// Persisted near-max counter must not wrap and re-enable ECH after one
+// additional failure update.
+// -----------------------------------------------------------------------
+
+TEST(EchRouteFailureCounterAdversarial, PersistedNearMaxCounterNeverReenablesEchAfterFailureUpdate) {
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+
+  auto store = std::make_shared<td::mtproto::test::EchRouteFailureMemoryKeyValue>();
+  td::mtproto::test::ScopedRuntimeEchStore scoped_store(store);
+
+  const td::Slice destination("persist-overflow.example.com");
+  const td::int32 unix_time = 1712345678;
+
+  store->set(td::mtproto::test::canonical_store_key(destination),
+             td::mtproto::test::serialize_store_entry(std::numeric_limits<td::uint32>::max(),
+                                                      /*blocked=*/false,
+                                                      /*remaining_ms=*/60000, td::mtproto::test::now_system_ms()));
+
+  auto decision_before = get_runtime_ech_decision(destination, unix_time, non_ru());
+  ASSERT_TRUE(decision_before.ech_mode == EchMode::Disabled);
+
+  note_runtime_ech_failure(destination, unix_time);
+
+  auto decision_after = get_runtime_ech_decision(destination, unix_time, non_ru());
+  ASSERT_TRUE(decision_after.ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(decision_after.disabled_by_circuit_breaker);
 }
 
 // -----------------------------------------------------------------------

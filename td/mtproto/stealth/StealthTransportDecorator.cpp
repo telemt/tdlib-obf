@@ -65,6 +65,14 @@ uint64 saturating_add(uint64 left, uint64 right) {
   return left + right;
 }
 
+bool is_finite_time(double value) {
+  return std::isfinite(value);
+}
+
+double sanitize_time_or_zero(double value) {
+  return is_finite_time(value) ? value : 0.0;
+}
+
 int32 adjust_tls_record_size_for_payload_overhead(int32 payload_cap_bytes, TransportPayloadOverhead payload_overhead) {
   auto safe_overhead = std::max<int64>(0, payload_overhead.bytes);
   auto adjusted = static_cast<int64>(payload_cap_bytes) + safe_overhead;
@@ -318,13 +326,17 @@ void StealthTransportDecorator::note_inbound_response(size_t bytes) {
 }
 
 void StealthTransportDecorator::clear_stale_queued_response_jitter() {
-  auto now = clock_->now();
+  auto now = sanitize_time_or_zero(clock_->now());
   auto clear_pending_jitter = [now](ShaperPendingWrite &pending_write) {
     if (pending_write.response_jitter_delay_us == 0) {
       return;
     }
     auto jitter_seconds = static_cast<double>(pending_write.response_jitter_delay_us) / 1e6;
-    auto adjusted_send_at = pending_write.send_at - jitter_seconds;
+    auto sanitized_send_at = sanitize_time_or_zero(pending_write.send_at);
+    auto adjusted_send_at = sanitized_send_at - jitter_seconds;
+    if (!is_finite_time(adjusted_send_at)) {
+      adjusted_send_at = now;
+    }
     pending_write.send_at = adjusted_send_at < now ? now : adjusted_send_at;
     pending_write.response_jitter_delay_us = 0;
   };
@@ -360,7 +372,11 @@ void StealthTransportDecorator::write(BufferWriter &&message, bool quick_ack) {
     delay_us = saturating_add(delay_us, response_jitter_delay_us);
     pending_post_response_jitter_us_ = 0;
   }
-  auto send_at = clock_->now() + static_cast<double>(delay_us) / 1e6;
+  auto now = sanitize_time_or_zero(clock_->now());
+  auto send_at = now + static_cast<double>(delay_us) / 1e6;
+  if (!is_finite_time(send_at)) {
+    send_at = now;
+  }
   ShaperPendingWrite pending_write{std::move(message), quick_ack, send_at, hint, response_jitter_delay_us};
   if (queued_write_count() >= config_.ring_capacity) {
     overflow_invariant_hits_++;
@@ -423,6 +439,11 @@ void StealthTransportDecorator::configure_packet_info(PacketInfo *packet_info) c
 }
 
 void StealthTransportDecorator::pre_flush_write(double now) {
+  if (!is_finite_time(now)) {
+    inner_->pre_flush_write(0.0);
+    return;
+  }
+
   if (!has_manual_record_size_override_ && has_drs_activity_ && queued_write_count() != 0 &&
       drs_.should_reset_after_idle(now - last_drs_activity_at_)) {
     drs_.notify_idle();
@@ -486,6 +507,10 @@ void StealthTransportDecorator::pre_flush_write(double now) {
     // the callback always runs at least once, so batch is always populated.
     CHECK(batch.has_value());
 
+    const auto normalized_batch_hint = normalize_drs_hint(batch->items().front().hint);
+    const bool should_update_drs =
+        normalized_batch_hint != TrafficHint::Keepalive && normalized_batch_hint != TrafficHint::AuthHandshake;
+
     size_t written_bytes = 0;
     if (batch->can_coalesce()) {
       inner_->set_traffic_hint(batch->items().front().hint);
@@ -515,7 +540,7 @@ void StealthTransportDecorator::pre_flush_write(double now) {
       }
     }
 
-    if (!has_manual_record_size_override_ && !batch_uses_greeting) {
+    if (!has_manual_record_size_override_ && !batch_uses_greeting && should_update_drs) {
       drs_.notify_bytes_written(account_transport_payload_overhead(written_bytes, batch_payload_overhead));
       has_drs_activity_ = true;
       last_drs_activity_at_ = now;
@@ -525,15 +550,26 @@ void StealthTransportDecorator::pre_flush_write(double now) {
   };
 
   auto write_idle_chaff = [this, now]() {
-    if (!chaff_scheduler_.should_emit(now, queued_write_count() != 0, inner_->can_write())) {
+    auto sampled_target_bytes = chaff_scheduler_.current_target_bytes();
+    if (sampled_target_bytes <= 0) {
       return false;
     }
 
-    auto target_bytes = apply_small_record_budget(clamp_tls_record_size(chaff_scheduler_.current_target_bytes()));
+    auto target_bytes = apply_small_record_budget(clamp_tls_record_size(sampled_target_bytes));
+    auto budget_target_bytes = static_cast<size_t>(target_bytes);
+    TransportPayloadOverhead payload_overhead;
+    if (inner_->supports_tls_record_sizing()) {
+      payload_overhead.bytes = inner_->tls_record_sizing_payload_overhead();
+      budget_target_bytes = account_transport_payload_overhead(budget_target_bytes, payload_overhead);
+    }
+
+    if (!chaff_scheduler_.should_emit_for_target(now, queued_write_count() != 0, inner_->can_write(),
+                                                 budget_target_bytes)) {
+      return false;
+    }
+
     auto effective_record_size = target_bytes;
     if (inner_->supports_tls_record_sizing()) {
-      TransportPayloadOverhead payload_overhead;
-      payload_overhead.bytes = inner_->tls_record_sizing_payload_overhead();
       effective_record_size = adjust_tls_record_size_for_payload_overhead(target_bytes, payload_overhead);
       inner_->set_max_tls_record_size(effective_record_size);
       inner_->set_stealth_record_padding_target(target_bytes);
@@ -547,7 +583,7 @@ void StealthTransportDecorator::pre_flush_write(double now) {
     BufferWriter chaff(Slice(), inner_->max_prepend_size(), append_reserve);
     inner_->write(std::move(chaff), false);
     note_record_target(target_bytes);
-    chaff_scheduler_.note_chaff_emitted(now, static_cast<size_t>(target_bytes));
+    chaff_scheduler_.note_chaff_emitted(now, budget_target_bytes);
     return true;
   };
 
@@ -591,24 +627,41 @@ double StealthTransportDecorator::get_shaping_wakeup() const {
   bool has_wakeup = false;
   double wakeup = 0.0;
   if (!bypass_ring_.empty()) {
-    wakeup = bypass_ring_.earliest_deadline();
-    has_wakeup = true;
-  }
-  if (!ring_.empty()) {
-    auto ring_wakeup = ring_.earliest_deadline();
-    if (!has_wakeup || ring_wakeup < wakeup) {
-      wakeup = ring_wakeup;
+    auto bypass_wakeup = bypass_ring_.earliest_deadline();
+    if (is_finite_time(bypass_wakeup) || bypass_wakeup == 0.0) {
+      wakeup = bypass_wakeup;
       has_wakeup = true;
     }
   }
-  if (inner_wakeup != 0.0) {
+  if (!ring_.empty()) {
+    auto ring_wakeup = ring_.earliest_deadline();
+    if (is_finite_time(ring_wakeup) || ring_wakeup == 0.0) {
+      if (!has_wakeup || ring_wakeup < wakeup) {
+        wakeup = ring_wakeup;
+        has_wakeup = true;
+      }
+    }
+  }
+  if (is_finite_time(inner_wakeup) && inner_wakeup > 0.0) {
     if (!has_wakeup || inner_wakeup < wakeup) {
       wakeup = inner_wakeup;
       has_wakeup = true;
     }
   }
-  auto chaff_wakeup = chaff_scheduler_.get_wakeup(clock_->now(), queued_write_count() != 0, inner_->can_write());
-  if (chaff_wakeup != 0.0) {
+  double chaff_wakeup = 0.0;
+  auto chaff_target_bytes = chaff_scheduler_.current_target_bytes();
+  if (chaff_target_bytes > 0) {
+    auto effective_chaff_target = apply_small_record_budget(clamp_tls_record_size(chaff_target_bytes));
+    auto budget_target_bytes = static_cast<size_t>(effective_chaff_target);
+    if (inner_->supports_tls_record_sizing()) {
+      TransportPayloadOverhead payload_overhead;
+      payload_overhead.bytes = inner_->tls_record_sizing_payload_overhead();
+      budget_target_bytes = account_transport_payload_overhead(budget_target_bytes, payload_overhead);
+    }
+    chaff_wakeup = chaff_scheduler_.get_wakeup_for_target(clock_->now(), queued_write_count() != 0, inner_->can_write(),
+                                                          budget_target_bytes);
+  }
+  if (is_finite_time(chaff_wakeup) && chaff_wakeup > 0.0) {
     if (!has_wakeup || chaff_wakeup < wakeup) {
       wakeup = chaff_wakeup;
       has_wakeup = true;

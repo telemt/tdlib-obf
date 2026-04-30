@@ -144,4 +144,36 @@ TEST(DecoratorDrs, IdleGapResetsBackToSlowStartCap) {
   ASSERT_EQ(900, fixture.inner->max_tls_record_sizes.back());
 }
 
+TEST(DecoratorDrs, KeepaliveWritesDoNotAdvanceInteractivePhaseState) {
+  auto fixture = make_test_decorator();
+
+  for (int i = 0; i < 3; i++) {
+    fixture.decorator->set_traffic_hint(TrafficHint::Keepalive);
+    fixture.decorator->write(make_test_buffer("k"), false);
+    fixture.decorator->pre_flush_write(fixture.clock->now());
+  }
+
+  fixture.decorator->set_traffic_hint(TrafficHint::Interactive);
+  fixture.decorator->write(make_test_buffer("i"), false);
+  fixture.decorator->pre_flush_write(fixture.clock->now());
+
+  ASSERT_EQ(900, fixture.inner->max_tls_record_sizes.back());
+}
+
+TEST(DecoratorDrs, AuthHandshakeWritesDoNotAdvanceInteractivePhaseState) {
+  auto fixture = make_test_decorator();
+
+  for (int i = 0; i < 3; i++) {
+    fixture.decorator->set_traffic_hint(TrafficHint::AuthHandshake);
+    fixture.decorator->write(make_test_buffer("a"), false);
+    fixture.decorator->pre_flush_write(fixture.clock->now());
+  }
+
+  fixture.decorator->set_traffic_hint(TrafficHint::Interactive);
+  fixture.decorator->write(make_test_buffer("i"), false);
+  fixture.decorator->pre_flush_write(fixture.clock->now());
+
+  ASSERT_EQ(900, fixture.inner->max_tls_record_sizes.back());
+}
+
 }  // namespace

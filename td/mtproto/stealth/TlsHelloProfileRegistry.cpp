@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <limits>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -245,6 +246,24 @@ string normalized_runtime_destination_key(Slice destination) {
   return key;
 }
 
+string runtime_destination_key_preserving_case(Slice destination) {
+  auto key = destination.substr(0, ProxySecret::MAX_DOMAIN_LENGTH).str();
+  while (!key.empty() && key.back() == '.') {
+    key.pop_back();
+  }
+  return key;
+}
+
+string uppercase_runtime_destination_key(Slice destination) {
+  auto key = normalized_runtime_destination_key(destination);
+  for (auto &ch : key) {
+    if ('a' <= ch && ch <= 'z') {
+      ch = static_cast<char>(ch - 'a' + 'A');
+    }
+  }
+  return key;
+}
+
 uint32 legacy_route_failure_bucket(int32 unix_time) {
   auto unix_time64 = static_cast<int64>(unix_time);
   if (unix_time64 < 0) {
@@ -269,18 +288,39 @@ td::vector<string> route_failure_store_keys_for_lookup(Slice destination, int32 
 
   td::vector<string> keys;
   auto canonical_destination_key = normalized_runtime_destination_key(destination);
+  auto preserved_destination_key = runtime_destination_key_preserving_case(destination);
+  auto uppercase_destination_key = uppercase_runtime_destination_key(destination);
   auto max_alias_dots = ProxySecret::MAX_DOMAIN_LENGTH > canonical_destination_key.size()
                             ? ProxySecret::MAX_DOMAIN_LENGTH - canonical_destination_key.size()
                             : 0;
-  keys.reserve(1 + max_alias_dots);
-  keys.push_back(kRuntimeEchStoreKeyPrefix.str() + canonical_destination_key);
+  td::vector<string> destination_variants;
+  destination_variants.reserve(3);
+  destination_variants.push_back(canonical_destination_key);
+  if (preserved_destination_key != canonical_destination_key &&
+      preserved_destination_key != uppercase_destination_key) {
+    destination_variants.push_back(preserved_destination_key);
+  }
+  if (uppercase_destination_key != canonical_destination_key &&
+      uppercase_destination_key != preserved_destination_key) {
+    destination_variants.push_back(uppercase_destination_key);
+  }
 
-  if (!canonical_destination_key.empty()) {
-    auto dotted_destination_key = canonical_destination_key;
-    for (size_t dots = 1; dots <= max_alias_dots; dots++) {
-      dotted_destination_key += '.';
-      keys.push_back(kRuntimeEchStoreKeyPrefix.str() + dotted_destination_key);
+  auto variant_count = destination_variants.size();
+  keys.reserve((1 + max_alias_dots) * variant_count);
+
+  auto add_destination_keys = [&](const string &destination_key) {
+    keys.push_back(kRuntimeEchStoreKeyPrefix.str() + destination_key);
+    if (!destination_key.empty()) {
+      auto dotted_destination_key = destination_key;
+      for (size_t dots = 1; dots <= max_alias_dots; dots++) {
+        dotted_destination_key += '.';
+        keys.push_back(kRuntimeEchStoreKeyPrefix.str() + dotted_destination_key);
+      }
     }
+  };
+
+  for (const auto &destination_key : destination_variants) {
+    add_destination_keys(destination_key);
   }
   return keys;
 }
@@ -288,26 +328,43 @@ td::vector<string> route_failure_store_keys_for_lookup(Slice destination, int32 
 td::vector<string> legacy_route_failure_store_keys_for_lookup(Slice destination, int32 unix_time) {
   auto bucket = legacy_route_failure_bucket(unix_time);
   auto canonical_destination_key = normalized_runtime_destination_key(destination);
+  auto preserved_destination_key = runtime_destination_key_preserving_case(destination);
+  auto uppercase_destination_key = uppercase_runtime_destination_key(destination);
   auto max_alias_dots = ProxySecret::MAX_DOMAIN_LENGTH > canonical_destination_key.size()
                             ? ProxySecret::MAX_DOMAIN_LENGTH - canonical_destination_key.size()
                             : 0;
 
   td::vector<string> keys;
-  keys.reserve((1 + max_alias_dots) * (bucket > 0 ? 2 : 1));
+  td::vector<string> destination_variants;
+  destination_variants.reserve(3);
+  destination_variants.push_back(canonical_destination_key);
+  if (preserved_destination_key != canonical_destination_key &&
+      preserved_destination_key != uppercase_destination_key) {
+    destination_variants.push_back(preserved_destination_key);
+  }
+  if (uppercase_destination_key != canonical_destination_key &&
+      uppercase_destination_key != preserved_destination_key) {
+    destination_variants.push_back(uppercase_destination_key);
+  }
 
-  auto add_bucket_keys = [&](Slice destination_key) {
-    keys.push_back(kRuntimeEchStoreKeyPrefix.str() + destination_key.str() + "|" + std::to_string(bucket));
+  auto variant_count = destination_variants.size();
+  keys.reserve((1 + max_alias_dots) * (bucket > 0 ? 2 : 1) * variant_count);
+
+  auto add_bucket_keys = [&](const string &destination_key) {
+    keys.push_back(kRuntimeEchStoreKeyPrefix.str() + destination_key + "|" + std::to_string(bucket));
     if (bucket > 0) {
-      keys.push_back(kRuntimeEchStoreKeyPrefix.str() + destination_key.str() + "|" + std::to_string(bucket - 1));
+      keys.push_back(kRuntimeEchStoreKeyPrefix.str() + destination_key + "|" + std::to_string(bucket - 1));
     }
   };
 
-  add_bucket_keys(canonical_destination_key);
-  if (!canonical_destination_key.empty()) {
-    auto dotted_destination_key = canonical_destination_key;
-    for (size_t dots = 1; dots <= max_alias_dots; dots++) {
-      dotted_destination_key += '.';
-      add_bucket_keys(dotted_destination_key);
+  for (const auto &destination_key : destination_variants) {
+    add_bucket_keys(destination_key);
+    if (!destination_key.empty()) {
+      auto dotted_destination_key = destination_key;
+      for (size_t dots = 1; dots <= max_alias_dots; dots++) {
+        dotted_destination_key += '.';
+        add_bucket_keys(dotted_destination_key);
+      }
     }
   }
   return keys;
@@ -655,7 +712,9 @@ void note_runtime_ech_failure(Slice destination, int32 unix_time) {
   if (entry.disabled_until && entry.disabled_until.is_in_past()) {
     entry = RouteFailureCacheEntry{};
   }
-  entry.state.recent_ech_failures++;
+  if (entry.state.recent_ech_failures < std::numeric_limits<uint32>::max()) {
+    entry.state.recent_ech_failures++;
+  }
   entry.disabled_until = Timestamp::in(runtime_params.route_failure.ech_disable_ttl_seconds);
   if (entry.state.recent_ech_failures >= runtime_params.route_failure.ech_failure_threshold) {
     entry.state.ech_block_suspected = true;

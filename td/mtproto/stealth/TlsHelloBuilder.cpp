@@ -197,16 +197,10 @@ string build_runtime_tls_client_hello(string domain, Slice secret, int32 unix_ti
   CHECK(!domain.empty());
   CHECK(secret.size() == 16);
 
-#if TD_DARWIN
-  return build_default_tls_client_hello(std::move(domain), secret, unix_time, route_hints, rng);
-#else
   auto platform = default_runtime_platform_hints();
   auto profile = pick_runtime_profile(domain, unix_time, platform);
   auto ech_mode = get_runtime_ech_decision(domain, unix_time, route_hints).ech_mode;
-  // Runtime path is the production proxy hot path; force ALPN to
-  // `http/1.1` only to match the proxy contract.
-  return build_tls_hello_impl(std::move(domain), secret, unix_time, profile, ech_mode, rng, /*proxy_mode=*/true);
-#endif
+  return build_proxy_tls_client_hello_for_profile(std::move(domain), secret, unix_time, profile, ech_mode, rng);
 }
 
 string build_runtime_tls_client_hello(string domain, Slice secret, int32 unix_time,
