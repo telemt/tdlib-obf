@@ -45,7 +45,10 @@ TEST(TlsRuntimeCrossOsProfileRejection, UnknownConfidenceRejectsTransportStrongB
   params.profile_weights = ProfileWeights{};
   params.profile_weights.chrome133 = 100;
   params.profile_weights.chrome131 = 0;
-  params.profile_weights.chrome120 = 0;
+  // Keep one Linux TLS-only lane enabled to satisfy unknown-confidence
+  // runtime coverage validation, while still biasing strongly toward
+  // transport-strong Chrome133.
+  params.profile_weights.chrome120 = 1;
   params.profile_weights.firefox148 = 0;
   params.profile_weights.safari26_3 = 0;
   params.profile_weights.ios14 = 100;

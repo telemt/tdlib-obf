@@ -16,7 +16,7 @@
 namespace td {
 namespace mtproto {
 namespace stealth {
-namespace {
+namespace stealth_config_internal {
 
 constexpr int32 kMaxTlsPayloadCap = 16384;
 constexpr int32 kMinGreetingRecordSize = 80;
@@ -26,23 +26,27 @@ StealthConfigFactory transport_stealth_config_factory = nullptr;
 
 class SecureRng final : public IRng {
  public:
-  void fill_secure_bytes(MutableSlice dest) final {
-    Random::secure_bytes(dest);
+  void fill_secure_bytes(MutableSlice dest) override {
+    auto *data_ptr = dest.ubegin();
+    auto data_size = dest.size();
+    Random::secure_bytes(data_ptr, data_size);
   }
-
-  uint32 secure_uint32() final {
-    return Random::secure_uint32();
-  }
-
-  uint32 bounded(uint32 n) final {
-    CHECK(n != 0);
-    return Random::secure_uint32() % n;
-  }
+  uint32 secure_uint32() override;
+  uint32 bounded(uint32 n) override;
 };
+
+uint32 SecureRng::secure_uint32() {
+  return Random::secure_uint32();
+}
+
+uint32 SecureRng::bounded(uint32 n) {
+  CHECK(n != 0);
+  return Random::secure_uint32() % n;
+}
 
 class SystemClock final : public IClock {
  public:
-  double now() const final {
+  double now() const override {
     return Time::now_cached();
   }
 };
@@ -301,7 +305,28 @@ void apply_profile_record_size_limit(StealthConfig &config) {
       std::min(config.record_size_policy.slow_start_min, config.record_size_policy.slow_start_max);
 }
 
-}  // namespace
+}  // namespace stealth_config_internal
+using stealth_config_internal::apply_profile_record_size_limit;
+using stealth_config_internal::kMaxGreetingRecordSize;
+using stealth_config_internal::kMaxTlsPayloadCap;
+using stealth_config_internal::kMinGreetingRecordSize;
+using stealth_config_internal::make_default_chaff_policy;
+using stealth_config_internal::make_default_greeting_camouflage_policy;
+using stealth_config_internal::sample_phase_model_value;
+using stealth_config_internal::SecureRng;
+using stealth_config_internal::SystemClock;
+using stealth_config_internal::transport_stealth_config_factory;
+using stealth_config_internal::validate_bidirectional_correlation_policy;
+using stealth_config_internal::validate_chaff_policy;
+using stealth_config_internal::validate_drs_phase_model;
+using stealth_config_internal::validate_finite;
+using stealth_config_internal::validate_greeting_camouflage_policy;
+using stealth_config_internal::validate_microsecond_delay_cap;
+using stealth_config_internal::validate_non_negative_finite;
+using stealth_config_internal::validate_positive_range;
+using stealth_config_internal::validate_probability;
+using stealth_config_internal::validate_range;
+using stealth_config_internal::validate_size_t_range;
 
 unique_ptr<IRng> make_connection_rng() {
   return td::make_unique<SecureRng>();

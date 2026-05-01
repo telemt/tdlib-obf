@@ -16,6 +16,7 @@
 #include "td/utils/Time.h"
 
 #include <atomic>
+#include <cerrno>
 #include <cstdlib>
 #include <limits>
 #include <mutex>
@@ -25,7 +26,7 @@
 namespace td {
 namespace mtproto {
 namespace stealth {
-namespace {
+namespace tls_hello_profile_registry_internal {
 
 constexpr BrowserProfile ALL_PROFILES[] = {
     BrowserProfile::Chrome133,
@@ -392,9 +393,10 @@ bool parse_int64_str(Slice value, int64 &result) {
   if (text.empty()) {
     return false;
   }
+  errno = 0;
   char *end = nullptr;
   auto parsed = std::strtoll(text.c_str(), &end, 10);
-  if (end == nullptr || *end != '\0') {
+  if (end == nullptr || *end != '\0' || errno == ERANGE) {
     return false;
   }
   result = static_cast<int64>(parsed);
@@ -459,6 +461,17 @@ bool parse_route_failure_cache_entry(Slice serialized, RouteFailureCacheEntry &e
   return entry.state.recent_ech_failures != 0 || entry.state.ech_block_suspected;
 }
 
+bool clamp_route_failure_disabled_until(RouteFailureCacheEntry &entry, Timestamp max_disabled_until) {
+  if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
+    return false;
+  }
+  if (entry.disabled_until.at() <= max_disabled_until.at()) {
+    return false;
+  }
+  entry.disabled_until = max_disabled_until;
+  return true;
+}
+
 void persist_route_failure_cache_entry_locked(Slice destination, int32 unix_time, const RouteFailureCacheEntry &entry) {
   auto store = route_failure_store();
   if (store == nullptr) {
@@ -491,8 +504,8 @@ void erase_legacy_route_failure_cache_entries_locked(Slice destination, int32 un
   }
 }
 
-bool try_load_legacy_route_failure_cache_entry_locked(Slice destination, int32 unix_time,
-                                                      RouteFailureCacheEntry &entry) {
+bool try_load_legacy_route_failure_cache_entry_locked(Slice destination, int32 unix_time, RouteFailureCacheEntry &entry,
+                                                      bool *saw_expired_blocked_entry = nullptr) {
   auto store = route_failure_store();
   if (store == nullptr) {
     return false;
@@ -510,6 +523,9 @@ bool try_load_legacy_route_failure_cache_entry_locked(Slice destination, int32 u
       return true;
     }
     if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
+      if (saw_expired_blocked_entry != nullptr && entry.state.ech_block_suspected) {
+        *saw_expired_blocked_entry = true;
+      }
       store->erase(legacy_key);
       continue;
     }
@@ -521,7 +537,15 @@ bool try_load_legacy_route_failure_cache_entry_locked(Slice destination, int32 u
   return false;
 }
 
-RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int32 unix_time) {
+RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int32 unix_time,
+                                                         bool *saw_expired_blocked_entry,
+                                                         Timestamp max_disabled_until) {
+  auto mark_expired_blocked_entry = [&](const RouteFailureCacheEntry &entry) {
+    if (saw_expired_blocked_entry != nullptr && entry.state.ech_block_suspected) {
+      *saw_expired_blocked_entry = true;
+    }
+  };
+
   auto &cache = route_failure_cache();
   auto key = route_failure_cache_key(destination, unix_time);
   auto it = cache.find(key);
@@ -546,7 +570,9 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
         }
         return inserted.first->second.state;
       }
+      clamp_route_failure_disabled_until(entry, max_disabled_until);
       if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
+        mark_expired_blocked_entry(entry);
         store->erase(store_key);
         continue;
       }
@@ -557,14 +583,19 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       }
       return inserted.first->second.state;
     }
-    if (try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry)) {
+    if (try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry, saw_expired_blocked_entry)) {
+      clamp_route_failure_disabled_until(entry, max_disabled_until);
       auto inserted = cache.emplace(key, entry);
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
       return inserted.first->second.state;
     }
     return RouteFailureState{};
   }
+  if (clamp_route_failure_disabled_until(it->second, max_disabled_until)) {
+    persist_route_failure_cache_entry_locked(destination, unix_time, it->second);
+  }
   if (it->second.disabled_until && it->second.disabled_until.is_in_past()) {
+    mark_expired_blocked_entry(it->second);
     cache.erase(it);
 
     auto store = route_failure_store();
@@ -585,6 +616,7 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
           }
           return inserted.first->second.state;
         }
+        clamp_route_failure_disabled_until(entry, max_disabled_until);
         if (entry.disabled_until && !entry.disabled_until.is_in_past()) {
           auto inserted = cache.emplace(key, entry);
           persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
@@ -593,12 +625,14 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
           }
           return inserted.first->second.state;
         }
+        mark_expired_blocked_entry(entry);
         store->erase(store_key);
       }
     }
 
     RouteFailureCacheEntry entry;
-    if (try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry)) {
+    if (try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry, saw_expired_blocked_entry)) {
+      clamp_route_failure_disabled_until(entry, max_disabled_until);
       auto inserted = cache.emplace(key, entry);
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
       return inserted.first->second.state;
@@ -657,7 +691,7 @@ bool transport_confidence_allows_profile(const StealthRuntimeParams &runtime_par
   return profile_fixture_metadata(profile).transport_claim_level == TransportClaimLevel::TlsOnly;
 }
 
-}  // namespace
+}  // namespace tls_hello_profile_registry_internal
 
 RuntimePlatformHints default_runtime_platform_hints() noexcept {
   return get_runtime_stealth_params_snapshot().platform_hints;
@@ -665,7 +699,7 @@ RuntimePlatformHints default_runtime_platform_hints() noexcept {
 
 SelectionKey make_profile_selection_key(Slice destination, int32 unix_time) {
   SelectionKey key;
-  key.destination = normalized_runtime_destination_key(destination);
+  key.destination = tls_hello_profile_registry_internal::normalized_runtime_destination_key(destination);
 
   auto unix_time64 = static_cast<int64>(unix_time);
   if (unix_time64 < 0) {
@@ -682,13 +716,42 @@ SelectionKey make_profile_selection_key(Slice destination, int32 unix_time) {
 }
 
 void set_runtime_ech_failure_store(std::shared_ptr<KeyValueSyncInterface> store) {
-  auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
-  route_failure_store() = std::move(store);
-  route_failure_cache().clear();
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  tls_hello_profile_registry_internal::route_failure_store() = std::move(store);
+  tls_hello_profile_registry_internal::route_failure_cache().clear();
+}
+
+void reconcile_runtime_ech_failure_ttl(double ttl_seconds) {
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  auto max_disabled_until = Timestamp::in(ttl_seconds);
+
+  auto &cache = tls_hello_profile_registry_internal::route_failure_cache();
+  for (auto &it : cache) {
+    if (tls_hello_profile_registry_internal::clamp_route_failure_disabled_until(it.second, max_disabled_until)) {
+      tls_hello_profile_registry_internal::persist_route_failure_cache_entry_locked(it.first, 0, it.second);
+    }
+  }
+
+  auto store = tls_hello_profile_registry_internal::route_failure_store();
+  if (store == nullptr) {
+    return;
+  }
+
+  auto persisted_entries = store->prefix_get(tls_hello_profile_registry_internal::kRuntimeEchStoreKeyPrefix);
+  for (const auto &it : persisted_entries) {
+    tls_hello_profile_registry_internal::RouteFailureCacheEntry entry;
+    if (!tls_hello_profile_registry_internal::parse_route_failure_cache_entry(it.second, entry)) {
+      continue;
+    }
+    if (!tls_hello_profile_registry_internal::clamp_route_failure_disabled_until(entry, max_disabled_until)) {
+      continue;
+    }
+    store->set(it.first, tls_hello_profile_registry_internal::serialize_route_failure_cache_entry(entry));
+  }
 }
 
 void note_runtime_ech_decision(const RuntimeEchDecision &decision, bool ech_enabled) noexcept {
-  auto &counters = runtime_ech_counters();
+  auto &counters = tls_hello_profile_registry_internal::runtime_ech_counters();
   if (ech_enabled) {
     counters.enabled_total.fetch_add(1, std::memory_order_relaxed);
     if (decision.reenabled_after_ttl) {
@@ -707,10 +770,11 @@ void note_runtime_ech_decision(const RuntimeEchDecision &decision, bool ech_enab
 
 void note_runtime_ech_failure(Slice destination, int32 unix_time) {
   auto runtime_params = get_runtime_stealth_params_snapshot();
-  auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
-  auto &entry = route_failure_cache()[route_failure_cache_key(destination, unix_time)];
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  auto &entry = tls_hello_profile_registry_internal::route_failure_cache()
+      [tls_hello_profile_registry_internal::route_failure_cache_key(destination, unix_time)];
   if (entry.disabled_until && entry.disabled_until.is_in_past()) {
-    entry = RouteFailureCacheEntry{};
+    entry = tls_hello_profile_registry_internal::RouteFailureCacheEntry{};
   }
   if (entry.state.recent_ech_failures < std::numeric_limits<uint32>::max()) {
     entry.state.recent_ech_failures++;
@@ -720,24 +784,25 @@ void note_runtime_ech_failure(Slice destination, int32 unix_time) {
     entry.state.ech_block_suspected = true;
     entry.disabled_until = Timestamp::in(runtime_params.route_failure.ech_disable_ttl_seconds);
   }
-  erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
-  persist_route_failure_cache_entry_locked(destination, unix_time, entry);
+  tls_hello_profile_registry_internal::erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
+  tls_hello_profile_registry_internal::persist_route_failure_cache_entry_locked(destination, unix_time, entry);
 }
 
 void note_runtime_ech_success(Slice destination, int32 unix_time) {
-  auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
-  route_failure_cache().erase(route_failure_cache_key(destination, unix_time));
-  erase_route_failure_cache_entry_locked(destination, unix_time);
-  erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  tls_hello_profile_registry_internal::route_failure_cache().erase(
+      tls_hello_profile_registry_internal::route_failure_cache_key(destination, unix_time));
+  tls_hello_profile_registry_internal::erase_route_failure_cache_entry_locked(destination, unix_time);
+  tls_hello_profile_registry_internal::erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
 }
 
 void reset_runtime_ech_failure_state_for_tests() {
-  auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
-  route_failure_cache().clear();
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  tls_hello_profile_registry_internal::route_failure_cache().clear();
 }
 
 RuntimeEchCounters get_runtime_ech_counters() noexcept {
-  auto &counters = runtime_ech_counters();
+  auto &counters = tls_hello_profile_registry_internal::runtime_ech_counters();
   RuntimeEchCounters result;
   result.enabled_total = counters.enabled_total.load(std::memory_order_relaxed);
   result.disabled_route_total = counters.disabled_route_total.load(std::memory_order_relaxed);
@@ -747,7 +812,7 @@ RuntimeEchCounters get_runtime_ech_counters() noexcept {
 }
 
 void reset_runtime_ech_counters_for_tests() noexcept {
-  auto &counters = runtime_ech_counters();
+  auto &counters = tls_hello_profile_registry_internal::runtime_ech_counters();
   counters.enabled_total.store(0, std::memory_order_relaxed);
   counters.disabled_route_total.store(0, std::memory_order_relaxed);
   counters.disabled_cb_total.store(0, std::memory_order_relaxed);
@@ -755,46 +820,48 @@ void reset_runtime_ech_counters_for_tests() noexcept {
 }
 
 RuntimeProfileSelectionCounters get_runtime_profile_selection_counters() noexcept {
-  auto &counters = runtime_profile_selection_counters();
+  auto &counters = tls_hello_profile_registry_internal::runtime_profile_selection_counters();
   RuntimeProfileSelectionCounters result;
   result.advisory_blocked_total = counters.advisory_blocked_total.load(std::memory_order_relaxed);
   return result;
 }
 
 void reset_runtime_profile_selection_counters_for_tests() noexcept {
-  auto &counters = runtime_profile_selection_counters();
+  auto &counters = tls_hello_profile_registry_internal::runtime_profile_selection_counters();
   counters.advisory_blocked_total.store(0, std::memory_order_relaxed);
 }
 
 Span<BrowserProfile> all_profiles() {
-  return Span<BrowserProfile>(ALL_PROFILES);
+  return Span<BrowserProfile>(tls_hello_profile_registry_internal::ALL_PROFILES);
 }
 
 Span<BrowserProfile> allowed_profiles_for_platform(const RuntimePlatformHints &platform) {
   if (platform.device_class == DeviceClass::Mobile) {
     if (platform.mobile_os == MobileOs::IOS) {
-      return Span<BrowserProfile>(IOS_MOBILE_PROFILES);
+      return Span<BrowserProfile>(tls_hello_profile_registry_internal::IOS_MOBILE_PROFILES);
     }
     if (platform.mobile_os == MobileOs::Android) {
-      return Span<BrowserProfile>(ANDROID_MOBILE_PROFILES);
+      return Span<BrowserProfile>(tls_hello_profile_registry_internal::ANDROID_MOBILE_PROFILES);
     }
-    return Span<BrowserProfile>(MOBILE_PROFILES);
+    return Span<BrowserProfile>(tls_hello_profile_registry_internal::MOBILE_PROFILES);
   }
   if (platform.desktop_os == DesktopOs::Darwin) {
-    return Span<BrowserProfile>(DARWIN_DESKTOP_PROFILES);
+    return Span<BrowserProfile>(tls_hello_profile_registry_internal::DARWIN_DESKTOP_PROFILES);
   }
   if (platform.desktop_os == DesktopOs::Windows) {
-    return Span<BrowserProfile>(WINDOWS_DESKTOP_PROFILES);
+    return Span<BrowserProfile>(tls_hello_profile_registry_internal::WINDOWS_DESKTOP_PROFILES);
   }
-  return Span<BrowserProfile>(NON_DARWIN_DESKTOP_PROFILES);
+  return Span<BrowserProfile>(tls_hello_profile_registry_internal::NON_DARWIN_DESKTOP_PROFILES);
 }
 
 const ProfileSpec &profile_spec(BrowserProfile profile) {
-  return PROFILE_SPECS[profile_index(profile)];
+  return tls_hello_profile_registry_internal::PROFILE_SPECS[tls_hello_profile_registry_internal::profile_index(
+      profile)];
 }
 
 const ProfileFixtureMetadata &profile_fixture_metadata(BrowserProfile profile) {
-  return PROFILE_FIXTURES[profile_index(profile)];
+  return tls_hello_profile_registry_internal::PROFILE_FIXTURES[tls_hello_profile_registry_internal::profile_index(
+      profile)];
 }
 
 ProfileWeights default_profile_weights() {
@@ -809,14 +876,14 @@ BrowserProfile pick_profile_sticky(const ProfileWeights &weights, const Selectio
 
   uint32 total_weight = 0;
   for (auto profile : allowed_profiles) {
-    total_weight += profile_weight(weights, profile);
+    total_weight += tls_hello_profile_registry_internal::profile_weight(weights, profile);
   }
   CHECK(total_weight > 0);
 
-  auto roll = stable_selection_hash(key, platform) % total_weight;
+  auto roll = tls_hello_profile_registry_internal::stable_selection_hash(key, platform) % total_weight;
   uint32 cumulative_weight = 0;
   for (auto profile : allowed_profiles) {
-    cumulative_weight += profile_weight(weights, profile);
+    cumulative_weight += tls_hello_profile_registry_internal::profile_weight(weights, profile);
     if (roll < cumulative_weight) {
       return profile;
     }
@@ -836,10 +903,10 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
 
   uint32 total_weight = 0;
   for (auto profile : allowed_profiles) {
-    if (!transport_confidence_allows_profile(runtime_params, profile)) {
+    if (!tls_hello_profile_registry_internal::transport_confidence_allows_profile(runtime_params, profile)) {
       continue;
     }
-    auto weight = profile_weight(weights, profile);
+    auto weight = tls_hello_profile_registry_internal::profile_weight(weights, profile);
     if (weight == 0) {
       continue;
     }
@@ -849,7 +916,7 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
 
   if (confidence_allowed_profiles.empty()) {
     for (auto profile : allowed_profiles) {
-      if (transport_confidence_allows_profile(runtime_params, profile)) {
+      if (tls_hello_profile_registry_internal::transport_confidence_allows_profile(runtime_params, profile)) {
         return profile;
       }
     }
@@ -857,11 +924,11 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
   }
   CHECK(total_weight > 0);
 
-  auto roll = stable_selection_hash(key, platform) % total_weight;
+  auto roll = tls_hello_profile_registry_internal::stable_selection_hash(key, platform) % total_weight;
   uint32 cumulative_weight = 0;
   BrowserProfile baseline_profile = confidence_allowed_profiles.back();
   for (auto profile : confidence_allowed_profiles) {
-    cumulative_weight += profile_weight(weights, profile);
+    cumulative_weight += tls_hello_profile_registry_internal::profile_weight(weights, profile);
     if (roll < cumulative_weight) {
       baseline_profile = profile;
       break;
@@ -880,7 +947,7 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
     if (!profile_fixture_metadata(profile).release_gating) {
       continue;
     }
-    auto weight = profile_weight(weights, profile);
+    auto weight = tls_hello_profile_registry_internal::profile_weight(weights, profile);
     if (weight == 0) {
       continue;
     }
@@ -889,7 +956,8 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
   }
 
   if (release_weight_total == 0 || release_profiles.empty()) {
-    runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1, std::memory_order_relaxed);
+    tls_hello_profile_registry_internal::runtime_profile_selection_counters().advisory_blocked_total.fetch_add(
+        1, std::memory_order_relaxed);
     for (auto profile : confidence_allowed_profiles) {
       if (profile_fixture_metadata(profile).release_gating) {
         return profile;
@@ -899,13 +967,14 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
   }
 
   if (blocked_advisory) {
-    runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1, std::memory_order_relaxed);
+    tls_hello_profile_registry_internal::runtime_profile_selection_counters().advisory_blocked_total.fetch_add(
+        1, std::memory_order_relaxed);
   }
 
-  auto release_roll = stable_selection_hash(key, platform) % release_weight_total;
+  auto release_roll = tls_hello_profile_registry_internal::stable_selection_hash(key, platform) % release_weight_total;
   uint32 release_cumulative = 0;
   for (auto profile : release_profiles) {
-    release_cumulative += profile_weight(weights, profile);
+    release_cumulative += tls_hello_profile_registry_internal::profile_weight(weights, profile);
     if (release_roll < release_cumulative) {
       return profile;
     }
@@ -916,8 +985,9 @@ BrowserProfile pick_runtime_profile(Slice destination, int32 unix_time, const Ru
 
 EchMode ech_mode_for_route(const NetworkRouteHints &route, const RouteFailureState &state) noexcept {
   auto runtime_params = get_runtime_stealth_params_snapshot();
-  auto active_policy = active_policy_for_route(runtime_params, route);
-  auto &route_policy = route_policy_entry_for_active_policy(runtime_params, active_policy);
+  auto active_policy = tls_hello_profile_registry_internal::active_policy_for_route(runtime_params, route);
+  auto &route_policy =
+      tls_hello_profile_registry_internal::route_policy_entry_for_active_policy(runtime_params, active_policy);
   if (active_policy == RuntimeActivePolicy::Unknown || active_policy == RuntimeActivePolicy::RuEgress) {
     return route_policy.ech_mode;
   }
@@ -930,8 +1000,9 @@ EchMode ech_mode_for_route(const NetworkRouteHints &route, const RouteFailureSta
 RuntimeEchDecision get_runtime_ech_decision(Slice destination, int32 unix_time,
                                             const NetworkRouteHints &route) noexcept {
   auto runtime_params = get_runtime_stealth_params_snapshot();
-  auto active_policy = active_policy_for_route(runtime_params, route);
-  auto &route_policy = route_policy_entry_for_active_policy(runtime_params, active_policy);
+  auto active_policy = tls_hello_profile_registry_internal::active_policy_for_route(runtime_params, route);
+  auto &route_policy =
+      tls_hello_profile_registry_internal::route_policy_entry_for_active_policy(runtime_params, active_policy);
   RuntimeEchDecision decision;
   if (active_policy == RuntimeActivePolicy::Unknown) {
     decision.ech_mode = route_policy.ech_mode;
@@ -949,19 +1020,16 @@ RuntimeEchDecision get_runtime_ech_decision(Slice destination, int32 unix_time,
     return decision;
   }
 
-  auto lock = std::lock_guard<std::mutex>(route_failure_cache_mutex());
-  auto key = route_failure_cache_key(destination, unix_time);
-  auto it = route_failure_cache().find(key);
-  if (it != route_failure_cache().end() && it->second.disabled_until && it->second.disabled_until.is_in_past()) {
-    decision.reenabled_after_ttl = it->second.state.ech_block_suspected;
-    route_failure_cache().erase(it);
-  }
-
-  auto state = get_runtime_route_failure_state_locked(destination, unix_time);
+  auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
+  auto max_disabled_until = Timestamp::in(runtime_params.route_failure.ech_disable_ttl_seconds);
+  bool saw_expired_blocked_entry = false;
+  auto state = tls_hello_profile_registry_internal::get_runtime_route_failure_state_locked(
+      destination, unix_time, &saw_expired_blocked_entry, max_disabled_until);
+  auto active_circuit_breaker =
+      state.ech_block_suspected || state.recent_ech_failures >= runtime_params.route_failure.ech_failure_threshold;
+  decision.reenabled_after_ttl = saw_expired_blocked_entry && !active_circuit_breaker;
   decision.ech_mode = ech_mode_for_route(route, state);
-  decision.disabled_by_circuit_breaker =
-      decision.ech_mode == EchMode::Disabled &&
-      (state.ech_block_suspected || state.recent_ech_failures >= runtime_params.route_failure.ech_failure_threshold);
+  decision.disabled_by_circuit_breaker = decision.ech_mode == EchMode::Disabled && active_circuit_breaker;
   return decision;
 }
 

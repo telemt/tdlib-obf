@@ -6,6 +6,7 @@
 
 #include "td/telegram/net/NetReliabilityMonitor.h"
 
+#include "td/utils/ScopeGuard.h"
 #include "td/utils/tests.h"
 
 #include <thread>
@@ -40,6 +41,10 @@ TEST(NetMonitorStress, ConcurrentCoerceAttemptsCountersRemainAccurate) {
 
 TEST(NetMonitorStress, ConcurrentDestroyReasonBucketsRemainAccurate) {
   td::net_health::reset_net_monitor_for_tests();
+  td::net_health::set_lane_probe_now_for_tests(10000.0);
+  SCOPE_EXIT {
+    td::net_health::clear_lane_probe_now_for_tests();
+  };
 
   constexpr td::uint32 thread_count = 4;
   constexpr td::uint32 iterations_per_thread = 100;

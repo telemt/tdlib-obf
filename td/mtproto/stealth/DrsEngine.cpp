@@ -14,7 +14,7 @@ namespace td {
 namespace mtproto {
 namespace stealth {
 
-namespace {
+namespace drs_engine_internal {
 
 constexpr int32 kCandidateSampleAttempts = 32;
 constexpr int32 kMaxMonotonicDirectionRun = 2;
@@ -41,7 +41,13 @@ int64 phase_transition_upper_bound(int32 anchor) {
   return static_cast<int64>(anchor) * 3 - 1;
 }
 
-}  // namespace
+}  // namespace drs_engine_internal
+using drs_engine_internal::direction_of_delta;
+using drs_engine_internal::kCandidateSampleAttempts;
+using drs_engine_internal::kMaxMonotonicDirectionRun;
+using drs_engine_internal::normalize_drs_hint;
+using drs_engine_internal::phase_transition_lower_bound;
+using drs_engine_internal::phase_transition_upper_bound;
 
 DrsEngine::DrsEngine(const DrsPolicy &policy, IRng &rng) : policy_(policy), rng_(rng) {
   CHECK(!policy_.slow_start.bins.empty());
@@ -59,9 +65,38 @@ int32 DrsEngine::next_payload_cap(TrafficHint hint) {
     return policy_.min_payload_cap;
   }
   if (normalized_hint == TrafficHint::BulkData) {
-    // Bulk path intentionally bypasses interactive run/transition state so
-    // large steady-state samples cannot poison subsequent interactive anchors.
-    return sample_weighted_bin_value(policy_.steady_state);
+    // Bulk path keeps anti-repeat hardening, but on an isolated run-state so
+    // bulk samples cannot poison interactive transition anchors.
+    auto saved_transition_anchor = transition_anchor_cap_;
+    auto saved_previous_cap = previous_cap_;
+    auto saved_last_cap = last_cap_;
+    auto saved_last_cap_run = last_cap_run_;
+    auto saved_monotonic_run = monotonic_run_;
+    auto saved_last_direction = last_direction_;
+
+    transition_anchor_cap_ = -1;
+    previous_cap_ = bulk_previous_cap_;
+    last_cap_ = bulk_last_cap_;
+    last_cap_run_ = bulk_last_cap_run_;
+    monotonic_run_ = bulk_monotonic_run_;
+    last_direction_ = bulk_last_direction_;
+
+    auto sampled = sample_from_phase(policy_.steady_state);
+
+    bulk_previous_cap_ = previous_cap_;
+    bulk_last_cap_ = last_cap_;
+    bulk_last_cap_run_ = last_cap_run_;
+    bulk_monotonic_run_ = monotonic_run_;
+    bulk_last_direction_ = last_direction_;
+
+    transition_anchor_cap_ = saved_transition_anchor;
+    previous_cap_ = saved_previous_cap;
+    last_cap_ = saved_last_cap;
+    last_cap_run_ = saved_last_cap_run;
+    monotonic_run_ = saved_monotonic_run;
+    last_direction_ = saved_last_direction;
+
+    return sampled;
   }
   return sample_from_phase(phase_model());
 }
@@ -88,6 +123,11 @@ void DrsEngine::notify_idle() {
   bytes_in_phase_ = 0;
   transition_anchor_cap_ = -1;
   reset_run_state();
+  bulk_previous_cap_ = -1;
+  bulk_last_cap_ = -1;
+  bulk_last_cap_run_ = 0;
+  bulk_monotonic_run_ = 0;
+  bulk_last_direction_ = 0;
 }
 
 void DrsEngine::prime_with_payload_cap(int32 payload_cap) noexcept {

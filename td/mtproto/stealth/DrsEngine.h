@@ -49,6 +49,14 @@ class DrsEngine final {
   int32 monotonic_run_{0};
   int8 last_direction_{0};
 
+  // Bulk-data sampling keeps an independent anti-repeat history so bulk
+  // traffic doesn't poison interactive phase transition anchors.
+  int32 bulk_previous_cap_{-1};
+  int32 bulk_last_cap_{-1};
+  int32 bulk_last_cap_run_{0};
+  int32 bulk_monotonic_run_{0};
+  int8 bulk_last_direction_{0};
+
   const DrsPhaseModel &phase_model() const noexcept;
   int32 sample_from_phase(const DrsPhaseModel &model);
   int32 sample_weighted_bin_value(const DrsPhaseModel &model);

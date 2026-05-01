@@ -146,6 +146,7 @@ struct RuntimeProfileSelectionCounters final {
 RuntimePlatformHints default_runtime_platform_hints() noexcept;
 SelectionKey make_profile_selection_key(Slice destination, int32 unix_time);
 void set_runtime_ech_failure_store(std::shared_ptr<KeyValueSyncInterface> store);
+void reconcile_runtime_ech_failure_ttl(double ttl_seconds);
 void note_runtime_ech_decision(const RuntimeEchDecision &decision, bool ech_enabled) noexcept;
 void note_runtime_ech_failure(Slice destination, int32 unix_time);
 void note_runtime_ech_success(Slice destination, int32 unix_time);

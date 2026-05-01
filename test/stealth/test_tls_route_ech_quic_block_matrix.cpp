@@ -76,18 +76,10 @@ bool profile_allows_ech_on_good_route(BrowserProfile profile) {
   return profile_spec(profile).allows_ech;
 }
 
-string build_wire(BrowserProfile profile, const NetworkRouteHints &hints, EchMode requested_ech, uint64 seed) {
-  MockRng rng(seed);
-  // The runtime route gate must lower ECH to Disabled on RU/unknown
-  // routes regardless of what we ask for. We still use the
-  // route-aware builder so we exercise that gate on every cell.
-  (void)requested_ech;
-  return build_runtime_tls_client_hello("www.google.com", "0123456789secret", kUnixTime, hints, rng);
-}
-
 string build_profile_wire(BrowserProfile profile, const NetworkRouteHints &hints, EchMode ech_mode, uint64 seed) {
   MockRng rng(seed);
-  auto wire = build_tls_client_hello_for_profile("www.google.com", "0123456789secret", kUnixTime, profile, ech_mode, rng);
+  auto wire =
+      build_tls_client_hello_for_profile("www.google.com", "0123456789secret", kUnixTime, profile, ech_mode, rng);
   // Profile builder doesn't apply the route gate itself; emulate the
   // runtime decision: RU/unknown -> force ECH off.
   if (hints.is_ru || !hints.is_known) {

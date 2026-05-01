@@ -15,7 +15,7 @@
 namespace td {
 namespace mtproto {
 namespace stealth {
-namespace {
+namespace stealth_runtime_params_internal {
 
 RuntimePlatformHints compiled_default_runtime_platform_hints() {
   RuntimePlatformHints hints;
@@ -309,13 +309,14 @@ Status validate_release_mode_profile_gating(const StealthRuntimeParams &params) 
   return Status::OK();
 }
 
-}  // namespace
+}  // namespace stealth_runtime_params_internal
 
 StealthRuntimeParams::StealthRuntimeParams() noexcept {
-  drs_policy = default_runtime_drs_policy();
-  platform_hints = compiled_default_runtime_platform_hints();
+  drs_policy = stealth_runtime_params_internal::default_runtime_drs_policy();
+  platform_hints = stealth_runtime_params_internal::compiled_default_runtime_platform_hints();
   profile_selection = RuntimeProfileSelectionPolicy{};
-  profile_weights = effective_profile_weights_for_platform(profile_selection, platform_hints);
+  profile_weights =
+      stealth_runtime_params_internal::effective_profile_weights_for_platform(profile_selection, platform_hints);
   route_policy.unknown.ech_mode = EchMode::Disabled;
   route_policy.ru.ech_mode = EchMode::Disabled;
   route_policy.non_ru.ech_mode = EchMode::Rfc9180Outer;
@@ -328,16 +329,19 @@ StealthRuntimeParams default_runtime_stealth_params() noexcept {
 Status validate_runtime_stealth_params(const StealthRuntimeParams &params) noexcept {
   TRY_STATUS(validate_ipt_params(params.ipt_params));
   TRY_STATUS(validate_drs_policy(params.drs_policy));
-  TRY_STATUS(validate_platform_hints(params.platform_hints));
-  TRY_STATUS(validate_flow_behavior(params.flow_behavior));
-  TRY_STATUS(validate_runtime_profile_selection_policy(params.profile_selection));
-  TRY_STATUS(validate_profile_weights(params.profile_weights));
-  TRY_STATUS(validate_allowed_profile_weights_for_platform(params.profile_weights, params.platform_hints));
-  TRY_STATUS(validate_transport_confidence_profile_coverage(params));
-  TRY_STATUS(validate_release_mode_profile_gating(params));
-  TRY_STATUS(validate_route_entry("route_policy.unknown", params.route_policy.unknown, true));
-  TRY_STATUS(validate_route_entry("route_policy.ru", params.route_policy.ru, true));
-  TRY_STATUS(validate_route_entry("route_policy.non_ru", params.route_policy.non_ru, false));
+  TRY_STATUS(stealth_runtime_params_internal::validate_platform_hints(params.platform_hints));
+  TRY_STATUS(stealth_runtime_params_internal::validate_flow_behavior(params.flow_behavior));
+  TRY_STATUS(stealth_runtime_params_internal::validate_runtime_profile_selection_policy(params.profile_selection));
+  TRY_STATUS(stealth_runtime_params_internal::validate_profile_weights(params.profile_weights));
+  TRY_STATUS(stealth_runtime_params_internal::validate_allowed_profile_weights_for_platform(params.profile_weights,
+                                                                                            params.platform_hints));
+  TRY_STATUS(stealth_runtime_params_internal::validate_transport_confidence_profile_coverage(params));
+  TRY_STATUS(stealth_runtime_params_internal::validate_release_mode_profile_gating(params));
+  TRY_STATUS(
+      stealth_runtime_params_internal::validate_route_entry("route_policy.unknown", params.route_policy.unknown, true));
+  TRY_STATUS(stealth_runtime_params_internal::validate_route_entry("route_policy.ru", params.route_policy.ru, true));
+  TRY_STATUS(
+      stealth_runtime_params_internal::validate_route_entry("route_policy.non_ru", params.route_policy.non_ru, false));
 
   if (params.route_failure.ech_failure_threshold < 1 || params.route_failure.ech_failure_threshold > 10) {
     return Status::Error("route_failure.ech_failure_threshold must be within [1, 10]");
@@ -356,16 +360,27 @@ Status validate_runtime_stealth_params(const StealthRuntimeParams &params) noexc
 }
 
 StealthRuntimeParams get_runtime_stealth_params_snapshot() noexcept {
-  auto lock = std::lock_guard<std::mutex>(runtime_params_storage_mutex());
-  auto params = runtime_params_storage();
+  auto lock = std::scoped_lock(stealth_runtime_params_internal::runtime_params_storage_mutex());
+  auto params = stealth_runtime_params_internal::runtime_params_storage();
   CHECK(params != nullptr);
   return *params;
 }
 
 Status set_runtime_stealth_params(const StealthRuntimeParams &params) noexcept {
   TRY_STATUS(validate_runtime_stealth_params(params));
-  auto lock = std::lock_guard<std::mutex>(runtime_params_storage_mutex());
-  runtime_params_storage() = std::make_shared<const StealthRuntimeParams>(params);
+  double previous_ttl_seconds = params.route_failure.ech_disable_ttl_seconds;
+  {
+    auto lock = std::scoped_lock(stealth_runtime_params_internal::runtime_params_storage_mutex());
+    auto current = stealth_runtime_params_internal::runtime_params_storage();
+    if (current != nullptr) {
+      previous_ttl_seconds = current->route_failure.ech_disable_ttl_seconds;
+    }
+    stealth_runtime_params_internal::runtime_params_storage() = std::make_shared<const StealthRuntimeParams>(params);
+  }
+
+  if (params.route_failure.ech_disable_ttl_seconds < previous_ttl_seconds) {
+    reconcile_runtime_ech_failure_ttl(params.route_failure.ech_disable_ttl_seconds);
+  }
   return Status::OK();
 }
 
@@ -374,8 +389,9 @@ Status set_runtime_stealth_params_for_tests(const StealthRuntimeParams &params) 
 }
 
 void reset_runtime_stealth_params_for_tests() noexcept {
-  auto lock = std::lock_guard<std::mutex>(runtime_params_storage_mutex());
-  runtime_params_storage() = make_default_runtime_params();
+  auto lock = std::scoped_lock(stealth_runtime_params_internal::runtime_params_storage_mutex());
+  stealth_runtime_params_internal::runtime_params_storage() =
+      stealth_runtime_params_internal::make_default_runtime_params();
 }
 
 }  // namespace stealth

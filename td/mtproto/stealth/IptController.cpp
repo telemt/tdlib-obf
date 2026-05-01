@@ -13,7 +13,7 @@ namespace td {
 namespace mtproto {
 namespace stealth {
 
-namespace {
+namespace ipt_controller_internal {
 
 constexpr double kUint32Denominator = 4294967296.0;
 constexpr double kMinUnitInterval = 1e-9;
@@ -29,7 +29,12 @@ uint64 to_delay_us(double delay_ms) {
   return delay_us == 0 ? 1 : delay_us;
 }
 
-}  // namespace
+}  // namespace ipt_controller_internal
+using ipt_controller_internal::kMaxUnitInterval;
+using ipt_controller_internal::kMinUnitInterval;
+using ipt_controller_internal::kTwoPi;
+using ipt_controller_internal::kUint32Denominator;
+using ipt_controller_internal::to_delay_us;
 
 IptController::IptController(const IptParams &params, IRng &rng) : params_(params), rng_(rng) {
 }

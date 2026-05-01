@@ -45,11 +45,6 @@ static void assert_parse_html_ok(td::string text, const td::string &expected_tex
   }
 }
 
-static void assert_parse_html_error(td::string text) {
-  auto r_entities = td::parse_html(text);
-  ASSERT_TRUE(r_entities.is_error());
-}
-
 }  // namespace
 
 // =============================================================================

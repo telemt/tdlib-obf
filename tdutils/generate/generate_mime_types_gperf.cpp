@@ -103,6 +103,17 @@ int main(int argc, char *argv[]) {
       line.pop_back();
     }
 
+    auto first_non_space = line.find_first_not_of(" \t");
+    if (first_non_space == std::string::npos) {
+      continue;
+    }
+    if (line[first_non_space] == '#') {
+      continue;
+    }
+    if (first_non_space != 0) {
+      line.erase(0, first_non_space);
+    }
+
     std::string mime_type;
     std::string extensions_string;
     std::tie(mime_type, extensions_string) = split(line, '\t');

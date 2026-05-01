@@ -6,7 +6,6 @@
 //
 #include "data.h"
 
-#include "td/db/binlog/BinlogHelper.h"
 #include "td/db/binlog/ConcurrentBinlog.h"
 #include "td/db/BinlogKeyValue.h"
 #include "td/db/DbKey.h"
@@ -17,7 +16,6 @@
 #include "td/db/SqliteKeyValueSafe.h"
 #include "td/db/TsSeqKeyValue.h"
 
-#include "td/actor/actor.h"
 #include "td/actor/ConcurrentScheduler.h"
 
 #include "td/utils/base64.h"
@@ -28,7 +26,6 @@
 #include "td/utils/port/FileFd.h"
 #include "td/utils/port/thread.h"
 #include "td/utils/Random.h"
-#include "td/utils/Slice.h"
 #include "td/utils/Status.h"
 #include "td/utils/StringBuilder.h"
 #include "td/utils/tests.h"
@@ -115,7 +112,7 @@ TEST(DB, binlog_encryption) {
     LOG(INFO) << "RESTART";
     td::Binlog binlog;
     auto status =
-      binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber);
+        binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber);
     CHECK(status.is_error());
   }
 
@@ -126,7 +123,7 @@ TEST(DB, binlog_encryption) {
     LOG(INFO) << "RESTART";
     td::Binlog binlog;
     auto status =
-      binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber, hello);
+        binlog.init(binlog_name, [&](const td::BinlogEvent &x) { v.push_back(x.get_data().str()); }, cucumber, hello);
     CHECK(v == td::vector<td::string>({"AAAA", "BBBB", long_data, "CCCC"}));
   }
 
@@ -451,8 +448,11 @@ TEST(DB, key_value) {
   new_kv.impl().init(new_kv_name.str()).ensure();
 
   QueryHandler<td::SqliteKeyValue> sqlite_kv;
-  td::CSlice path = "test_sqlite_kv";
+  auto path = make_unique_test_path("test_sqlite_kv");
   td::SqliteDb::destroy(path).ignore();
+  SCOPE_EXIT {
+    td::SqliteDb::destroy(path).ignore();
+  };
   auto db = td::SqliteDb::open_with_key(path, true, td::DbKey::empty()).move_as_ok();
   sqlite_kv.impl().init_with_connection(std::move(db), "KV").ensure();
 
@@ -476,7 +476,6 @@ TEST(DB, key_value) {
       new_kv.impl().init(new_kv_name.str()).ensure();
     }
   }
-  td::SqliteDb::destroy(path).ignore();
   td::Binlog::destroy(new_kv_name).ignore();
 }
 
@@ -492,8 +491,11 @@ TEST(DB, key_value_set_all) {
   }
 
   td::SqliteKeyValue sqlite_kv;
-  td::CSlice sqlite_kv_name = "test_sqlite_kv";
+  auto sqlite_kv_name = make_unique_test_path("test_sqlite_kv");
   td::SqliteDb::destroy(sqlite_kv_name).ignore();
+  SCOPE_EXIT {
+    td::SqliteDb::destroy(sqlite_kv_name).ignore();
+  };
   auto db = td::SqliteDb::open_with_key(sqlite_kv_name, true, td::DbKey::empty()).move_as_ok();
   sqlite_kv.init_with_connection(std::move(db), "KV").ensure();
 
@@ -516,7 +518,6 @@ TEST(DB, key_value_set_all) {
       CHECK(kv.get(key) == sqlite_kv.get(key));
     }
   }
-  td::SqliteDb::destroy(sqlite_kv_name).ignore();
 }
 
 TEST(DB, binlog_key_value) {

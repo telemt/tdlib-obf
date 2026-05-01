@@ -10,7 +10,7 @@ namespace td {
 namespace mtproto {
 namespace stealth {
 
-namespace {
+namespace traffic_classifier_internal {
 
 constexpr size_t kMinBulkThresholdBytes = 512;
 constexpr size_t kMaxBulkThresholdBytes = 1 << 20;
@@ -28,7 +28,9 @@ bool is_bulk_ack_flood(size_t ack_count, size_t bulk_threshold_bytes) noexcept {
   return ack_count >= ack_bulk_threshold;
 }
 
-}  // namespace
+}  // namespace traffic_classifier_internal
+using traffic_classifier_internal::is_bulk_ack_flood;
+using traffic_classifier_internal::sanitize_bulk_threshold_bytes;
 
 TrafficHint classify_session_traffic_hint(bool has_salt, int64 ping_id, size_t query_count, size_t query_bytes,
                                           size_t ack_count, bool has_service_queries, bool destroy_auth_key,

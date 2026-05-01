@@ -14,7 +14,7 @@ namespace td {
 namespace mtproto {
 namespace stealth {
 
-namespace {
+namespace chaff_scheduler_internal {
 
 double max_double(double left, double right) {
   return left > right ? left : right;
@@ -24,7 +24,9 @@ bool is_finite_time(double value) {
   return std::isfinite(value);
 }
 
-}  // namespace
+}  // namespace chaff_scheduler_internal
+using chaff_scheduler_internal::is_finite_time;
+using chaff_scheduler_internal::max_double;
 
 ChaffScheduler::ChaffScheduler(const StealthConfig &config, IptController &ipt_controller, IRng &rng, double now)
     : config_(config), ipt_controller_(ipt_controller), rng_(rng) {

@@ -423,7 +423,7 @@ BrowserProfileSpec make_chrome147_ios_chromium_impl() {
   return profile;
 }
 
-BrowserProfileSpec make_chrome_darwin_impl() {
+[[maybe_unused]] BrowserProfileSpec make_chrome_darwin_impl() {
   BrowserProfileSpec profile;
   profile.name = "chrome_darwin";
 

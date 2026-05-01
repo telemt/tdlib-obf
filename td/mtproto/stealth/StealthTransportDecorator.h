@@ -23,24 +23,24 @@ class StealthTransportDecorator final : public IStreamTransport {
                                                               unique_ptr<IRng> rng, unique_ptr<IClock> clock);
   ~StealthTransportDecorator() override = default;
 
-  Result<size_t> read_next(BufferSlice *message, uint32 *quick_ack) final;
-  bool support_quick_ack() const final;
-  void write(BufferWriter &&message, bool quick_ack) final;
-  bool can_read() const final;
-  bool can_write() const final;
-  void init(ChainBufferReader *input, ChainBufferWriter *output) final;
-  size_t max_prepend_size() const final;
-  size_t max_append_size() const final;
-  TransportType get_type() const final;
-  bool use_random_padding() const final;
-  void configure_packet_info(PacketInfo *packet_info) const final;
-  void pre_flush_write(double now) final;
-  double get_shaping_wakeup() const final;
-  void set_traffic_hint(TrafficHint hint) final;
-  void set_max_tls_record_size(int32 size) final;
-  void set_stealth_record_padding_target(int32 target_bytes) final;
-  bool supports_tls_record_sizing() const final;
-  size_t traffic_bulk_threshold_bytes() const final;
+  Result<size_t> read_next(BufferSlice *message, uint32 *quick_ack) override;
+  bool support_quick_ack() const override;
+  void write(BufferWriter &&message, bool quick_ack) override;
+  bool can_read() const override;
+  bool can_write() const override;
+  void init(ChainBufferReader *input, ChainBufferWriter *output) override;
+  size_t max_prepend_size() const override;
+  size_t max_append_size() const override;
+  TransportType get_type() const override;
+  bool use_random_padding() const override;
+  void configure_packet_info(PacketInfo *packet_info) const override;
+  void pre_flush_write(double now) override;
+  double get_shaping_wakeup() const override;
+  void set_traffic_hint(TrafficHint hint) override;
+  void set_max_tls_record_size(int32 size) override;
+  void set_stealth_record_padding_target(int32 target_bytes) override;
+  bool supports_tls_record_sizing() const override;
+  size_t traffic_bulk_threshold_bytes() const override;
 
  private:
   StealthTransportDecorator(unique_ptr<IStreamTransport> inner, StealthConfig config, unique_ptr<IRng> rng,

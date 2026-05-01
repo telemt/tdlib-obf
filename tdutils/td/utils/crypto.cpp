@@ -616,9 +616,13 @@ struct AesCbcState::Impl {
   Evp evp_;
 };
 
-AesCbcState::AesCbcState(Slice key256, Slice iv128) : raw_{SecureString(key256), SecureString(iv128)} {
-  CHECK(raw_.key.size() == 32);
-  CHECK(raw_.iv.size() == 16);
+AesCbcState::AesCbcState(Slice key256, Slice iv128) {
+  CHECK(key256.size() == 32);
+  CHECK(iv128.size() == 16);
+  raw_.key = SecureString(32);
+  raw_.iv = SecureString(16);
+  raw_.key.as_mutable_slice().copy_from(key256);
+  raw_.iv.as_mutable_slice().copy_from(iv128);
 }
 
 AesCbcState::AesCbcState(AesCbcState &&) noexcept = default;

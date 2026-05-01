@@ -17,30 +17,34 @@
 namespace td {
 namespace mtproto {
 namespace stealth {
-namespace {
+namespace tls_hello_builder_internal {
 
 class SecureRng final : public IRng {
  public:
-  void fill_secure_bytes(MutableSlice dest) final {
-    Random::secure_bytes(dest);
+  void fill_secure_bytes(MutableSlice dest) override {
+    auto *data_ptr = dest.ubegin();
+    auto data_size = dest.size();
+    Random::secure_bytes(data_ptr, data_size);
   }
+  uint32 secure_uint32() override;
+  uint32 bounded(uint32 n) override;
+};
 
-  uint32 secure_uint32() final {
-    return Random::secure_uint32();
-  }
+uint32 SecureRng::secure_uint32() {
+  return Random::secure_uint32();
+}
 
-  uint32 bounded(uint32 n) final {
-    CHECK(n > 0);
+uint32 SecureRng::bounded(uint32 n) {
+  CHECK(n > 0);
 
-    auto threshold = static_cast<uint32>(-n) % n;
-    while (true) {
-      auto value = secure_uint32();
-      if (value >= threshold) {
-        return value % n;
-      }
+  auto threshold = static_cast<uint32>(-n) % n;
+  while (true) {
+    auto value = secure_uint32();
+    if (value >= threshold) {
+      return value % n;
     }
   }
-};
+}
 
 bool should_enable_ech(const NetworkRouteHints &route_hints) {
   return route_hints.is_known && !route_hints.is_ru;
@@ -117,7 +121,11 @@ string build_default_hello_impl(string domain, Slice secret, int32 unix_time, co
   return result.move_as_ok();
 }
 
-}  // namespace
+}  // namespace tls_hello_builder_internal
+using tls_hello_builder_internal::build_default_hello_impl;
+using tls_hello_builder_internal::build_tls_hello_impl;
+using tls_hello_builder_internal::SecureRng;
+using tls_hello_builder_internal::should_enable_ech;
 
 namespace detail {
 

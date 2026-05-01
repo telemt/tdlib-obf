@@ -84,7 +84,7 @@ td::mtproto::stealth::RuntimeFlowBehaviorPolicy make_policy(int max_connects = 2
                                                             double dest_share = 0.70) {
   auto params = default_runtime_stealth_params();
   params.flow_behavior.max_connects_per_10s_per_destination = max_connects;
-  params.flow_behavior.anti_churn_min_reconnect_interval_ms = anti_churn_ms;
+  params.flow_behavior.anti_churn_min_reconnect_interval_ms = static_cast<td::uint32>(anti_churn_ms);
   params.flow_behavior.max_destination_share = dest_share;
   return params.flow_behavior;
 }
@@ -331,7 +331,7 @@ TEST(FlowDestinationBudgetJoint, AntiChurnStrictThanRateLimit) {
   ASSERT_TRUE(flow_wakeup > now);
 
   // BudgetController (single dest, bootstrap) may allow.
-  double budget_wakeup = budget.get_wakeup_at(now, dest, policy);
+  static_cast<void>(budget.get_wakeup_at(now, dest, policy));
 
   // Combined must respect anti-churn block.
   double combined = combined_wakeup_at(flow, budget, now, dest, policy);

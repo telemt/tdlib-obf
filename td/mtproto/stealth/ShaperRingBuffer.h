@@ -38,11 +38,7 @@ class ShaperRingBuffer final {
     while (size_ != 0) {
       auto &front = items_[head_];
       CHECK(front.has_value());
-      if (front->send_at > now) {
-        break;
-      }
-
-      if (!callback(front.value())) {
+      if (front->send_at > now || !callback(front.value())) {
         break;
       }
 

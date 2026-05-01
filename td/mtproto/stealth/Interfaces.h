@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include "td/utils/common.h"
-#include "td/utils/Slice.h"
 #include "td/utils/StringBuilder.h"
 
 #include <cctype>
+#include <utility>
 
 namespace td {
 namespace mtproto {
@@ -44,19 +43,20 @@ enum class TrafficHint : uint8 {
 };
 
 inline StringBuilder &operator<<(StringBuilder &sb, TrafficHint hint) {
+  using enum TrafficHint;
   switch (hint) {
-    case TrafficHint::Unknown:
+    case Unknown:
       return sb << "Unknown";
-    case TrafficHint::Interactive:
+    case Interactive:
       return sb << "Interactive";
-    case TrafficHint::Keepalive:
+    case Keepalive:
       return sb << "Keepalive";
-    case TrafficHint::BulkData:
+    case BulkData:
       return sb << "BulkData";
-    case TrafficHint::AuthHandshake:
+    case AuthHandshake:
       return sb << "AuthHandshake";
   }
-  return sb << static_cast<int>(hint);
+  return sb << static_cast<int>(std::to_underlying(hint));
 }
 
 struct PaddingPolicy final {

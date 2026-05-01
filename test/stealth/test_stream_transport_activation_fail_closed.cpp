@@ -72,7 +72,9 @@ td::Result<StealthConfig> invalid_stealth_config_factory_for_logs(const ProxySec
 td::Result<StealthConfig> invalid_stealth_config_factory_with_secret_leak(const ProxySecret &secret, IRng &rng) {
   (void)rng;
   g_config_factory_calls++;
-  return td::Status::Error("test_secret_leak_marker=" + secret.get_raw_secret().str());
+  std::string message = "test_secret_leak_marker=";
+  message += secret.get_raw_secret().str();
+  return td::Status::Error(message);
 }
 
 td::Result<StealthConfig> invalid_stealth_config_factory_with_multiline_message(const ProxySecret &secret, IRng &rng) {

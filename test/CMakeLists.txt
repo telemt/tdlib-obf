@@ -82,6 +82,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/secure_storage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/set_with_position.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/string_cleaning.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mime_type_update_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tdclient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tqueue.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/translation_manager.cpp
@@ -669,6 +670,9 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_profile_selection_weight_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_concurrency_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_serialization_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_numeric_overflow_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_policy_reload_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_sticky_rotation_route_reload_storm_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_anchor_overflow_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_cb_success_reset_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_ech_downstream_integration.cpp

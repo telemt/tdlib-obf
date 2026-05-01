@@ -96,10 +96,6 @@ TEST(RouteBundleCdnIngestionLightFuzz, AddRsaBoundarySweepCounterInvariantsAreDe
         // After any anomaly, monitor must not be Healthy
         ASSERT_TRUE(snapshot.state != td::net_health::NetMonitorState::Healthy);
       }
-
-      // Counters must never underflow (always >= 0 for unsigned — just ensure they're readable)
-      ASSERT_TRUE(snapshot.counters.route_bundle_entry_overflow_total >= 0u);
-      ASSERT_TRUE(snapshot.counters.route_bundle_parse_failure_total >= 0u);
     }
   }
 }

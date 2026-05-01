@@ -23,7 +23,7 @@
 namespace td {
 namespace mtproto {
 namespace stealth {
-namespace {
+namespace stealth_params_loader_internal {
 
 bool platform_hints_equal(const RuntimePlatformHints &lhs, const RuntimePlatformHints &rhs) {
   return lhs.device_class == rhs.device_class && lhs.mobile_os == rhs.mobile_os && lhs.desktop_os == rhs.desktop_os;
@@ -718,7 +718,7 @@ string sanitize_reload_status_message(Slice status_message, Slice fallback_messa
   return message;
 }
 
-}  // namespace
+}  // namespace stealth_params_loader_internal
 
 StealthParamsLoader::StealthParamsLoader(string config_path)
     : config_path_(std::move(config_path))
@@ -753,7 +753,7 @@ Result<StealthRuntimeParams> StealthParamsLoader::try_load_strict(Slice config_p
 }
 
 bool StealthParamsLoader::try_reload() noexcept {
-  auto lock = std::lock_guard<std::mutex>(reload_mu_);
+  auto lock = std::scoped_lock(reload_mu_);
   auto now = Timestamp::now();
   if (reload_cooldown_until_ && !reload_cooldown_until_.is_in_past(now)) {
     LOG(DEBUG) << "Stealth params reload skipped due to cooldown " << tag("path", config_path_)
@@ -773,8 +773,9 @@ bool StealthParamsLoader::try_reload() noexcept {
 
     auto cooldown_active = reload_cooldown_until_ && !reload_cooldown_until_.is_in_past(now);
     auto status_public_message = status.public_message();
-    auto remediation_hint = remediation_hint_for_reload_failure(stage, status_public_message);
-    auto safe_status_message = sanitize_reload_status_message(
+    auto remediation_hint =
+        stealth_params_loader_internal::remediation_hint_for_reload_failure(stage, status_public_message);
+    auto safe_status_message = stealth_params_loader_internal::sanitize_reload_status_message(
         status_public_message, "stealth params reload rejected configuration; see stage/remediation_hint for triage");
     auto last_known_good = get_snapshot();
     LOG(WARNING) << "Stealth params reload failed " << tag("path", config_path_) << tag("stage", stage)
@@ -786,7 +787,7 @@ bool StealthParamsLoader::try_reload() noexcept {
                  << tag("last_good_bulk_threshold_bytes", static_cast<uint64>(last_known_good.bulk_threshold_bytes));
   };
 
-  if (is_missing_config_path(config_path_)) {
+  if (stealth_params_loader_internal::is_missing_config_path(config_path_)) {
     note_reload_failure("path_missing", Status::Error("Stealth params path does not exist"));
     return false;
   }
@@ -800,9 +801,10 @@ bool StealthParamsLoader::try_reload() noexcept {
   auto runtime_snapshot = get_runtime_stealth_params_snapshot();
   auto default_snapshot = default_runtime_stealth_params();
   auto platform_hints_locked =
-      has_successful_reload_ || !platform_hints_equal(runtime_snapshot.platform_hints, default_snapshot.platform_hints);
-  auto stability_status =
-      validate_platform_hints_stability_across_reload(runtime_snapshot, params, platform_hints_locked);
+      has_successful_reload_ || !stealth_params_loader_internal::platform_hints_equal(runtime_snapshot.platform_hints,
+                                                                                      default_snapshot.platform_hints);
+  auto stability_status = stealth_params_loader_internal::validate_platform_hints_stability_across_reload(
+      runtime_snapshot, params, platform_hints_locked);
   if (stability_status.is_error()) {
     note_reload_failure("platform_hints_stability", stability_status);
     return false;
@@ -816,7 +818,7 @@ bool StealthParamsLoader::try_reload() noexcept {
   consecutive_reload_failures_ = 0;
   reload_cooldown_until_ = Timestamp();
   {
-    auto current_lock = std::lock_guard<std::mutex>(current_mu_);
+    auto current_lock = std::scoped_lock(current_mu_);
     current_ = std::make_shared<const StealthRuntimeParams>(params);
   }
   has_successful_reload_ = true;
@@ -829,7 +831,7 @@ bool StealthParamsLoader::try_reload() noexcept {
 }
 
 StealthRuntimeParams StealthParamsLoader::get_snapshot() const noexcept {
-  auto current_lock = std::lock_guard<std::mutex>(current_mu_);
+  auto current_lock = std::scoped_lock(current_mu_);
   auto snapshot = current_;
   CHECK(snapshot != nullptr);
   return *snapshot;
@@ -837,7 +839,7 @@ StealthRuntimeParams StealthParamsLoader::get_snapshot() const noexcept {
 
 Result<string> StealthParamsLoader::read_file_secure(const string &path) noexcept {
 #if TD_PORT_POSIX
-  TRY_STATUS(validate_secure_parent_directory(path));
+  TRY_STATUS(stealth_params_loader_internal::validate_secure_parent_directory(path));
 
   // O_NONBLOCK ensures special files like FIFOs don't block open(2)
   // before we can fail-closed on the regular-file check below.
@@ -915,7 +917,7 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
     return Status::Error("Stealth params root must be an object");
   }
   auto &object = json_value.get_object();
-  TRY_STATUS(ensure_exact_object_shape(
+  TRY_STATUS(stealth_params_loader_internal::ensure_exact_object_shape(
       "root", object,
       {Slice("version"), Slice("active_policy"), Slice("ipt"), Slice("drs"), Slice("flow_behavior"),
        Slice("platform_hints"), Slice("profile_weights"), Slice("route_policy"), Slice("route_failure"),
@@ -929,27 +931,27 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
   StealthRuntimeParams params = default_runtime_stealth_params();
   if (object.has_field("active_policy")) {
     TRY_RESULT(active_policy_name, object.get_required_string_field("active_policy"));
-    TRY_RESULT(active_policy, parse_active_policy(active_policy_name));
+    TRY_RESULT(active_policy, stealth_params_loader_internal::parse_active_policy(active_policy_name));
     params.active_policy = active_policy;
   }
   if (object.has_field("ipt")) {
     TRY_RESULT(ipt_value, object.extract_required_field("ipt", JsonValue::Type::Object));
-    TRY_RESULT(ipt_params, parse_ipt_params(std::move(ipt_value)));
+    TRY_RESULT(ipt_params, stealth_params_loader_internal::parse_ipt_params(std::move(ipt_value)));
     params.ipt_params = ipt_params;
   }
   if (object.has_field("drs")) {
     TRY_RESULT(drs_value, object.extract_required_field("drs", JsonValue::Type::Object));
-    TRY_RESULT(drs_policy, parse_drs_policy(std::move(drs_value)));
+    TRY_RESULT(drs_policy, stealth_params_loader_internal::parse_drs_policy(std::move(drs_value)));
     params.drs_policy = drs_policy;
   }
   if (object.has_field("flow_behavior")) {
     TRY_RESULT(flow_behavior_value, object.extract_required_field("flow_behavior", JsonValue::Type::Object));
-    TRY_RESULT(flow_behavior, parse_flow_behavior(std::move(flow_behavior_value)));
+    TRY_RESULT(flow_behavior, stealth_params_loader_internal::parse_flow_behavior(std::move(flow_behavior_value)));
     params.flow_behavior = flow_behavior;
   }
   if (object.has_field("platform_hints")) {
     TRY_RESULT(platform_hints_value, object.extract_required_field("platform_hints", JsonValue::Type::Object));
-    TRY_RESULT(platform_hints, parse_platform_hints(std::move(platform_hints_value)));
+    TRY_RESULT(platform_hints, stealth_params_loader_internal::parse_platform_hints(std::move(platform_hints_value)));
     params.platform_hints = platform_hints;
   }
   if (object.has_field("release_mode_profile_gating")) {
@@ -958,17 +960,18 @@ Result<StealthRuntimeParams> StealthParamsLoader::parse_and_validate(string cont
   }
   if (object.has_field("transport_confidence")) {
     TRY_RESULT(transport_confidence_name, object.get_required_string_field("transport_confidence"));
-    TRY_RESULT(transport_confidence, parse_transport_confidence(transport_confidence_name));
+    TRY_RESULT(transport_confidence,
+               stealth_params_loader_internal::parse_transport_confidence(transport_confidence_name));
     params.transport_confidence = transport_confidence;
   }
   TRY_RESULT(profile_weights_value, object.extract_required_field("profile_weights", JsonValue::Type::Object));
   TRY_RESULT(route_policy_value, object.extract_required_field("route_policy", JsonValue::Type::Object));
   TRY_RESULT(route_failure_value, object.extract_required_field("route_failure", JsonValue::Type::Object));
   RuntimeProfileSelectionPolicy profile_selection = params.profile_selection;
-  TRY_RESULT(profile_weights,
-             parse_profile_weights(std::move(profile_weights_value), params.platform_hints, &profile_selection));
-  TRY_RESULT(route_policy, parse_route_policy(std::move(route_policy_value)));
-  TRY_RESULT(route_failure, parse_route_failure(std::move(route_failure_value)));
+  TRY_RESULT(profile_weights, stealth_params_loader_internal::parse_profile_weights(
+                                  std::move(profile_weights_value), params.platform_hints, &profile_selection));
+  TRY_RESULT(route_policy, stealth_params_loader_internal::parse_route_policy(std::move(route_policy_value)));
+  TRY_RESULT(route_failure, stealth_params_loader_internal::parse_route_failure(std::move(route_failure_value)));
   params.profile_weights = profile_weights;
   params.profile_selection = profile_selection;
   params.route_policy = route_policy;

@@ -69,7 +69,13 @@ static Result<SecureString> X25519_pem_from_PKEY(EVP_PKEY *pkey, bool is_private
   }
   char *data_ptr = nullptr;
   auto data_size = BIO_get_mem_data(mem_bio, &data_ptr);
-  return std::string(data_ptr, data_size);
+  if (data_ptr == nullptr || data_size < 0) {
+    return Status::Error("Failed to export key to pem");
+  }
+  auto size = static_cast<size_t>(data_size);
+  SecureString pem(size);
+  pem.as_mutable_slice().copy_from(Slice(data_ptr, size));
+  return std::move(pem);
 }
 
 static int password_cb(char *buf, int size, int rwflag, void *u) {

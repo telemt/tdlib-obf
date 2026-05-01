@@ -9,7 +9,7 @@
 
 #include "test/stealth/SourceContractFileReader.h"
 
-namespace {
+namespace tls_runtime_selection_source_contract_test {
 
 td::string normalize_for_contract(td::Slice source) {
   td::string normalized;
@@ -42,15 +42,26 @@ TEST(TlsRuntimeSelectionSourceContract, AllowedProfilesForPlatformRoutesDesktopM
 
   ASSERT_TRUE(normalized.find("if(platform.device_class==DeviceClass::Mobile)") != td::string::npos);
   ASSERT_TRUE(normalized.find("if(platform.mobile_os==MobileOs::IOS)") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(IOS_MOBILE_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find("returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::IOS_MOBILE_PROFILES);") !=
+      td::string::npos);
   ASSERT_TRUE(normalized.find("if(platform.mobile_os==MobileOs::Android)") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(ANDROID_MOBILE_PROFILES);") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(MOBILE_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find("returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::ANDROID_MOBILE_PROFILES);") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::MOBILE_PROFILES);") !=
+              td::string::npos);
   ASSERT_TRUE(normalized.find("if(platform.desktop_os==DesktopOs::Darwin)") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(DARWIN_DESKTOP_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find("returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::DARWIN_DESKTOP_PROFILES);") !=
+      td::string::npos);
   ASSERT_TRUE(normalized.find("if(platform.desktop_os==DesktopOs::Windows)") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(WINDOWS_DESKTOP_PROFILES);") != td::string::npos);
-  ASSERT_TRUE(normalized.find("returnSpan<BrowserProfile>(NON_DARWIN_DESKTOP_PROFILES);") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find("returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::WINDOWS_DESKTOP_PROFILES);") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find(
+                  "returnSpan<BrowserProfile>(tls_hello_profile_registry_internal::NON_DARWIN_DESKTOP_PROFILES);") !=
+              td::string::npos);
 }
 
 TEST(TlsRuntimeSelectionSourceContract, RuntimeProfileSelectionUsesPlatformAllowListAndStableHashRoll) {
@@ -63,20 +74,20 @@ TEST(TlsRuntimeSelectionSourceContract, RuntimeProfileSelectionUsesPlatformAllow
   ASSERT_TRUE(normalized.find("autokey=make_profile_selection_key(destination,unix_time);") != td::string::npos);
   ASSERT_TRUE(normalized.find("autoweights=runtime_params.profile_weights;") != td::string::npos);
   ASSERT_TRUE(normalized.find("std::vector<BrowserProfile>confidence_allowed_profiles;") != td::string::npos);
-  ASSERT_TRUE(normalized.find("if(!transport_confidence_allows_profile(runtime_params,profile)){continue;}") !=
-              td::string::npos);
+  ASSERT_TRUE(normalized.find("if(!tls_hello_profile_registry_internal::transport_confidence_allows_profile(runtime_"
+                              "params,profile)){continue;}") != td::string::npos);
   ASSERT_TRUE(normalized.find("CHECK(total_weight>0);") != td::string::npos);
-  ASSERT_TRUE(normalized.find("autoroll=stable_selection_hash(key,platform)%total_weight;") != td::string::npos);
+  ASSERT_TRUE(normalized.find(
+                  "autoroll=tls_hello_profile_registry_internal::stable_selection_hash(key,platform)%total_weight;") !=
+              td::string::npos);
   ASSERT_TRUE(normalized.find("BrowserProfilebaseline_profile=confidence_allowed_profiles.back();") !=
               td::string::npos);
   ASSERT_TRUE(normalized.find("for(autoprofile:confidence_allowed_profiles)") != td::string::npos);
   ASSERT_TRUE(normalized.find("if(confidence_allowed_profiles.empty())") != td::string::npos);
   ASSERT_TRUE(normalized.find("if(!runtime_params.release_mode_profile_gating){returnbaseline_profile;}") !=
               td::string::npos);
-  ASSERT_TRUE(
-      normalized.find(
-          "runtime_profile_selection_counters().advisory_blocked_total.fetch_add(1,std::memory_order_relaxed);") !=
-      td::string::npos);
+  ASSERT_TRUE(normalized.find("tls_hello_profile_registry_internal::runtime_profile_selection_counters().advisory_"
+                              "blocked_total.fetch_add(1,std::memory_order_relaxed);") != td::string::npos);
 }
 
-}  // namespace
+}  // namespace tls_runtime_selection_source_contract_test
