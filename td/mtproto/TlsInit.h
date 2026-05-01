@@ -54,6 +54,7 @@ class TlsInit final : public TransparentProxy {
   bool hello_ech_disabled_by_route_{false};
   bool hello_ech_disabled_by_circuit_breaker_{false};
   bool hello_ech_reenabled_after_ttl_{false};
+  bool hello_failure_recorded_{false};
   enum class State {
     SendHello,
     WaitHelloResponse,
@@ -62,9 +63,11 @@ class TlsInit final : public TransparentProxy {
   std::string hello_profile_name_;
   std::string hello_rand_;
 
+  bool record_ech_failure_once();
   void send_hello();
   Status wait_hello_response();
 
+  void on_proxy_setup_error(const Status &status) override;
   Status loop_impl() final;
 };
 

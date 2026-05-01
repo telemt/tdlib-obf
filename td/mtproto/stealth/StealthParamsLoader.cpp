@@ -18,6 +18,7 @@
 #include "td/utils/port/Stat.h"
 #endif
 
+#include <array>
 #include <unordered_set>
 
 namespace td {
@@ -650,9 +651,34 @@ Result<RuntimeRouteFailurePolicy> parse_route_failure(JsonValue value) {
     if (failure_kinds.empty()) {
       return Status::Error("route_failure.failure_kinds must not be empty");
     }
+
+    static const std::array<Slice, 4> kSupportedFailureKinds = {
+        Slice("tcp_reset_after_ch"),
+        Slice("hello_timeout"),
+        Slice("tls_alert_fatal"),
+        Slice("server_hello_parser_reject"),
+    };
+    std::unordered_set<string> seen_failure_kinds;
+    seen_failure_kinds.reserve(failure_kinds.size());
+
     for (const auto &failure_kind : failure_kinds) {
       if (failure_kind.type() != JsonValue::Type::String || failure_kind.get_string().empty()) {
         return Status::Error("route_failure.failure_kinds entries must be non-empty strings");
+      }
+
+      auto failure_kind_name = failure_kind.get_string();
+      bool supported = false;
+      for (auto allowed_failure_kind : kSupportedFailureKinds) {
+        if (failure_kind_name == allowed_failure_kind) {
+          supported = true;
+          break;
+        }
+      }
+      if (!supported) {
+        return Status::Error("route_failure.failure_kinds has unsupported value \"" + failure_kind_name.str() + "\"");
+      }
+      if (!seen_failure_kinds.emplace(failure_kind_name.str()).second) {
+        return Status::Error("route_failure.failure_kinds must not contain duplicates");
       }
     }
   }

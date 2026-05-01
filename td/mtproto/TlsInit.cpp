@@ -222,6 +222,15 @@ void Grease::init(MutableSlice res) {
   }
 }
 
+bool TlsInit::record_ech_failure_once() {
+  if (!hello_uses_ech_ || hello_failure_recorded_) {
+    return false;
+  }
+  stealth::note_runtime_ech_failure(username_, hello_unix_time_);
+  hello_failure_recorded_ = true;
+  return true;
+}
+
 void TlsInit::send_hello() {
   hello_unix_time_ = static_cast<int32>(Time::now() + server_time_difference_);
   auto decision = stealth::get_runtime_ech_decision(username_, hello_unix_time_, route_hints_);
@@ -239,6 +248,7 @@ void TlsInit::send_hello() {
   hello_profile_name_ = stealth::profile_spec(profile).name.str();
   hello_profile_allows_ech_ = stealth::profile_spec(profile).allows_ech;
   hello_uses_ech_ = hello_profile_allows_ech_ && decision.ech_mode == stealth::EchMode::Rfc9180Outer;
+  hello_failure_recorded_ = false;
   auto hello = stealth::build_proxy_tls_client_hello_for_profile(
       username_, password_, hello_unix_time_, profile,
       hello_uses_ech_ ? stealth::EchMode::Rfc9180Outer : stealth::EchMode::Disabled);
@@ -291,11 +301,7 @@ Status TlsInit::wait_hello_response() {
   auto status = consume_tls_hello_response_records(&it, &is_complete);
   auto parsed_bytes = buffered_bytes - it.size();
   if (status.is_error()) {
-    bool recorded_ech_failure = false;
-    if (hello_uses_ech_) {
-      stealth::note_runtime_ech_failure(username_, hello_unix_time_);
-      recorded_ech_failure = true;
-    }
+    bool recorded_ech_failure = record_ech_failure_once();
     log_hello_rejection("record_parse", status, recorded_ech_failure, buffered_bytes, parsed_bytes, false);
     return status;
   }
@@ -305,11 +311,7 @@ Status TlsInit::wait_hello_response() {
 
   auto response = fd_.input_buffer().cut_head(it.begin().clone()).move_as_buffer_slice();
   if (response.size() < kTlsHelloMinEnvelopeLength) {
-    bool recorded_ech_failure = false;
-    if (hello_uses_ech_) {
-      stealth::note_runtime_ech_failure(username_, hello_unix_time_);
-      recorded_ech_failure = true;
-    }
+    bool recorded_ech_failure = record_ech_failure_once();
     auto error = tls_hello_malformed_response_error(PSLICE() << "response is shorter than minimal TLS hello envelope: "
                                                              << "response_bytes=" << response.size()
                                                              << " min_expected=" << kTlsHelloMinEnvelopeLength);
@@ -323,11 +325,7 @@ Status TlsInit::wait_hello_response() {
   string hash_dest(32, '\0');
   hmac_sha256(password_, PSLICE() << hello_rand_ << response.as_slice(), hash_dest);
   if (!constant_time_equals(hash_dest, response_rand)) {
-    bool recorded_ech_failure = false;
-    if (hello_uses_ech_) {
-      stealth::note_runtime_ech_failure(username_, hello_unix_time_);
-      recorded_ech_failure = true;
-    }
+    bool recorded_ech_failure = record_ech_failure_once();
     auto error = tls_hello_hash_mismatch_error(response.size());
     log_hello_rejection("response_hash", error, recorded_ech_failure, response.size(), response.size(), true);
     return error;
@@ -350,6 +348,28 @@ Status TlsInit::wait_hello_response() {
     stop();
   }
   return Status::OK();
+}
+
+void TlsInit::on_proxy_setup_error(const Status &status) {
+  if (!status.is_error() || state_ != State::WaitHelloResponse) {
+    return;
+  }
+
+  auto recorded_ech_failure = record_ech_failure_once();
+  if (!recorded_ech_failure) {
+    return;
+  }
+
+  LOG(WARNING) << "TlsInit hello transport/setup rejection recorded for ECH circuit breaker "
+               << tag("destination", username_) << tag("route_known", route_hints_.is_known)
+               << tag("route_ru", route_hints_.is_ru) << tag("ech_mode", hello_ech_mode_name_)
+               << tag("ech_enabled", hello_uses_ech_) << tag("profile", hello_profile_name_)
+               << tag("profile_allows_ech", hello_profile_allows_ech_)
+               << tag("ech_disabled_by_route", hello_ech_disabled_by_route_)
+               << tag("ech_disabled_by_circuit_breaker", hello_ech_disabled_by_circuit_breaker_)
+               << tag("ech_reenabled_after_ttl", hello_ech_reenabled_after_ttl_)
+               << tag("hello_unix_time", hello_unix_time_) << tag("status_code", status.code())
+               << tag("status_message", status.public_message());
 }
 
 Status TlsInit::loop_impl() {

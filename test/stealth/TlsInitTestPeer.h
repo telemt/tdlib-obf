@@ -54,6 +54,10 @@ struct TlsInitTestPeer final {
   static const std::string &hello_rand(const TlsInit &tls_init) {
     return tls_init.hello_rand_;
   }
+
+  static void on_proxy_setup_error(TlsInit &tls_init, const td::Status &status) {
+    tls_init.on_proxy_setup_error(status);
+  }
 };
 
 }  // namespace test

@@ -113,6 +113,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_profile_runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_security.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_order_diagnostics_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_response_diagnostics_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_log_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_generation_log_source_contract.cpp
@@ -489,6 +490,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_padding_budget_interactions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_wakeup_edge_cases.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_clock_anomaly_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_manual_override_unsupported_transport_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_contract_edges.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_overflow_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller.cpp
@@ -671,6 +673,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_concurrency_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_serialization_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_numeric_overflow_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_parse_fail_ttl_race_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_route_failure_policy_reload_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_sticky_rotation_route_reload_storm_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_drs_anchor_overflow_adversarial.cpp
@@ -931,7 +934,10 @@ if(NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN)
       add_test(run_all_tests run_all_tests)
     endif()
   else()
-    message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")
+    message(
+      STATUS
+        "run_all_tests executable is not available during configure; registering umbrella CTest entry"
+    )
     add_test(run_all_tests run_all_tests)
   endif()
 endif()

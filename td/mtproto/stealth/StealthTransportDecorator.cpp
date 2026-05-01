@@ -528,6 +528,20 @@ void StealthTransportDecorator::pre_flush_write(double now) {
     // the callback always runs at least once, so batch is always populated.
     CHECK(batch.has_value());
 
+    auto resolve_coalesced_batch_hint = [&](const vector<ShaperPendingWrite> &items) {
+      CHECK(!items.empty());
+      auto resolved_hint = items.front().hint;
+      if (resolved_hint != TrafficHint::Unknown) {
+        return resolved_hint;
+      }
+      for (const auto &item : items) {
+        if (item.hint != TrafficHint::Unknown) {
+          return item.hint;
+        }
+      }
+      return resolved_hint;
+    };
+
     const auto normalized_batch_hint =
         stealth_transport_decorator_internal::normalize_drs_hint(batch->items().front().hint);
     const bool should_update_drs =
@@ -535,7 +549,7 @@ void StealthTransportDecorator::pre_flush_write(double now) {
 
     size_t written_bytes = 0;
     if (batch->can_coalesce()) {
-      inner_->set_traffic_hint(batch->items().front().hint);
+      inner_->set_traffic_hint(resolve_coalesced_batch_hint(batch->items()));
       auto merged = batch->take_coalesced_message();
       written_bytes = merged.size();
       inner_->write(std::move(merged), false);

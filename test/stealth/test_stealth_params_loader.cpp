@@ -179,6 +179,29 @@ TEST(StealthParamsLoader, StrictLoadRejectsEmptyPlanFailureKinds) {
   ASSERT_TRUE(result.is_error());
 }
 
+TEST(StealthParamsLoader, StrictLoadRejectsUnknownPlanFailureKind) {
+  ScopedTempDir temp_dir;
+  auto path = config_path(temp_dir.path());
+  write_file(path,
+             "{"
+             "\"version\":1,"
+             "\"profile_weights\":{"
+             "\"chrome133\":50,\"chrome131\":20,\"chrome120\":15,\"firefox148\":15,"
+             "\"safari26_3\":20,\"ios14\":70,\"android11_okhttp_advisory\":30},"
+             "\"route_policy\":{"
+             "\"unknown\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"ru\":{\"ech_mode\":\"disabled\",\"allow_quic\":false},"
+             "\"non_ru\":{\"ech_mode\":\"rfc9180_outer\",\"allow_quic\":false}},"
+             "\"route_failure\":{"
+             "\"ech_fail_open_threshold\":4,\"ech_disable_ttl_sec\":600.0,"
+             "\"failure_kinds\":[\"tcp_reset_after_ch\",\"nonexistent_failure_kind\"],"
+             "\"persist_across_restart\":true},"
+             "\"bulk_threshold_bytes\":16384}");
+
+  auto result = StealthParamsLoader::try_load_strict(path);
+  ASSERT_TRUE(result.is_error());
+}
+
 TEST(StealthParamsLoader, StrictLoadAcceptsPlanStyleRoutePolicyNames) {
   ScopedTempDir temp_dir;
   auto path = config_path(temp_dir.path());

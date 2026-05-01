@@ -44,6 +44,7 @@ class TransparentProxy : public Actor {
   ActorShared<> parent_;
 
   void on_error(Status status);
+  virtual void on_proxy_setup_error(const Status &status);
   void tear_down() override;
   void start_up() override;
   void hangup() override;

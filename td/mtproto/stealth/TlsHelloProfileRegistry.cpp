@@ -563,6 +563,7 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       }
       if (!parse_route_failure_cache_entry(serialized, entry)) {
         entry = make_fail_closed_route_failure_cache_entry();
+        clamp_route_failure_disabled_until(entry, max_disabled_until);
         auto inserted = cache.emplace(key, entry);
         persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
         if (store_key != canonical_store_key) {
@@ -609,6 +610,7 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
         RouteFailureCacheEntry entry;
         if (!parse_route_failure_cache_entry(serialized, entry)) {
           entry = make_fail_closed_route_failure_cache_entry();
+          clamp_route_failure_disabled_until(entry, max_disabled_until);
           auto inserted = cache.emplace(key, entry);
           persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
           if (store_key != canonical_store_key) {

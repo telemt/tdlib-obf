@@ -7,6 +7,7 @@
 #include "td/actor/actor.h"
 #include "td/mtproto/stealth/Interfaces.h"
 #include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
+#include "td/net/ProxySetupError.h"
 #include "td/utils/common.h"
 #include "td/utils/port/IPAddress.h"
 #include "td/utils/port/PollFlags.h"
@@ -338,6 +339,75 @@ TEST(TlsInitCircuitBreaker, FailuresMustDisableEchForNextDayBucketOfSameDestinat
     ASSERT_TRUE(parsed.is_ok());
     ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
   }
+}
+
+TEST(TlsInitCircuitBreaker, TransportTimeoutFailuresWhileWaitingResponseDisableEch) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  auto candidate = find_ech_enabled_runtime_candidate();
+
+  for (td::int32 attempt = 0; attempt < 3; attempt++) {
+    auto socket_pair = create_socket_pair().move_as_ok();
+    auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+    TlsInitTestPeer::send_hello(tls_init);
+
+    auto wire = flush_client_hello(tls_init, socket_pair.peer);
+    auto parsed = parse_tls_client_hello(wire);
+    ASSERT_TRUE(parsed.is_ok());
+    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+
+    auto timeout_error =
+        make_proxy_setup_error(td::ProxySetupErrorCode::ConnectionTimeoutExpired, "Connection timeout expired");
+    TlsInitTestPeer::on_proxy_setup_error(tls_init, timeout_error);
+  }
+
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto wire = flush_client_hello(tls_init, socket_pair.peer);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+  ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
+
+  auto counters = get_runtime_ech_counters();
+  ASSERT_TRUE(counters.enabled_total >= 3);
+  ASSERT_EQ(1u, counters.disabled_cb_total);
+}
+
+TEST(TlsInitCircuitBreaker, TransportConnectionClosedFailuresWhileWaitingResponseDisableEch) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  auto candidate = find_ech_enabled_runtime_candidate();
+
+  for (td::int32 attempt = 0; attempt < 3; attempt++) {
+    auto socket_pair = create_socket_pair().move_as_ok();
+    auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+    TlsInitTestPeer::send_hello(tls_init);
+
+    auto wire = flush_client_hello(tls_init, socket_pair.peer);
+    auto parsed = parse_tls_client_hello(wire);
+    ASSERT_TRUE(parsed.is_ok());
+    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+
+    auto closed_error = make_proxy_setup_error(td::ProxySetupErrorCode::ConnectionClosed, "Connection closed");
+    TlsInitTestPeer::on_proxy_setup_error(tls_init, closed_error);
+  }
+
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto wire = flush_client_hello(tls_init, socket_pair.peer);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+  ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
+
+  auto counters = get_runtime_ech_counters();
+  ASSERT_TRUE(counters.enabled_total >= 3);
+  ASSERT_EQ(1u, counters.disabled_cb_total);
 }
 
 TEST(TlsInitCircuitBreaker, SuccessForDifferentDestinationMustNotClearBlockedDestinationState) {

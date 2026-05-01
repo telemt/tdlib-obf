@@ -29,11 +29,16 @@ void TransparentProxy::on_error(Status status) {
   CHECK(status.is_error());
   VLOG(proxy) << "Receive proxy setup error" << tag("status_code", status.code())
               << tag("status_message", status.public_message());
+  on_proxy_setup_error(status);
   if (callback_) {
     callback_->set_result(std::move(status));
     callback_.reset();
   }
   stop();
+}
+
+void TransparentProxy::on_proxy_setup_error(const Status &status) {
+  (void)status;
 }
 
 void TransparentProxy::tear_down() {

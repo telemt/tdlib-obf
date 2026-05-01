@@ -19,7 +19,9 @@
 #include <cmath>
 #include <limits>
 
-namespace {
+namespace td {
+namespace mtproto {
+namespace test {
 
 using td::mtproto::stealth::ChaffScheduler;
 using td::mtproto::stealth::DrsPhaseModel;
@@ -245,4 +247,40 @@ TEST(SchedulerBudget, ExplicitOversizedTargetWakeupIsDeferredByBudgetWindow) {
   ASSERT_TRUE(std::isfinite(wakeup));
 }
 
-}  // namespace
+TEST(SchedulerBudget, ClockRewindDoesNotBypassBudgetWithFutureDatedEmissionSample) {
+  MockRng rng(16);
+  auto config = make_tight_budget_config(100, 100);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 100.0);
+
+  sched.note_activity(100.0);
+  sched.note_chaff_emitted(101.0, 100);
+
+  // Simulate non-monotonic runtime clock behavior. Budget must remain fail-closed.
+  sched.note_activity(50.0);
+
+  ASSERT_FALSE(sched.should_emit(50.1, false, true));
+  auto wakeup = sched.get_wakeup(50.1, false, true);
+  ASSERT_TRUE(wakeup > 100.0);
+  ASSERT_TRUE(std::isfinite(wakeup));
+}
+
+TEST(SchedulerBudget, ClockRewindKeepsExplicitTargetBudgetChecksFailClosed) {
+  MockRng rng(17);
+  auto config = make_tight_budget_config(100, 100);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 100.0);
+
+  sched.note_activity(100.0);
+  sched.note_chaff_emitted(101.0, 100);
+
+  // Rewound queries must not make room for additional target bytes early.
+  ASSERT_FALSE(sched.should_emit_for_target(50.0, false, true, 1));
+  auto wakeup = sched.get_wakeup_for_target(50.0, false, true, 1);
+  ASSERT_TRUE(wakeup > 100.0);
+  ASSERT_TRUE(std::isfinite(wakeup));
+}
+
+}  // namespace test
+}  // namespace mtproto
+}  // namespace td
