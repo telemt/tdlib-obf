@@ -84,8 +84,8 @@ struct ChaffHarness final {
   RecordingTransport *inner{nullptr};
   MockClock *clock{nullptr};
 
-  static ChaffHarness make(double idle_threshold_ms = 100.0, double chaff_interval_ms = 200.0,
-                           size_t chaff_bytes = 512, size_t budget_bytes_per_minute = 4096) {
+  static ChaffHarness make(double idle_threshold_ms = 100.0, double chaff_interval_ms = 200.0, size_t chaff_bytes = 512,
+                           size_t budget_bytes_per_minute = 4096) {
     MockRng config_rng(1);
     auto config = StealthConfig::default_config(config_rng);
 
@@ -100,12 +100,12 @@ struct ChaffHarness final {
     // IPT: zero delay for simplicity
     config.ipt_params.p_burst_stay = 0.0;
     config.ipt_params.p_idle_to_burst = 0.0;
-    config.ipt_params.idle_alpha = 0.0;
-    config.ipt_params.idle_scale_ms = 0.0;
-    config.ipt_params.idle_max_ms = 0.0;
-    config.ipt_params.burst_mu_ms = 0.0;
+    config.ipt_params.idle_alpha = 1.0;
+    config.ipt_params.idle_scale_ms = 0.001;
+    config.ipt_params.idle_max_ms = 0.002;
+    config.ipt_params.burst_mu_ms = -20.0;
     config.ipt_params.burst_sigma = 0.0;
-    config.ipt_params.burst_max_ms = 0.0;
+    config.ipt_params.burst_max_ms = 0.001;
 
     // Chaff: enabled with controllable parameters
     ChaffPolicy chaff;
@@ -132,8 +132,8 @@ struct ChaffHarness final {
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
 
-    auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(99),
-                                                    std::move(clock));
+    auto result =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(99), std::move(clock));
     CHECK(result.is_ok());
     h.transport = result.move_as_ok();
     return h;
@@ -180,12 +180,10 @@ TEST(ChaffIptInteraction, ChaffIsEmittedAfterIdlePeriod) {
 
   // Flush: chaff should be emitted
   h.flush_now();
-  ASSERT_GT(h.inner->write_calls, writes_before)
-      << "Expected chaff to be emitted after idle period";
+  ASSERT_TRUE(h.inner->write_calls > writes_before);
 
   // Chaff should appear as Keepalive hint
-  ASSERT_GT(h.count_keepalive_writes(), 0)
-      << "Chaff writes should use Keepalive hint";
+  ASSERT_TRUE(h.count_keepalive_writes() > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,20 +213,22 @@ TEST(ChaffIptInteraction, ChaffDoesNotUpdateIptActivityState) {
   // Flush: chaff should emit
   h.flush_now();
   const int after_chaff = h.inner->write_calls;
-  ASSERT_GT(after_chaff, before_chaff) << "Expected at least one chaff write";
+  ASSERT_TRUE(after_chaff > before_chaff);
 
-  // After chaff, the chaff_scheduler_ note_activity was NOT called.
-  // The idle counter should continue from the last REAL activity write
-  // (not from the chaff emission).
-  // Verify: the wakeup time for chaff is based on chaff_interval, not
-  // on real traffic interval.
-  auto wakeup = h.transport->get_shaping_wakeup();
-  if (wakeup != 0.0) {
-    // If chaff properly updated the activity timer, wakeup would be
-    // now + chaff_interval. If not, wakeup reflects the last real activity.
-    // Either is valid behavior, but we document it explicitly here.
-    ASSERT_GT(wakeup, 0.0) << "Wakeup should be positive after chaff emission";
-  }
+  // Chaff emission must be interval-limited: no immediate re-emit in same instant.
+  const int after_first_emit = h.inner->write_calls;
+  h.flush_now();
+  ASSERT_EQ(after_first_emit, h.inner->write_calls);
+
+  // Less than interval still should not emit.
+  h.clock->advance(0.02);  // 20ms < 50ms interval
+  h.flush_now();
+  ASSERT_EQ(after_first_emit, h.inner->write_calls);
+
+  // After interval elapses, next chaff emit is allowed.
+  h.clock->advance(0.04);  // total 60ms > 50ms interval
+  h.flush_now();
+  ASSERT_TRUE(h.inner->write_calls > after_first_emit);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,8 +258,7 @@ TEST(ChaffIptInteraction, ChaffDoesNotEmitWithActivePendingData) {
   h.flush_now();
 
   // Chaff requires no pending data
-  ASSERT_EQ(0, h.count_keepalive_writes())
-      << "Chaff should not emit when real traffic is pending";
+  ASSERT_EQ(0, h.count_keepalive_writes());
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +290,7 @@ TEST(ChaffIptInteraction, ChaffBudgetExhaustion) {
     if (new_chaff > 0) {
       chaff_writes += new_chaff;
     }
-    if (h.count_keepalive_writes() == 0 && i > 5) {
+    if (new_chaff == 0 && i > 5) {
       break;  // Budget exhausted
     }
   }
@@ -299,13 +298,11 @@ TEST(ChaffIptInteraction, ChaffBudgetExhaustion) {
   // Eventually the budget should be exhausted and chaff stops.
   // After a full minute window, budget resets, but in our test window
   // we expect limited chaff.
-  ASSERT_GT(chaff_writes, 0) << "Expected at least some chaff before budget exhaustion";
+  ASSERT_TRUE(chaff_writes > 0);
   // With budget = 3 * chaff_bytes, at most 3 chaff writes should succeed
   // before budget is exhausted (within the 60-second window).
   // Note: the budget window is 60 seconds; our test advances ~2s total.
-  ASSERT_LE(chaff_writes, static_cast<int>(kBudgetBytesPerMinute / kChaffBytes) + 1)
-      << "Chaff should be budget-limited; expected at most "
-      << (kBudgetBytesPerMinute / kChaffBytes) << " chaff writes (plus 1 tolerance)";
+  ASSERT_TRUE(chaff_writes <= static_cast<int>(kBudgetBytesPerMinute / kChaffBytes));
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +326,7 @@ TEST(ChaffIptInteraction, RealTrafficAfterChaffPreservesHintSeparation) {
   // Flush to emit chaff
   h.flush_now();
   const int chaff_count = h.count_keepalive_writes();
-  ASSERT_GT(chaff_count, 0) << "Expected chaff to be emitted";
+  ASSERT_TRUE(chaff_count > 0);
 
   // Now write real Interactive traffic
   const int before = h.inner->write_calls;
@@ -337,7 +334,7 @@ TEST(ChaffIptInteraction, RealTrafficAfterChaffPreservesHintSeparation) {
   h.flush_now();
   const int after = h.inner->write_calls;
 
-  ASSERT_GT(after, before) << "Real traffic should still be flushed after chaff";
+  ASSERT_TRUE(after > before);
 
   // The real traffic write should use Interactive hint, not Keepalive
   bool found_interactive = false;
@@ -347,8 +344,7 @@ TEST(ChaffIptInteraction, RealTrafficAfterChaffPreservesHintSeparation) {
       break;
     }
   }
-  ASSERT_TRUE(found_interactive)
-      << "Real traffic after chaff should preserve Interactive hint separation";
+  ASSERT_TRUE(found_interactive);
 }
 
 // ---------------------------------------------------------------------------
@@ -375,19 +371,19 @@ TEST(ChaffIptInteraction, ChaffDoesNotEmitWhenInnerCantWrite) {
   h.flush_now();
   const int after = h.inner->write_calls;
 
-  ASSERT_EQ(before, after) << "Chaff should not be emitted when inner cannot write";
+  ASSERT_EQ(before, after);
 }
 
 // ---------------------------------------------------------------------------
-// Adversarial: chaff with zero-byte budget.
-// Chaff budget exhausted immediately → no chaff emitted.
+// Adversarial: chaff with unsatisfiable tiny budget.
+// Budget lower than single chaff target should fail closed with no emission.
 // ---------------------------------------------------------------------------
 TEST(ChaffIptInteraction, ZeroBudgetPreventsAllChaff) {
   auto h = ChaffHarness::make(
       /*idle_threshold_ms=*/50.0,
       /*chaff_interval_ms=*/100.0,
       /*chaff_bytes=*/256,
-      /*budget_bytes_per_minute=*/0);  // Zero budget
+      /*budget_bytes_per_minute=*/1);  // Valid config, but below one chaff target
 
   h.write_interactive(32);
   h.flush_now();
@@ -395,8 +391,7 @@ TEST(ChaffIptInteraction, ZeroBudgetPreventsAllChaff) {
   h.clock->advance(1.0);
   h.flush_now();
 
-  ASSERT_EQ(0, h.count_keepalive_writes())
-      << "Zero budget should prevent all chaff emission";
+  ASSERT_EQ(0, h.count_keepalive_writes());
 }
 
 }  // namespace

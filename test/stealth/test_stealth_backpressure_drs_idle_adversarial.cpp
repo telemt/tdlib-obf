@@ -111,12 +111,12 @@ struct Harness final {
     // IPT: zero delay
     config.ipt_params.p_burst_stay = 0.0;
     config.ipt_params.p_idle_to_burst = 0.0;
-    config.ipt_params.idle_alpha = 0.0;
-    config.ipt_params.idle_scale_ms = 0.0;
-    config.ipt_params.idle_max_ms = 0.0;
-    config.ipt_params.burst_mu_ms = 0.0;
+    config.ipt_params.idle_alpha = 1.0;
+    config.ipt_params.idle_scale_ms = 0.001;
+    config.ipt_params.idle_max_ms = 0.002;
+    config.ipt_params.burst_mu_ms = -20.0;
     config.ipt_params.burst_sigma = 0.0;
-    config.ipt_params.burst_max_ms = 0.0;
+    config.ipt_params.burst_max_ms = 0.001;
 
     config.chaff_policy.enabled = false;
     config.greeting_camouflage_policy.greeting_record_count = 0;
@@ -132,8 +132,8 @@ struct Harness final {
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
 
-    auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(13),
-                                                    std::move(clock));
+    auto result =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(13), std::move(clock));
     CHECK(result.is_ok());
     h.transport = result.move_as_ok();
     return h;
@@ -160,8 +160,12 @@ struct Harness final {
       inner->writes_per_flush_budget_result = -1;
       transport->pre_flush_write(clock->now());
       all_sizes.insert(all_sizes.end(), inner->max_tls_record_sizes.begin(), inner->max_tls_record_sizes.end());
-      if (transport->get_shaping_wakeup() == 0.0 || transport->get_shaping_wakeup() > clock->now()) {
+      auto wakeup = transport->get_shaping_wakeup();
+      if (wakeup == 0.0) {
         break;
+      }
+      if (wakeup > clock->now()) {
+        clock->advance(wakeup - clock->now());
       }
     }
     return all_sizes;
@@ -186,8 +190,7 @@ TEST(BackpressureDrsIdle, BaselineDrsReachesSteadyStateNormally) {
   h.drain_all_writes();
 
   ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
-  ASSERT_EQ(kSteadyStateCap, h.inner->max_tls_record_sizes.back())
-      << "DRS should reach steady-state after sufficient records";
+  ASSERT_EQ(kSteadyStateCap, h.inner->max_tls_record_sizes.back());
 }
 
 // ---------------------------------------------------------------------------
@@ -213,8 +216,7 @@ TEST(BackpressureDrsIdle, LongPauseResetsToSlowStart) {
     h.write_interactive(32);
     h.drain_all_writes();
     ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
-    ASSERT_EQ(kSteadyStateCap, h.inner->max_tls_record_sizes.back())
-        << "DRS should be in steady-state before the pause";
+    ASSERT_EQ(kSteadyStateCap, h.inner->max_tls_record_sizes.back());
   }
 
   // Block the inner transport (simulates network backpressure)
@@ -237,15 +239,11 @@ TEST(BackpressureDrsIdle, LongPauseResetsToSlowStart) {
   h.drain_all_writes();
 
   // After the long pause + reset, writes use slow-start cap
-  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty())
-      << "Expected writes to be flushed after backpressure release";
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
 
   auto first_size_after_reset = h.inner->max_tls_record_sizes.front();
   // DRS resets to slow-start; first write uses slow-start cap
-  ASSERT_EQ(kSlowStartCap, first_size_after_reset)
-      << "DRS should reset to slow-start cap (" << kSlowStartCap
-      << ") after long idle pause, but got " << first_size_after_reset
-      << ". This confirms the backpressure+idle-reset interaction.";
+  ASSERT_EQ(kSlowStartCap, first_size_after_reset);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,9 +285,7 @@ TEST(BackpressureDrsIdle, ShortPauseDoesNotResetDrs) {
 
   ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
   auto first_size = h.inner->max_tls_record_sizes.front();
-  ASSERT_EQ(kSteadyStateCap, first_size)
-      << "Short pause should NOT reset DRS; expected steady-state cap "
-      << kSteadyStateCap << " but got " << first_size;
+  ASSERT_EQ(kSteadyStateCap, first_size);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,16 +322,14 @@ TEST(BackpressureDrsIdle, RepeatedCyclesPreventSteadyState) {
       break;
     }
   }
-  ASSERT_TRUE(any_slow_start)
-      << "Repeated long pauses should keep resetting DRS to slow-start; "
-         "expected to see cap <= " << kSlowStartCap;
+  ASSERT_TRUE(any_slow_start);
 }
 
 // ---------------------------------------------------------------------------
-// Boundary: exactly at idle threshold does NOT trigger reset.
-// (should_reset_after_idle uses > comparison, not >=)
+// Boundary: exactly at idle threshold keeps steady-state in this harness.
+// Floating-point time arithmetic can land just below the sampled threshold.
 // ---------------------------------------------------------------------------
-TEST(BackpressureDrsIdle, ExactlyAtIdleThresholdDoesNotReset) {
+TEST(BackpressureDrsIdle, ExactlyAtIdleThresholdKeepsSteadyState) {
   auto h = Harness::make(4, 2, 1);
 
   // Warm up to steady-state
@@ -366,14 +360,9 @@ TEST(BackpressureDrsIdle, ExactlyAtIdleThresholdDoesNotReset) {
   h.inner->max_tls_record_sizes.clear();
   h.drain_all_writes();
 
-  // Exactly at threshold: behavior depends on whether the check is > or >=.
-  // Document the actual behavior here.
   ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
   auto cap = h.inner->max_tls_record_sizes.front();
-  // This test documents the boundary behavior, not asserts a specific value.
-  // It ensures no crash or undefined behavior at the exact threshold.
-  ASSERT_TRUE(cap == kSlowStartCap || cap == kSteadyStateCap)
-      << "At exact idle threshold, cap should be either slow-start or steady-state, got " << cap;
+  ASSERT_EQ(kSteadyStateCap, cap);
 }
 
 // ---------------------------------------------------------------------------
@@ -382,8 +371,7 @@ TEST(BackpressureDrsIdle, ExactlyAtIdleThresholdDoesNotReset) {
 TEST(BackpressureDrsIdle, CanWriteReturnsFalseWhenBackpressureLatched) {
   auto h = Harness::make(4, 2, 1);
 
-  ASSERT_TRUE(h.transport->can_write())
-      << "Before high watermark, can_write() should be true";
+  ASSERT_TRUE(h.transport->can_write());
 
   // Queue enough writes to reach high watermark
   // high_watermark=2, ring_capacity=4
@@ -401,16 +389,13 @@ TEST(BackpressureDrsIdle, CanWriteReturnsFalseWhenBackpressureLatched) {
     h.write_interactive(32);
   }
 
-  ASSERT_FALSE(h.transport->can_write())
-      << "After high watermark, can_write() should return false (backpressure)";
+  ASSERT_FALSE(h.transport->can_write());
 
   // Drain by unblocking inner and flushing
   h.inner->can_write_result = true;
-  h.inner->writes_per_flush_budget_result = -1;
-  h.transport->pre_flush_write(h.clock->now());
+  h.drain_all_writes();
 
-  ASSERT_TRUE(h.transport->can_write())
-      << "After draining to low watermark, can_write() should return true";
+  ASSERT_TRUE(h.transport->can_write());
 }
 
 // ---------------------------------------------------------------------------
@@ -441,8 +426,8 @@ TEST(BackpressureDrsIdle, WriteAfterBackpressureReleaseIsValid) {
 
   ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
   auto cap = h.inner->max_tls_record_sizes.back();
-  ASSERT_GE(cap, 256) << "Record size should be >= minimum TLS record size";
-  ASSERT_LE(cap, 16384) << "Record size should be <= maximum TLS record size";
+  ASSERT_TRUE(cap >= 256);
+  ASSERT_TRUE(cap <= 16384);
 }
 
 }  // namespace

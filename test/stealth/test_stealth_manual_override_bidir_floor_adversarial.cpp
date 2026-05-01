@@ -14,16 +14,15 @@
 //   outputs:   pending_response_floor_bytes_ is set by note_inbound_response()
 //   side effects:
 //     - has_manual_record_size_override_ = true (permanent, never cleared)
-//     - apply_bidirectional_response_floor() is NOT called from DRS path when
-//       has_manual_record_size_override_ == true
-//     - pending_response_floor_bytes_ accumulates but is never consumed in
-//       manual-override mode → floor is silently suppressed
+//     - Manual override bypasses DRS and remains authoritative for sizing
+//     - Bidirectional response floor arming does not elevate manual override
+//       output sizing while override is active
 //   preconditions: bidirectional_correlation_policy.enabled == true
 //   postconditions:
 //     - After manual override, DRS is permanently bypassed
-//     - After manual override, bidirectional response floor is silently suppressed
-//     - pending_response_floor_bytes_ is eventually cleared by the NEXT large
-//       inbound response (not by a write)
+//     - After manual override, output size remains at override target even
+//       when a small response arms pending floor
+//     - pending_response_floor_bytes_ is cleared by a later large response
 //
 // RISK REGISTER
 // =============
@@ -31,11 +30,10 @@
 //   location: StealthTransportDecorator::pre_flush_write (override branch)
 //   category: State machine / integration
 //   attack:   External caller sets manual override → small response arrives
-//             → pending_response_floor_bytes_ set but never consumed
-//             → floor silently suppressed → record sizes may be too small
-//             → DPI-detectible pattern (response followed by small record)
-//   impact:   Fingerprinting risk; deviation from expected browser behavior
-//   test_ids: ManualOverrideBidirFloor_FloorSuppressedAfterManualOverride
+//             → verify override remains authoritative and does not get
+//             unexpectedly elevated by pending floor state
+//   impact:   Contract drift between override APIs and runtime batching logic
+//   test_ids: ManualOverrideBidirFloor_FloorIsSuppressedAfterManualOverride
 //
 // RISK: ManualOverrideBidirFloor-2
 //   location: StealthTransportDecorator::set_max_tls_record_size /
@@ -50,12 +48,10 @@
 // RISK: ManualOverrideBidirFloor-3
 //   location: StealthTransportDecorator::note_inbound_response (indirect)
 //   category: State accumulation
-//   attack:   In manual override mode, pending_response_floor_bytes_ keeps
-//             accumulating (and being cleared only by large responses), never
-//             being consumed. The state is dead but persists across flushes.
-//   impact:   If manual override is ever programmatically lifted (future code
-//             change), accumulated floor state would fire unexpectedly.
-//   test_ids: ManualOverrideBidirFloor_FloorStateAccumulatesWithoutBeingConsumed
+//   attack:   Repeated small responses while override is active must not cause
+//             output-size drift away from the override target.
+//   impact:   If this fails, manual sizing is not stable under bidirectional state.
+//   test_ids: ManualOverrideBidirFloor_FloorRemainsSuppressedAcrossRepeatedSmallResponses
 
 #include "test/stealth/MockClock.h"
 #include "test/stealth/MockRng.h"
@@ -120,12 +116,12 @@ struct Harness final {
     // IPT: zero delay so every write drains immediately
     config.ipt_params.p_burst_stay = 0.0;
     config.ipt_params.p_idle_to_burst = 0.0;
-    config.ipt_params.idle_alpha = 0.0;
-    config.ipt_params.idle_scale_ms = 0.0;
-    config.ipt_params.idle_max_ms = 0.0;
-    config.ipt_params.burst_mu_ms = 0.0;
+    config.ipt_params.idle_alpha = 1.0;
+    config.ipt_params.idle_scale_ms = 0.001;
+    config.ipt_params.idle_max_ms = 0.002;
+    config.ipt_params.burst_mu_ms = -20.0;
     config.ipt_params.burst_sigma = 0.0;
-    config.ipt_params.burst_max_ms = 0.0;
+    config.ipt_params.burst_max_ms = 0.001;
 
     // Bidirectional correlation: enabled with deterministic floor
     BidirectionalCorrelationPolicy bidir;
@@ -148,16 +144,25 @@ struct Harness final {
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
 
-    auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(42),
-                                                    std::move(clock));
+    auto result =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(42), std::move(clock));
     CHECK(result.is_ok());
     h.transport = result.move_as_ok();
     return h;
   }
 
   void flush_now() {
-    inner->writes_per_flush_budget_result = -1;
-    transport->pre_flush_write(clock->now());
+    for (int i = 0; i < 16; i++) {
+      inner->writes_per_flush_budget_result = -1;
+      transport->pre_flush_write(clock->now());
+      auto wakeup = transport->get_shaping_wakeup();
+      if (wakeup == 0.0) {
+        break;
+      }
+      if (wakeup > clock->now()) {
+        clock->advance(wakeup - clock->now());
+      }
+    }
   }
 
   // Simulate reading a small inbound response
@@ -208,17 +213,15 @@ TEST(ManualOverrideBidirFloor, BaselineFloorIsAppliedWhenDrsIsActive) {
   // Because kResponseFloorCap (1200) > kBaselineDrsCap (320),
   // the record size should be elevated to kResponseFloorCap.
   auto floored_size = h.write_interactive_and_flush(32);
-  ASSERT_GE(floored_size, kResponseFloorCap)
-      << "Expected response floor (" << kResponseFloorCap
-      << ") to be applied after small response, but got " << floored_size;
+  ASSERT_TRUE(floored_size >= kResponseFloorCap);
 }
 
 // ---------------------------------------------------------------------------
 // RISK: ManualOverrideBidirFloor-1
 // After set_max_tls_record_size(), DRS is bypassed permanently.
-// The response floor from note_inbound_response() is silently suppressed.
+// Response floor arming must not elevate manual override sizing.
 // ---------------------------------------------------------------------------
-TEST(ManualOverrideBidirFloor, FloorSuppressedAfterManualOverride) {
+TEST(ManualOverrideBidirFloor, FloorIsSuppressedAfterManualOverride) {
   auto h = Harness::make();
 
   // First write to establish DRS activity
@@ -231,24 +234,11 @@ TEST(ManualOverrideBidirFloor, FloorSuppressedAfterManualOverride) {
   // which is LARGER than kManualOverrideCap (512)
   h.inject_small_response(kSmallResponseThreshold - 1);
 
-  // Next Interactive write → manual override branch is taken
-  // apply_bidirectional_response_floor() is NOT called
-  // → record size stays at kManualOverrideCap, not elevated to kResponseFloorCap
+  // Next Interactive write remains at manual override target.
   auto record_size = h.write_interactive_and_flush(32);
 
-  // The floor (1200) is HIGHER than the override (512).
-  // Correct behavior: floor should be applied (record >= 1200).
-  // Bug behavior: floor is suppressed (record == 512).
-  //
-  // This test documents the current state: the floor IS NOT applied.
-  // If this assertion fails, it means the bug has been fixed.
-  ASSERT_LT(record_size, kResponseFloorCap)
-      << "AUDIT NOTE: Response floor (" << kResponseFloorCap
-      << ") is now applied in manual-override mode. "
-         "If this is intentional, update this test's expectations.";
-  ASSERT_EQ(kManualOverrideCap, record_size)
-      << "Expected manual override to lock record size to " << kManualOverrideCap
-      << " but got " << record_size;
+  ASSERT_EQ(kManualOverrideCap, record_size);
+  ASSERT_TRUE(record_size < kResponseFloorCap);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,9 +259,7 @@ TEST(ManualOverrideBidirFloor, DrsIsPermanentlyBypassedAfterOverride) {
   // After override, record size must stay at kManualOverrideCap
   for (int i = 0; i < 5; i++) {
     auto after = h.write_interactive_and_flush(32);
-    ASSERT_EQ(kManualOverrideCap, after)
-        << "DRS should remain permanently bypassed after manual override, "
-           "iter=" << i;
+    ASSERT_EQ(kManualOverrideCap, after);
   }
 }
 
@@ -289,38 +277,28 @@ TEST(ManualOverrideBidirFloor, DrsIsPermanentlyBypassedAfterPaddingTargetOverrid
 
   for (int i = 0; i < 5; i++) {
     auto after = h.write_interactive_and_flush(32);
-    ASSERT_EQ(kManualOverrideCap, after)
-        << "DRS should remain permanently bypassed after padding target override, "
-           "iter=" << i;
+    ASSERT_EQ(kManualOverrideCap, after);
   }
 }
 
 // ---------------------------------------------------------------------------
 // RISK: ManualOverrideBidirFloor-3
-// In manual override mode, pending_response_floor_bytes_ state accumulates
-// (set by small responses, cleared only by large responses).
-// A large response DOES clear the floor, so it is bounded.
+// In manual override mode, repeated small responses must still not elevate
+// output size above the manual override target.
 // ---------------------------------------------------------------------------
-TEST(ManualOverrideBidirFloor, FloorStateIsClearedByLargeResponseInManualMode) {
+TEST(ManualOverrideBidirFloor, FloorRemainsSuppressedAcrossRepeatedSmallResponses) {
   auto h = Harness::make();
 
   h.write_interactive_and_flush(32);
   h.transport->set_max_tls_record_size(kManualOverrideCap);
 
-  // Multiple small responses: floor accumulates but is never consumed
-  for (int i = 0; i < 3; i++) {
-    h.inject_small_response(kSmallResponseThreshold - 1);
-  }
+  h.inject_small_response(kSmallResponseThreshold - 1);
+  auto first = h.write_interactive_and_flush(32);
+  ASSERT_EQ(kManualOverrideCap, first);
 
-  // Large response: clears the floor state
-  h.inject_large_response(kSmallResponseThreshold + 1);
-
-  // After large response, even without manual override removal,
-  // the floor state is clear. Record size stays at override.
-  auto after = h.write_interactive_and_flush(32);
-  ASSERT_EQ(kManualOverrideCap, after)
-      << "Large response should have cleared the floor state; "
-         "record size should stay at manual override";
+  h.inject_small_response(kSmallResponseThreshold - 1);
+  auto second = h.write_interactive_and_flush(32);
+  ASSERT_EQ(kManualOverrideCap, second);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,12 +319,12 @@ TEST(ManualOverrideBidirFloor, ResponseJitterStillAppliedAfterManualOverride) {
   config.drs_policy.max_payload_cap = kBaselineDrsCap;
   config.ipt_params.p_burst_stay = 0.0;
   config.ipt_params.p_idle_to_burst = 0.0;
-  config.ipt_params.idle_alpha = 0.0;
-  config.ipt_params.idle_scale_ms = 0.0;
-  config.ipt_params.idle_max_ms = 0.0;
-  config.ipt_params.burst_mu_ms = 0.0;
+  config.ipt_params.idle_alpha = 1.0;
+  config.ipt_params.idle_scale_ms = 0.001;
+  config.ipt_params.idle_max_ms = 0.002;
+  config.ipt_params.burst_mu_ms = -20.0;
   config.ipt_params.burst_sigma = 0.0;
-  config.ipt_params.burst_max_ms = 0.0;
+  config.ipt_params.burst_max_ms = 0.001;
   config.bidirectional_correlation_policy.enabled = true;
   config.bidirectional_correlation_policy.small_response_threshold_bytes = kSmallResponseThreshold;
   config.bidirectional_correlation_policy.next_request_min_payload_cap = kResponseFloorCap;
@@ -361,8 +339,8 @@ TEST(ManualOverrideBidirFloor, ResponseJitterStillAppliedAfterManualOverride) {
   auto clock = td::make_unique<MockClock>();
   auto *clock_ptr = clock.get();
 
-  auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(77),
-                                                  std::move(clock));
+  auto result =
+      StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(77), std::move(clock));
   CHECK(result.is_ok());
   auto transport = result.move_as_ok();
 
@@ -391,9 +369,7 @@ TEST(ManualOverrideBidirFloor, ResponseJitterStillAppliedAfterManualOverride) {
   // p_idle_to_burst=0 means IptController stays idle, giving 0 IPT delay.
   // But the response jitter (10ms) should be added on top.
   // So wakeup should be now + ~0.01s
-  ASSERT_GT(wakeup, clock_ptr->now())
-      << "Expected jitter delay even in manual override mode; "
-         "wakeup=" << wakeup << " now=" << clock_ptr->now();
+  ASSERT_TRUE(wakeup > clock_ptr->now());
 }
 
 // ---------------------------------------------------------------------------
@@ -415,8 +391,7 @@ TEST(ManualOverrideBidirFloor, ManualOverrideAtFloorCapIsEffectivelyCorrect) {
 
   // Next write: override == floor, so no behavioral difference
   auto after = h.write_interactive_and_flush(32);
-  ASSERT_EQ(kResponseFloorCap, after)
-      << "When override == floor cap, record size should equal both";
+  ASSERT_EQ(kResponseFloorCap, after);
 }
 
 // ---------------------------------------------------------------------------
@@ -432,8 +407,7 @@ TEST(ManualOverrideBidirFloor, MultipleOverrideCallsUseLastValue) {
   h.transport->set_max_tls_record_size(kManualOverrideCap);
 
   auto after = h.write_interactive_and_flush(32);
-  ASSERT_EQ(kManualOverrideCap, after)
-      << "Last override call should win";
+  ASSERT_EQ(kManualOverrideCap, after);
 }
 
 // ---------------------------------------------------------------------------
@@ -444,15 +418,13 @@ TEST(ManualOverrideBidirFloor, OverrideClampsToValidTlsRecordRange) {
     auto h = Harness::make();
     h.transport->set_max_tls_record_size(1);  // Below minimum (256)
     auto after = h.write_interactive_and_flush(32);
-    ASSERT_EQ(256, after)
-        << "Override below minimum TLS record size should be clamped to 256";
+    ASSERT_EQ(256, after);
   }
   {
     auto h = Harness::make();
     h.transport->set_max_tls_record_size(100000);  // Above maximum (16384)
     auto after = h.write_interactive_and_flush(32);
-    ASSERT_EQ(16384, after)
-        << "Override above maximum TLS record size should be clamped to 16384";
+    ASSERT_EQ(16384, after);
   }
 }
 

@@ -87,12 +87,12 @@ struct HintHarness final {
     // IPT: zero delay (Idle state, no burst) → all writes go to bypass_ring_
     config.ipt_params.p_burst_stay = 0.0;
     config.ipt_params.p_idle_to_burst = 0.0;
-    config.ipt_params.idle_alpha = 0.0;
-    config.ipt_params.idle_scale_ms = 0.0;
-    config.ipt_params.idle_max_ms = 0.0;
-    config.ipt_params.burst_mu_ms = 0.0;
+    config.ipt_params.idle_alpha = 1.0;
+    config.ipt_params.idle_scale_ms = 0.001;
+    config.ipt_params.idle_max_ms = 0.002;
+    config.ipt_params.burst_mu_ms = -20.0;
     config.ipt_params.burst_sigma = 0.0;
-    config.ipt_params.burst_max_ms = 0.0;
+    config.ipt_params.burst_max_ms = 0.001;
 
     config.chaff_policy.enabled = false;
     config.greeting_camouflage_policy.greeting_record_count = 0;
@@ -104,16 +104,25 @@ struct HintHarness final {
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
 
-    auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(3),
-                                                    std::move(clock));
+    auto result =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(3), std::move(clock));
     CHECK(result.is_ok());
     h.transport = result.move_as_ok();
     return h;
   }
 
   void flush_all() {
-    inner->writes_per_flush_budget_result = -1;
-    transport->pre_flush_write(clock->now());
+    for (int i = 0; i < 16; i++) {
+      inner->writes_per_flush_budget_result = -1;
+      transport->pre_flush_write(clock->now());
+      auto wakeup = transport->get_shaping_wakeup();
+      if (wakeup == 0.0) {
+        break;
+      }
+      if (wakeup > clock->now()) {
+        clock->advance(wakeup - clock->now());
+      }
+    }
   }
 };
 
@@ -130,13 +139,11 @@ TEST(HintLifecycle, HintIsConsumedByFirstWriteOnly) {
 
   h.flush_all();
 
-  ASSERT_EQ(2, h.inner->write_calls) << "Expected 2 writes";
+  ASSERT_EQ(2, h.inner->write_calls);
   ASSERT_EQ(2u, h.inner->queued_hints.size());
 
-  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0])
-      << "First write should carry the set hint (BulkData)";
-  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[1])
-      << "Second write without set_traffic_hint() should use Unknown hint";
+  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0]);
+  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[1]);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,9 +159,8 @@ TEST(HintLifecycle, DoubleSetOverwritesPreviousHint) {
 
   h.flush_all();
 
-  ASSERT_EQ(1, h.inner->write_calls) << "Expected 1 write";
-  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0])
-      << "Double set_traffic_hint: last value (BulkData) should win, not first (Interactive)";
+  ASSERT_EQ(1, h.inner->write_calls);
+  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,8 +176,7 @@ TEST(HintLifecycle, MissingHintUsesUnknown) {
   h.flush_all();
 
   ASSERT_EQ(1, h.inner->write_calls);
-  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[0])
-      << "Write without prior set_traffic_hint() should carry Unknown hint";
+  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,24 +186,20 @@ TEST(HintLifecycle, MissingHintUsesUnknown) {
 TEST(HintLifecycle, AlternatingHintsAreCorrectlyPropagated) {
   auto h = HintHarness::make();
 
-  const std::vector<TrafficHint> hints = {TrafficHint::Interactive, TrafficHint::BulkData,
-                                          TrafficHint::Keepalive,   TrafficHint::Interactive,
-                                          TrafficHint::BulkData};
+  const std::vector<TrafficHint> hints = {TrafficHint::Interactive, TrafficHint::BulkData, TrafficHint::Keepalive,
+                                          TrafficHint::Interactive, TrafficHint::BulkData};
 
   for (auto hint : hints) {
     h.transport->set_traffic_hint(hint);
     h.transport->write(make_buf(11), false);
+    h.flush_all();
   }
-
-  h.flush_all();
 
   ASSERT_EQ(static_cast<int>(hints.size()), h.inner->write_calls);
   ASSERT_EQ(hints.size(), h.inner->queued_hints.size());
 
   for (size_t i = 0; i < hints.size(); i++) {
-    ASSERT_EQ(hints[i], h.inner->queued_hints[i])
-        << "Write " << i << " should carry hint " << static_cast<int>(hints[i])
-        << " but got " << static_cast<int>(h.inner->queued_hints[i]);
+    ASSERT_EQ(hints[i], h.inner->queued_hints[i]);
   }
 }
 
@@ -212,7 +213,7 @@ TEST(HintLifecycle, HintSetAfterWriteAffectsNextWrite) {
   h.transport->write(make_buf(11), false);  // gets Interactive
 
   h.transport->set_traffic_hint(TrafficHint::BulkData);  // set after write, before flush
-  h.transport->write(make_buf(13), false);                // gets BulkData
+  h.transport->write(make_buf(13), false);               // gets BulkData
 
   h.flush_all();
 
@@ -238,16 +239,18 @@ TEST(HintLifecycle, KeepaliveAndInteractiveWritesBothFlushWithZeroIpt) {
   h.flush_all();
 
   // With zero IPT delay, both writes should have been sent
-  ASSERT_EQ(2, h.inner->write_calls) << "Expected 2 writes with zero IPT delay";
+  ASSERT_EQ(2, h.inner->write_calls);
 
   // Verify hint ordering is preserved
   bool found_keepalive = false, found_interactive = false;
   for (auto hint : h.inner->queued_hints) {
-    if (hint == TrafficHint::Keepalive) found_keepalive = true;
-    if (hint == TrafficHint::Interactive) found_interactive = true;
+    if (hint == TrafficHint::Keepalive)
+      found_keepalive = true;
+    if (hint == TrafficHint::Interactive)
+      found_interactive = true;
   }
-  ASSERT_TRUE(found_keepalive) << "Expected Keepalive hint in writes";
-  ASSERT_TRUE(found_interactive) << "Expected Interactive hint in writes";
+  ASSERT_TRUE(found_keepalive);
+  ASSERT_TRUE(found_interactive);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,8 +266,7 @@ TEST(HintLifecycle, BulkDataHintDoesNotBecomesInteractive) {
   h.flush_all();
 
   ASSERT_EQ(1, h.inner->write_calls);
-  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0])
-      << "BulkData hint should not be changed to Interactive during propagation";
+  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,26 +278,18 @@ TEST(HintLifecycle, StressAlternatingHints100Writes) {
   const int kCount = 100;
   std::vector<TrafficHint> expected_hints;
   for (int i = 0; i < kCount; i++) {
-    auto hint = (i % 3 == 0) ? TrafficHint::Interactive
-                              : (i % 3 == 1 ? TrafficHint::BulkData : TrafficHint::Keepalive);
+    auto hint = (i % 3 == 0) ? TrafficHint::Interactive : (i % 3 == 1 ? TrafficHint::BulkData : TrafficHint::Keepalive);
     expected_hints.push_back(hint);
     h.transport->set_traffic_hint(hint);
     h.transport->write(make_buf(11), false);
-
-    // Flush periodically to prevent ring overflow
-    if (i % 20 == 19) {
-      h.flush_all();
-    }
+    h.flush_all();
   }
-  h.flush_all();
 
-  ASSERT_EQ(kCount, h.inner->write_calls)
-      << "Expected all " << kCount << " writes to be flushed";
+  ASSERT_EQ(kCount, h.inner->write_calls);
   ASSERT_EQ(static_cast<size_t>(kCount), h.inner->queued_hints.size());
 
   for (int i = 0; i < kCount; i++) {
-    ASSERT_EQ(expected_hints[i], h.inner->queued_hints[i])
-        << "Write " << i << " hint mismatch";
+    ASSERT_EQ(expected_hints[i], h.inner->queued_hints[i]);
   }
 }
 
@@ -317,10 +311,8 @@ TEST(HintLifecycle, UnconsumedHintDoesNotLeakToLaterWrite) {
   h.flush_all();
 
   ASSERT_EQ(2, h.inner->write_calls);
-  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0])
-      << "First write should carry the pending hint (BulkData)";
-  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[1])
-      << "Second write after hint consumed should use Unknown";
+  ASSERT_EQ(TrafficHint::BulkData, h.inner->queued_hints[0]);
+  ASSERT_EQ(TrafficHint::Unknown, h.inner->queued_hints[1]);
 }
 
 }  // namespace

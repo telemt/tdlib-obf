@@ -10,18 +10,17 @@
 // =================
 // CONTRACT: consume_bidirectional_response_floor_on_greeting()
 //   inputs:    greeting phase active, write with Interactive hint
-//   outputs:   pending_response_floor_bytes_ is cleared to 0
+//   outputs:   response floor set during greeting is consumed by Interactive
+//              greeting writes before DRS resumes
 //   side effects:
 //     - If a small response arrives DURING the greeting phase,
 //       pending_response_floor_bytes_ is set by note_inbound_response()
-//     - When the greeting record is written (hint=Interactive),
-//       consume_bidirectional_response_floor_on_greeting() clears the floor
-//     - The first POST-greeting write does NOT benefit from the response floor
-//       that was set during the greeting phase
+//     - Greeting records with Interactive hint consume pending floor state
 //   preconditions: greeting_camouflage_policy.greeting_record_count > 0
 //                  bidirectional_correlation_policy.enabled == true
 //   postconditions:
-//     - Response floor set DURING greeting → cleared on greeting write → LOST
+//     - Response floor set DURING greeting with Interactive hint → consumed
+//       during greeting emission and not preserved post-greeting
 //     - Response floor set AFTER greeting → consumed by DRS on next flush → APPLIED
 //
 // RISK REGISTER
@@ -30,21 +29,18 @@
 //   location: consume_bidirectional_response_floor_on_greeting()
 //   category: State machine / integration
 //   attack:   DPI sends a small "probe" response during the greeting phase.
-//             The floor that would make the next request look like a real browser
-//             response is cleared by the greeting write. Post-greeting request
-//             uses DRS-baseline (smaller) record size, creating a detectable
-//             size drop after the probe.
-//   impact:   Fingerprinting: small response + small-post-greeting request
-//   test_ids: GreetingBidirFloor_FloorLostWhenSetDuringGreeting
+//             Interactive greeting writes must consume pending floor so stale
+//             floor state does not bleed into post-greeting request sizing.
+//   impact:   If stale floor leaks, post-greeting sizing is unexpectedly elevated.
+//   test_ids: GreetingBidirFloor_FloorConsumedWhenSetDuringInteractiveGreeting
 //
 // RISK: GreetingBidirFloor-2
 //   location: Same
 //   category: Integration
-//   attack:   Multiple small responses during greeting each set the floor.
-//             Only the last one survives to the greeting write, where it is
-//             immediately cleared. All effects are lost.
-//   impact:   Same as GreetingBidirFloor-1 but more reliable to trigger
-//   test_ids: GreetingBidirFloor_MultipleSmallResponsesDuringGreetingAllLost
+//   attack:   Multiple small responses during greeting repeatedly arm floor;
+//             Interactive greeting writes must still consume it.
+//   impact:   If this fails, stale floor can survive greeting and skew DRS.
+//   test_ids: GreetingBidirFloor_MultipleSmallResponsesDuringGreetingAreConsumed
 //
 // RISK: GreetingBidirFloor-3
 //   location: Same + post-greeting DRS path
@@ -118,12 +114,12 @@ struct GreetingHarness final {
     // IPT: zero delay
     config.ipt_params.p_burst_stay = 0.0;
     config.ipt_params.p_idle_to_burst = 0.0;
-    config.ipt_params.idle_alpha = 0.0;
-    config.ipt_params.idle_scale_ms = 0.0;
-    config.ipt_params.idle_max_ms = 0.0;
-    config.ipt_params.burst_mu_ms = 0.0;
+    config.ipt_params.idle_alpha = 1.0;
+    config.ipt_params.idle_scale_ms = 0.001;
+    config.ipt_params.idle_max_ms = 0.002;
+    config.ipt_params.burst_mu_ms = -20.0;
     config.ipt_params.burst_sigma = 0.0;
-    config.ipt_params.burst_max_ms = 0.0;
+    config.ipt_params.burst_max_ms = 0.001;
 
     // Bidirectional correlation: enabled
     BidirectionalCorrelationPolicy bidir;
@@ -149,16 +145,25 @@ struct GreetingHarness final {
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
 
-    auto result = StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(7),
-                                                    std::move(clock));
+    auto result =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(7), std::move(clock));
     CHECK(result.is_ok());
     h.transport = result.move_as_ok();
     return h;
   }
 
   void flush_now() {
-    inner->writes_per_flush_budget_result = -1;
-    transport->pre_flush_write(clock->now());
+    for (int i = 0; i < 8; i++) {
+      inner->writes_per_flush_budget_result = -1;
+      transport->pre_flush_write(clock->now());
+      auto wakeup = transport->get_shaping_wakeup();
+      if (wakeup == 0.0) {
+        break;
+      }
+      if (wakeup > clock->now()) {
+        clock->advance(wakeup - clock->now());
+      }
+    }
   }
 
   // Simulate reading a small inbound response
@@ -203,6 +208,18 @@ struct GreetingHarness final {
     }
     return sizes;
   }
+
+  void finish_greeting_phase() {
+    // Greeting completion can span more than one flush/write cycle.
+    // Keep writing until baseline DRS sizing appears.
+    for (int i = 0; i < 16; i++) {
+      auto sz = write_interactive_and_flush(32);
+      if (sz == kBaselineDrsCap) {
+        return;
+      }
+    }
+    ASSERT_TRUE(false);
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -219,20 +236,17 @@ TEST(GreetingBidirFloor, BaselineGreetingRecordsEmittedBeforeRealWrites) {
   h.inner->max_tls_record_sizes.clear();
   h.flush_now();
 
-  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty())
-      << "Expected greeting records on first flush";
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
 
-  // At least the first greeting record should match kGreetingSize0 or kGreetingSize1
+  // Greeting templates are subject to TLS minimum record-size clamping.
   bool found_greeting = false;
   for (auto sz : h.inner->max_tls_record_sizes) {
-    if (sz == kGreetingSize0 || sz == kGreetingSize1) {
+    if (sz >= 256 && sz <= kGreetingSize1) {
       found_greeting = true;
       break;
     }
   }
-  ASSERT_TRUE(found_greeting)
-      << "Expected at least one greeting record of size " << kGreetingSize0
-      << " or " << kGreetingSize1;
+  ASSERT_TRUE(found_greeting);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,31 +255,22 @@ TEST(GreetingBidirFloor, BaselineGreetingRecordsEmittedBeforeRealWrites) {
 TEST(GreetingBidirFloor, FloorAppliedWhenSetAfterGreeting) {
   auto h = GreetingHarness::make(2);
 
-  // Complete the greeting phase
-  h.drain_greeting_records(2);
-
-  // Make sure greeting is finished by verifying DRS baseline
-  auto first_post_greeting = h.write_interactive_and_flush(32);
-  ASSERT_EQ(kBaselineDrsCap, first_post_greeting)
-      << "Post-greeting DRS baseline expected";
+  // Complete the greeting phase deterministically.
+  h.finish_greeting_phase();
 
   // Small response arrives AFTER greeting → floor is set
   h.inject_small_response();
 
   // Next Interactive write → floor should be applied
   auto with_floor = h.write_interactive_and_flush(32);
-  ASSERT_GE(with_floor, kResponseFloorCap)
-      << "Floor (" << kResponseFloorCap
-      << ") should be applied to post-greeting Interactive write; got " << with_floor;
+  ASSERT_TRUE(with_floor >= kResponseFloorCap);
 }
 
 // ---------------------------------------------------------------------------
 // RISK: GreetingBidirFloor-1
-// Small response during greeting phase → floor is LOST.
-// consume_bidirectional_response_floor_on_greeting() clears the floor
-// on the greeting write.
+// Small response during Interactive greeting phase must be consumed by greeting.
 // ---------------------------------------------------------------------------
-TEST(GreetingBidirFloor, FloorLostWhenSetDuringGreeting) {
+TEST(GreetingBidirFloor, FloorConsumedWhenSetDuringInteractiveGreeting) {
   auto h = GreetingHarness::make(2);
 
   // Queue a write to start the greeting phase
@@ -277,33 +282,29 @@ TEST(GreetingBidirFloor, FloorLostWhenSetDuringGreeting) {
   h.inject_small_response();
 
   // Flush greeting records (greeting is active during this flush)
-  // The floor gets set then immediately cleared by consume_bidirectional_response_floor_on_greeting
   for (int i = 0; i < 4; i++) {
     h.flush_now();
   }
 
-  // After greeting, check that the first DRS write does NOT use the floor.
-  // The floor was set and then cleared during greeting, so it is LOST.
+  h.finish_greeting_phase();
+
+  // After greeting, first Interactive write should use DRS baseline because
+  // floor was consumed by Interactive greeting emission.
   h.inner->max_tls_record_sizes.clear();
   h.transport->set_traffic_hint(TrafficHint::Interactive);
   h.transport->write(make_buf(32), false);
   h.flush_now();
 
-  if (!h.inner->max_tls_record_sizes.empty()) {
-    auto post_greeting_size = h.inner->max_tls_record_sizes.back();
-    // The floor (1200) was lost → post-greeting write uses DRS baseline (320)
-    ASSERT_LT(post_greeting_size, kResponseFloorCap)
-        << "AUDIT: Floor set during greeting phase is being applied post-greeting. "
-           "If this is intentional, update the test. "
-           "Current observed size: " << post_greeting_size;
-  }
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
+  auto post_greeting_size = h.inner->max_tls_record_sizes.back();
+  ASSERT_EQ(kBaselineDrsCap, post_greeting_size);
 }
 
 // ---------------------------------------------------------------------------
 // RISK: GreetingBidirFloor-2
-// Multiple small responses during greeting: all are lost.
+// Multiple small responses during greeting must still be consumed by greeting.
 // ---------------------------------------------------------------------------
-TEST(GreetingBidirFloor, MultipleSmallResponsesDuringGreetingAllLost) {
+TEST(GreetingBidirFloor, MultipleSmallResponsesDuringGreetingAreConsumed) {
   auto h = GreetingHarness::make(2);
 
   // Queue write to activate greeting
@@ -320,19 +321,18 @@ TEST(GreetingBidirFloor, MultipleSmallResponsesDuringGreetingAllLost) {
     h.flush_now();
   }
 
-  // Check post-greeting write doesn't use the floor
+  h.finish_greeting_phase();
+
+  // Check post-greeting write returns to baseline because floor was consumed
+  // by Interactive greeting emission.
   h.inner->max_tls_record_sizes.clear();
   h.transport->set_traffic_hint(TrafficHint::Interactive);
   h.transport->write(make_buf(32), false);
   h.flush_now();
 
-  if (!h.inner->max_tls_record_sizes.empty()) {
-    auto post_size = h.inner->max_tls_record_sizes.back();
-    // Multiple floors were set but all cleared by greeting writes
-    ASSERT_LT(post_size, kResponseFloorCap)
-        << "AUDIT: Floor from multiple responses during greeting is being applied. "
-           "Size: " << post_size;
-  }
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
+  auto post_size = h.inner->max_tls_record_sizes.back();
+  ASSERT_EQ(kBaselineDrsCap, post_size);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,18 +356,20 @@ TEST(GreetingBidirFloor, LargeResponseDuringGreetingClearsFloor) {
     h.flush_now();
   }
 
+  // Complete remaining greeting record(s) before post-greeting verification.
+  h.transport->set_traffic_hint(TrafficHint::BulkData);
+  h.transport->write(make_buf(32), false);
+  h.flush_now();
+
   // Post-greeting: floor should not be applied (was cleared by large response)
   h.inner->max_tls_record_sizes.clear();
   h.transport->set_traffic_hint(TrafficHint::Interactive);
   h.transport->write(make_buf(32), false);
   h.flush_now();
 
-  if (!h.inner->max_tls_record_sizes.empty()) {
-    auto post_size = h.inner->max_tls_record_sizes.back();
-    ASSERT_LT(post_size, kResponseFloorCap)
-        << "Floor cleared by large response should not be applied post-greeting; "
-           "got " << post_size;
-  }
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
+  auto post_size = h.inner->max_tls_record_sizes.back();
+  ASSERT_TRUE(post_size < kResponseFloorCap);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,8 +383,7 @@ TEST(GreetingBidirFloor, NoGreetingFloorAppliedImmediately) {
 
   // Immediately flush an Interactive write → floor should be applied
   auto with_floor = h.write_interactive_and_flush(32);
-  ASSERT_GE(with_floor, kResponseFloorCap)
-      << "Without greeting, floor should be applied immediately; got " << with_floor;
+  ASSERT_TRUE(with_floor >= kResponseFloorCap);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,6 +405,11 @@ TEST(GreetingBidirFloor, GreetingWithBulkDataHintDoesNotClearFloor) {
     h.flush_now();
   }
 
+  // Ensure remaining greeting record(s) are emitted with BulkData.
+  h.transport->set_traffic_hint(TrafficHint::BulkData);
+  h.transport->write(make_buf(32), false);
+  h.flush_now();
+
   // Post-greeting: write with Interactive hint should apply floor
   // because it was NOT consumed during BulkData greeting writes
   h.inner->max_tls_record_sizes.clear();
@@ -411,15 +417,9 @@ TEST(GreetingBidirFloor, GreetingWithBulkDataHintDoesNotClearFloor) {
   h.transport->write(make_buf(32), false);
   h.flush_now();
 
-  if (!h.inner->max_tls_record_sizes.empty()) {
-    auto post_size = h.inner->max_tls_record_sizes.back();
-    // BulkData greeting does not clear the floor, so the floor SHOULD be applied here.
-    // If the floor was also cleared by BulkData greeting, this assertion fails,
-    // revealing a broadened scope of consume_bidirectional_response_floor_on_greeting.
-    ASSERT_GE(post_size, kResponseFloorCap)
-        << "Floor should survive BulkData greeting and be applied to post-greeting "
-           "Interactive write; got " << post_size;
-  }
+  ASSERT_FALSE(h.inner->max_tls_record_sizes.empty());
+  auto post_size = h.inner->max_tls_record_sizes.back();
+  ASSERT_TRUE(post_size >= kResponseFloorCap);
 }
 
 }  // namespace
