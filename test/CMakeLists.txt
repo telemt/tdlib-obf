@@ -692,6 +692,13 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ios_ech_disabled_fingerprint_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_proxy_alpn_length_compensation_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_init_alert_injection_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_manual_override_bidir_floor_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_backpressure_drs_idle_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_chaff_ipt_interaction_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_greeting_bidir_floor_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_ring_capacity_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_hint_lifecycle_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_full_integration_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_loading_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_loading_positive.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tdnet/test_ssl_ctx_loading_negative.cpp
