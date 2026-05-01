@@ -85,4 +85,17 @@ TEST(DrsEngineAdversarial, CongestionByteAccumulatorDoesNotWrapOnHostileHugeWrit
   ASSERT_TRUE(drs.current_phase() == DrsEngine::Phase::SteadyState);
 }
 
+TEST(DrsEngineAdversarial, IdleResetThresholdIsFailClosedForInvalidAndBoundaryDurations) {
+  MockRng rng(14);
+  auto policy = make_policy();
+  policy.idle_reset_ms_min = 100;
+  policy.idle_reset_ms_max = 100;
+  DrsEngine drs(policy, rng);
+
+  ASSERT_FALSE(drs.should_reset_after_idle(0.099));
+  ASSERT_TRUE(drs.should_reset_after_idle(0.100));
+  ASSERT_TRUE(drs.should_reset_after_idle(-0.001));
+  ASSERT_TRUE(drs.should_reset_after_idle(std::numeric_limits<double>::quiet_NaN()));
+}
+
 }  // namespace

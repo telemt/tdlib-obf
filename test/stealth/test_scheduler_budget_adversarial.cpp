@@ -221,4 +221,28 @@ TEST(SchedulerBudget, AlternatingNoteActivityAndChaffEmittedRemainCoherent) {
   }
 }
 
+TEST(SchedulerBudget, ExplicitOversizedTargetFailsClosedEvenWithEmptyBudgetWindow) {
+  MockRng rng(14);
+  auto config = make_tight_budget_config(128, 64);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 0.0);
+
+  sched.note_activity(0.0);
+
+  ASSERT_FALSE(sched.should_emit_for_target(5.0, false, true, 1024));
+}
+
+TEST(SchedulerBudget, ExplicitOversizedTargetWakeupIsDeferredByBudgetWindow) {
+  MockRng rng(15);
+  auto config = make_tight_budget_config(128, 64);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 0.0);
+
+  sched.note_activity(0.0);
+
+  auto wakeup = sched.get_wakeup_for_target(5.0, false, true, 1024);
+  ASSERT_TRUE(wakeup > 5.0);
+  ASSERT_TRUE(std::isfinite(wakeup));
+}
+
 }  // namespace

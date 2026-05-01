@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace td {
 namespace mtproto {
@@ -19,6 +20,8 @@ constexpr double kUint32Denominator = 4294967296.0;
 constexpr double kMinUnitInterval = 1e-9;
 constexpr double kMaxUnitInterval = 1.0 - 1e-9;
 constexpr double kTwoPi = 6.28318530717958647692;
+constexpr double kMaxSafeExpInput = 709.78271289338397;   // log(DBL_MAX)
+constexpr double kMinSafeExpInput = -708.39641853226408;  // log(DBL_MIN)
 
 uint64 to_delay_us(double delay_ms) {
   if (!(delay_ms > 0.0)) {
@@ -29,11 +32,24 @@ uint64 to_delay_us(double delay_ms) {
   return delay_us == 0 ? 1 : delay_us;
 }
 
+double safe_positive_exp(double value) {
+  if (!std::isfinite(value)) {
+    return std::numeric_limits<double>::min();
+  }
+  value = std::clamp(value, kMinSafeExpInput, kMaxSafeExpInput);
+  auto exp_value = std::exp(value);
+  if (!(exp_value > 0.0) || !std::isfinite(exp_value)) {
+    return std::numeric_limits<double>::min();
+  }
+  return exp_value;
+}
+
 }  // namespace ipt_controller_internal
 using ipt_controller_internal::kMaxUnitInterval;
 using ipt_controller_internal::kMinUnitInterval;
 using ipt_controller_internal::kTwoPi;
 using ipt_controller_internal::kUint32Denominator;
+using ipt_controller_internal::safe_positive_exp;
 using ipt_controller_internal::to_delay_us;
 
 IptController::IptController(const IptParams &params, IRng &rng) : params_(params), rng_(rng) {
@@ -111,9 +127,9 @@ double IptController::sample_normal() {
 
 double IptController::sample_lognormal(double mu, double sigma) {
   if (sigma == 0.0) {
-    return std::exp(mu);
+    return safe_positive_exp(mu);
   }
-  return std::exp(mu + sigma * sample_normal());
+  return safe_positive_exp(mu + sigma * sample_normal());
 }
 
 double IptController::sample_truncated_pareto(double u, double alpha, double scale, double max_value) const {

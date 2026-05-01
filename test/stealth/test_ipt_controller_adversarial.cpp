@@ -127,4 +127,38 @@ TEST(IptControllerAdversarial, ControlBypassHintsDoNotConsumeBurstState) {
   ASSERT_TRUE(second_delay >= 19999u && second_delay <= 20000u);
 }
 
+TEST(IptControllerAdversarial, ExtremeBurstSigmaMustNotCollapseInteractiveDelayToZero) {
+  auto params = make_boundary_params();
+  params.p_burst_stay = 1.0;
+  params.p_idle_to_burst = 1.0;
+  params.burst_mu_ms = 1.0;
+  params.burst_sigma = 1000.0;
+  params.burst_max_ms = 50.0;
+
+  // Transition draw enters Burst. Then Box-Muller draws u1 ~= 1e-9 and
+  // u2 ~= 0.5, producing a large negative normal sample. With extreme sigma,
+  // this drives the exponent far below representable range and probes
+  // underflow hardening.
+  SequenceRng rng({0u, 0u, 0x80000000u});
+  IptController controller(params, rng);
+
+  auto delay = controller.next_delay_us(true, TrafficHint::Interactive);
+  ASSERT_TRUE(delay > 0u);
+}
+
+TEST(IptControllerAdversarial, ExtremeNegativeMuWithZeroSigmaMustNotCollapseInteractiveDelayToZero) {
+  auto params = make_boundary_params();
+  params.p_burst_stay = 1.0;
+  params.p_idle_to_burst = 1.0;
+  params.burst_mu_ms = -1000.0;
+  params.burst_sigma = 0.0;
+  params.burst_max_ms = 50.0;
+
+  SequenceRng rng({0u});
+  IptController controller(params, rng);
+
+  auto delay = controller.next_delay_us(true, TrafficHint::Interactive);
+  ASSERT_TRUE(delay > 0u);
+}
+
 }  // namespace
