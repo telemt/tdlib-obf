@@ -7,8 +7,8 @@ telemt: https://t.me/telemtrs
 
 # Custom Client Integration Guide
 
-**Document Version:** 1.1  
-**Date:** 2026-05-02  
+**Document Version:** 1.2
+**Date:** 2026-05-03
 **Scope:** Embedding `tdlib-obf` into custom client software through `tdjson`, generated TDLib bindings, or native C++ integration
 
 ---
@@ -178,6 +178,27 @@ If you want a wider transport sanity pass:
 ```bash
 ctest --test-dir build --output-on-failure -j 4
 ```
+
+### Practical integration examples (`/example`)
+
+Yes, integrators should use the repository `example/` tree as a practical companion to this contract.
+
+Start here:
+
+1. `example/README.md` for the cross-language map and build overview.
+
+Per-platform entry points:
+
+1. Python (`tdjson`): `example/python/README.md`, `example/python/tdjson_example.py`
+2. C++: `example/cpp/README.md`, `example/cpp/td_example.cpp`, `example/cpp/tdjson_example.cpp`
+3. Java/JNI and Java JSON: `example/java/README.md`, `example/java/org/drinkless/tdlib/example/Example.java`, `example/java/org/drinkless/tdlib/example/JsonExample.java`
+4. Android packaging scripts: `example/android/README.md`, `example/android/check-environment.sh`, `example/android/fetch-sdk.sh`, `example/android/build-openssl.sh`, `example/android/build-tdlib.sh`
+5. Apple/XCFramework build path: `example/ios/README.md`, `example/ios/build-openssl.sh`, `example/ios/build.sh`
+6. Swift sample app: `example/swift/README.md`, `example/swift/src/main.swift`
+7. .NET/C# paths: `example/csharp/README.md`, `example/csharp/TdExample.cs`, `example/uwp/README.md`, `example/uwp/build.ps1`
+8. Browser/WebAssembly path: `example/web/README.md`, `example/web/build-openssl.sh`, `example/web/build-tdlib.sh`, `example/web/copy-tdlib.sh`, `example/web/build-tdweb.sh`, `example/web/tdweb/README.md`
+
+Important for this fork: those examples come from the upstream TDLib ecosystem and are useful for integration structure, but your production `tdlib-obf` artifacts should still explicitly enforce `-DTDLIB_STEALTH_SHAPING=ON` as described in this guide.
 
 ---
 

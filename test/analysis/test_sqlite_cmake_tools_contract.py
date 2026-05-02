@@ -7,7 +7,6 @@ import json
 import pathlib
 import unittest
 
-
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parent.parent
 SETTINGS_PATH = REPO_ROOT / ".vscode" / "settings.json"
@@ -44,27 +43,40 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             msg="workspace CMake settings must keep CMake Tools on the checked-in preset flow",
         )
 
-    def test_repo_declares_default_configure_and_sqlite_smoke_test_presets(self) -> None:
+    def test_repo_declares_default_configure_and_sqlite_smoke_test_presets(
+        self,
+    ) -> None:
         presets = json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
 
-        configure_presets = {preset["name"]: preset for preset in presets.get("configurePresets", [])}
-        test_presets = {preset["name"]: preset for preset in presets.get("testPresets", [])}
+        configure_presets = {
+            preset["name"]: preset for preset in presets.get("configurePresets", [])
+        }
+        test_presets = {
+            preset["name"]: preset for preset in presets.get("testPresets", [])
+        }
 
         self.assertIn(
             "default",
             configure_presets,
             msg="repo CMake presets must expose a default configure preset for CMake Tools",
         )
-        self.assertEqual("${sourceDir}/build", configure_presets["default"].get("binaryDir"))
+        self.assertEqual(
+            "${sourceDir}/build", configure_presets["default"].get("binaryDir")
+        )
         self.assertIn(
             "sqlite-vendor-smoke",
             test_presets,
             msg="repo CMake presets must expose a targeted SQLite smoke test preset",
         )
-        self.assertEqual("default", test_presets["sqlite-vendor-smoke"].get("configurePreset"))
+        self.assertEqual(
+            "default", test_presets["sqlite-vendor-smoke"].get("configurePreset")
+        )
         self.assertEqual(
             "^Test_DB_sqlite_vendor_wrapper_surface_contract$",
-            test_presets["sqlite-vendor-smoke"].get("filter", {}).get("include", {}).get("name"),
+            test_presets["sqlite-vendor-smoke"]
+            .get("filter", {})
+            .get("include", {})
+            .get("name"),
         )
 
     def test_workspace_declares_preset_backed_cmake_tasks(self) -> None:
@@ -88,7 +100,9 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             tasks.get("cmake test sqlite vendor smoke", {}).get("type"),
             msg="workspace smoke task must use an explicit shell ctest invocation so it cannot widen to the full suite",
         )
-        self.assertEqual("ctest", tasks["cmake test sqlite vendor smoke"].get("command"))
+        self.assertEqual(
+            "ctest", tasks["cmake test sqlite vendor smoke"].get("command")
+        )
         self.assertEqual(
             [
                 "--test-dir",
@@ -115,7 +129,9 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             tasks.get("cmake refresh exact sqlite smoke discovery", {}).get("type"),
             msg="workspace must expose a dedicated post-build configure refresh task for exact CTest discovery",
         )
-        self.assertEqual("cmake", tasks["cmake refresh exact sqlite smoke discovery"].get("command"))
+        self.assertEqual(
+            "cmake", tasks["cmake refresh exact sqlite smoke discovery"].get("command")
+        )
         self.assertEqual(
             [
                 "-S",
@@ -169,7 +185,9 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             msg="root CMake must gate add_subdirectory(test) behind BUILD_TESTING",
         )
 
-    def test_test_cmake_discovers_exact_run_all_tests_cases_and_has_clean_tree_fallback(self) -> None:
+    def test_test_cmake_discovers_exact_run_all_tests_cases_and_has_clean_tree_fallback(
+        self,
+    ) -> None:
         test_cmake = TEST_CMAKE_PATH.read_text(encoding="utf-8")
 
         self.assertIn(
@@ -193,8 +211,12 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             msg="clean-tree configure must degrade to an umbrella CTest entry instead of assuming generated CTest files already exist",
         )
 
-    def test_sqlite_vendor_wrapper_smoke_case_exists_in_run_all_tests_source(self) -> None:
-        sqlite_vendor_contract_test = SQLITE_VENDOR_CONTRACT_TEST_PATH.read_text(encoding="utf-8")
+    def test_sqlite_vendor_wrapper_smoke_case_exists_in_run_all_tests_source(
+        self,
+    ) -> None:
+        sqlite_vendor_contract_test = SQLITE_VENDOR_CONTRACT_TEST_PATH.read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn(
             "TEST(DB, sqlite_vendor_wrapper_surface_contract)",

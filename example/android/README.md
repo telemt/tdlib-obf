@@ -17,7 +17,9 @@ If you already have prebuilt OpenSSL, you can skip the third step and specify pa
 
 If you want to update TDLib to a newer version, you need to run only the script `./build-tdlib.sh`.
 
-You can specify different OpenSSL version as the fourth parameter to the script `./build-openssl.sh`. By default OpenSSL 1.1.1 is used because of much smaller binary footprint and better performance than newer OpenSSL versions.
+You can specify different OpenSSL version as the fourth parameter to the script `./build-openssl.sh`. By default OpenSSL 3.0.13 is used.
+
+If you specify a custom OpenSSL version, you must also set the `OPENSSL_SHA256` environment variable to the expected archive checksum before running `./build-openssl.sh`.
 
 You can build shared OpenSSL libraries instead of static ones by passing any non-empty string as the fifth parameter to the script `./build-openssl.sh`. This can reduce total application size if you have a lot of other code that uses OpenSSL and want it to use the same shared library.
 

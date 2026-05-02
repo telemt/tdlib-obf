@@ -6,9 +6,9 @@ cd "$SCRIPT_DIR" || exit 1
 
 cd tdweb || exit 1
 if [ -f package-lock.json ]; then
-  npm ci --no-audit --fund=false || exit 1
+	npm ci --no-audit --fund=false || exit 1
 else
-  npm install --no-save --no-audit --fund=false || exit 1
+	npm install --no-save --no-audit --fund=false || exit 1
 fi
 npm run build || exit 1
 cd .. || exit 1

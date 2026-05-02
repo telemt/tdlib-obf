@@ -2,18 +2,14 @@
 
 This is an example of building `TDLib` for browsers using [Emscripten](https://github.com/kripken/emscripten).
 These scripts build `TDLib` and create an [NPM](https://www.npmjs.com/) package [tdweb](https://www.npmjs.com/package/tdweb).
-You need a Unix shell with `sed`, `tar` and `wget` utilities to run the provided scripts.
+You need a Unix shell with `sed`, `tar` and either `wget` or `curl` utilities to run the provided scripts.
 
 ## Building tdweb NPM package
 
 * Install the 3.1.1 [emsdk](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html), which is known to work. Do not use the system-provided `emscripten` package, because it contains a too old emsdk version.
-* Install all `TDLib` build dependencies described in [Building](https://github.com/tdlib/td#building) and `sed`, `tar` and `wget` utilities.
+* Install all `TDLib` build dependencies described in [Building](https://github.com/tdlib/td#building) and `sed`, `tar` plus either `wget` or `curl` utilities.
 * Run `source ./emsdk_env.sh` from `emsdk` directory to set up the correct build environment.
-* On `macOS`, install the `coreutils` [Homebrew](https://brew.sh) package and replace `realpath` in scripts with `grealpath`:
-```
-brew install coreutils
-sed -i.bak 's/[(]realpath/(grealpath/g' build-tdlib.sh
-```
+* On `macOS`, no script edits are needed for path handling.
 * Run build scripts in the following order:
 ```
 cd <path to TDLib sources>/example/web

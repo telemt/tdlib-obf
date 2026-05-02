@@ -28,14 +28,14 @@ is_enabled_flag() {
 }
 
 compute_sha256() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    echo "Error: sha256sum or shasum is required to verify downloads."
-    exit 1
-  fi
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | awk '{print $1}'
+	else
+		echo "Error: sha256sum or shasum is required to verify downloads."
+		exit 1
+	fi
 }
 
 version_gt() {
@@ -152,12 +152,12 @@ cd "$SCRIPT_DIR" || exit 1
 OPENSSL_ARCHIVE="$OPENSSL_VERSION.tar.gz"
 OPENSSL_SHA256_DEFAULT=""
 if [[ $OPENSSL_VERSION == "openssl-3.0.13" ]]; then
-  OPENSSL_SHA256_DEFAULT="e74504ed7035295ec7062b1da16c15b57ff2a03cd2064a28d8c39458cacc45fc"
+	OPENSSL_SHA256_DEFAULT="e74504ed7035295ec7062b1da16c15b57ff2a03cd2064a28d8c39458cacc45fc"
 fi
 OPENSSL_SHA256=${OPENSSL_SHA256:-$OPENSSL_SHA256_DEFAULT}
 if [ -z "$OPENSSL_SHA256" ]; then
-  echo "Error: No checksum is known for $OPENSSL_VERSION. Set OPENSSL_SHA256 to continue."
-  exit 1
+	echo "Error: No checksum is known for $OPENSSL_VERSION. Set OPENSSL_SHA256 to continue."
+	exit 1
 fi
 
 echo "Downloading OpenSSL sources..."
@@ -165,10 +165,10 @@ rm -f "$OPENSSL_ARCHIVE" || exit 1
 $WGET "https://github.com/openssl/openssl/archive/refs/tags/$OPENSSL_ARCHIVE" || exit 1
 OPENSSL_SHA256_ACTUAL=$(compute_sha256 "$OPENSSL_ARCHIVE")
 if [ "$OPENSSL_SHA256_ACTUAL" != "$OPENSSL_SHA256" ]; then
-  echo "Error: OpenSSL archive checksum mismatch for $OPENSSL_ARCHIVE"
-  echo "Expected: $OPENSSL_SHA256"
-  echo "Actual:   $OPENSSL_SHA256_ACTUAL"
-  exit 1
+	echo "Error: OpenSSL archive checksum mismatch for $OPENSSL_ARCHIVE"
+	echo "Expected: $OPENSSL_SHA256"
+	echo "Actual:   $OPENSSL_SHA256_ACTUAL"
+	exit 1
 fi
 rm -rf "./openssl-$OPENSSL_VERSION" || exit 1
 tar xzf "$OPENSSL_ARCHIVE" || exit 1

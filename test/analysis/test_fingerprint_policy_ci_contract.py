@@ -9,7 +9,6 @@ from __future__ import annotations
 import pathlib
 import unittest
 
-
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "fingerprint-policy-integrity.yml"
@@ -36,7 +35,9 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertEqual(1, workflow_text.count("schedule:"))
         self.assertEqual(1, workflow_text.count("- cron: '17 2 * * *'"))
 
-    def test_workflow_has_explicit_distinct_reviewed_and_imported_job_names(self) -> None:
+    def test_workflow_has_explicit_distinct_reviewed_and_imported_job_names(
+        self,
+    ) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("reviewed_corpus_smoke:", workflow_text)
@@ -45,42 +46,95 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertIn("name: imported_corpus_smoke", workflow_text)
         self.assertIn("continue-on-error: true", workflow_text)
 
-    def test_workflow_executes_reviewed_and_imported_smoke_with_separate_registries(self) -> None:
+    def test_workflow_executes_reviewed_and_imported_smoke_with_separate_registries(
+        self,
+    ) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("--registry test/analysis/profiles_validation.json", workflow_text)
-        self.assertIn("--fixtures-root test/analysis/fixtures/clienthello", workflow_text)
-        self.assertIn("--server-hello-fixtures-root test/analysis/fixtures/serverhello", workflow_text)
+        self.assertIn(
+            "--registry test/analysis/profiles_validation.json", workflow_text
+        )
+        self.assertIn(
+            "--fixtures-root test/analysis/fixtures/clienthello", workflow_text
+        )
+        self.assertIn(
+            "--server-hello-fixtures-root test/analysis/fixtures/serverhello",
+            workflow_text,
+        )
 
         self.assertIn("--registry test/analysis/profiles_imported.json", workflow_text)
-        self.assertIn("--fixtures-root test/analysis/fixtures/imported/clienthello", workflow_text)
-        self.assertIn("--server-hello-fixtures-root test/analysis/fixtures/imported/serverhello", workflow_text)
+        self.assertIn(
+            "--fixtures-root test/analysis/fixtures/imported/clienthello", workflow_text
+        )
+        self.assertIn(
+            "--server-hello-fixtures-root test/analysis/fixtures/imported/serverhello",
+            workflow_text,
+        )
 
     def test_workflow_enforces_generator_drift_fail_closed(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("tier_semantics_drift_check:", workflow_text)
         self.assertIn("NOW_UTC=\"$(python3 - <<'PY'", workflow_text)
-        self.assertIn("docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", workflow_text)
-        self.assertIn("if not isinstance(value, str) or not value.strip():", workflow_text)
-        self.assertIn("generated_at_utc must be RFC3339 UTC with Z suffix", workflow_text)
-        self.assertIn("python3 test/analysis/build_transport_coherence_status.py --repo-root . --now-utc \"$NOW_UTC\"", workflow_text)
-        self.assertIn("python3 test/analysis/build_active_probing_status.py --repo-root . --now-utc \"$NOW_UTC\"", workflow_text)
-        self.assertIn("python3 test/analysis/render_fingerprint_policy_artifacts.py --repo-root . --now-utc \"$NOW_UTC\"", workflow_text)
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            workflow_text,
+        )
+        self.assertIn(
+            "if not isinstance(value, str) or not value.strip():", workflow_text
+        )
+        self.assertIn(
+            "generated_at_utc must be RFC3339 UTC with Z suffix", workflow_text
+        )
+        self.assertIn(
+            'python3 test/analysis/build_transport_coherence_status.py --repo-root . --now-utc "$NOW_UTC"',
+            workflow_text,
+        )
+        self.assertIn(
+            'python3 test/analysis/build_active_probing_status.py --repo-root . --now-utc "$NOW_UTC"',
+            workflow_text,
+        )
+        self.assertIn(
+            'python3 test/analysis/render_fingerprint_policy_artifacts.py --repo-root . --now-utc "$NOW_UTC"',
+            workflow_text,
+        )
         self.assertIn("git diff --exit-code", workflow_text)
-        self.assertIn("docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", workflow_text)
-        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", workflow_text)
-        self.assertIn("docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json", workflow_text)
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            workflow_text,
+        )
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+            workflow_text,
+        )
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_RELEASE_EVIDENCE_POLICY.generated.json",
+            workflow_text,
+        )
 
     def test_workflow_trigger_paths_cover_generated_status_artifacts(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-        push_section = self._section_between(workflow_text, "  push:\n", "  pull_request:\n")
+        push_section = self._section_between(
+            workflow_text, "  push:\n", "  pull_request:\n"
+        )
         pull_request_section = workflow_text[workflow_text.index("  pull_request:\n") :]
 
-        self.assertIn("docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", push_section)
-        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", push_section)
-        self.assertIn("docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json", pull_request_section)
-        self.assertIn("docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json", pull_request_section)
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            push_section,
+        )
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+            push_section,
+        )
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_TRANSPORT_COHERENCE_STATUS.generated.json",
+            pull_request_section,
+        )
+        self.assertIn(
+            "docs/Generated/FINGERPRINT_ACTIVE_PROBING_NIGHTLY_STATUS.generated.json",
+            pull_request_section,
+        )
 
     def test_workflow_has_scheduled_active_probing_refresh_wrapper(self) -> None:
         workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -88,9 +142,17 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertIn("schedule:", workflow_text)
         self.assertIn("active_probing_nightly_refresh:", workflow_text)
         self.assertIn("if: github.event_name == 'schedule'", workflow_text)
-        self.assertIn("python3 test/analysis/refresh_active_probing_nightly_observations.py", workflow_text)
-        self.assertIn("python3 test/analysis/build_active_probing_status.py", workflow_text)
-        self.assertIn("test_refresh_active_probing_nightly_observations_contract.py", workflow_text)
+        self.assertIn(
+            "python3 test/analysis/refresh_active_probing_nightly_observations.py",
+            workflow_text,
+        )
+        self.assertIn(
+            "python3 test/analysis/build_active_probing_status.py", workflow_text
+        )
+        self.assertIn(
+            "test_refresh_active_probing_nightly_observations_contract.py",
+            workflow_text,
+        )
         self.assertIn("uses: actions/upload-artifact@v7", workflow_text)
         self.assertIn("active-probing-nightly-evidence", workflow_text)
 

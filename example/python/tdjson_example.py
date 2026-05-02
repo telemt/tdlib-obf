@@ -5,6 +5,7 @@
 # Distributed under the Boost Software License, Version 1.0. (See accompanying
 # file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
+import getpass
 import json
 import os
 import sys
@@ -246,7 +247,7 @@ class TdExample:
                     )
 
                 elif auth_type == "authorizationStateWaitPassword":
-                    password = input("Please enter your password: ")
+                    password = getpass.getpass("Please enter your password: ")
                     self.send(
                         {"@type": "checkAuthenticationPassword", "password": password}
                     )
