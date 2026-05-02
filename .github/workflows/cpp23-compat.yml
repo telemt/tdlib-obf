@@ -79,8 +79,10 @@ jobs:
           sudo apt-get update -qq
 
           if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
-            # Prefer already-available gcc-15 on runner images.
-            if ! apt-cache show gcc-15 >/dev/null 2>&1; then
+            # Prefer already-available gcc-15/g++-15 on runner images.
+            if command -v gcc-15 >/dev/null 2>&1 && command -v g++-15 >/dev/null 2>&1; then
+              echo "gcc-15 and g++-15 are already available on the runner; skipping PPA setup"
+            elif ! apt-cache show gcc-15 >/dev/null 2>&1; then
               # Add ubuntu-toolchain-r/test without add-apt-repository to avoid
               # Launchpad API lookups that are flaky on hosted runners.
               echo "deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu noble main" \
@@ -130,7 +132,11 @@ jobs:
           )
 
           if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
-            sudo apt-get install -y "${common_packages[@]}" gcc-15 g++-15
+            if command -v gcc-15 >/dev/null 2>&1 && command -v g++-15 >/dev/null 2>&1; then
+              sudo apt-get install -y "${common_packages[@]}"
+            else
+              sudo apt-get install -y "${common_packages[@]}" gcc-15 g++-15
+            fi
           else
             sudo apt-get install -y "${common_packages[@]}" clang-22 lld-22
           fi
