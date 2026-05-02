@@ -151,6 +151,7 @@ endif()
 if(NOT TD_GENERATE_SOURCE_FILES)
   set(TD_OPENSSL_MIN_VERSION "3.0.13")
   set(TD_OPENSSL_RECOMMENDED_VERSION "3.5.6")
+  set(TD_ZLIB_MIN_VERSION "1.3.2")
   if(NOT OPENSSL_FOUND)
     find_package(OpenSSL ${TD_OPENSSL_MIN_VERSION})
   endif()
@@ -311,6 +312,36 @@ if(NOT ZLIB_FOUND)
   message(WARNING "Can't find zlib: stop building")
   return()
 endif()
+
+set(TD_ZLIB_VERSION "")
+if(DEFINED ZLIB_VERSION)
+  set(TD_ZLIB_VERSION "${ZLIB_VERSION}")
+elseif(DEFINED ZLIB_VERSION_STRING)
+  set(TD_ZLIB_VERSION "${ZLIB_VERSION_STRING}")
+elseif(DEFINED ZLIB_INCLUDE_DIR AND EXISTS "${ZLIB_INCLUDE_DIR}/zlib.h")
+  file(STRINGS "${ZLIB_INCLUDE_DIR}/zlib.h" TD_ZLIB_VERSION_LINE
+       REGEX "^#define[ \t]+ZLIB_VERSION[ \t]+\"[^\"]+\"")
+  if(TD_ZLIB_VERSION_LINE)
+    string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" TD_ZLIB_VERSION
+                         "${TD_ZLIB_VERSION_LINE}")
+  endif()
+endif()
+
+if(TD_ZLIB_VERSION STREQUAL "")
+  message(
+    FATAL_ERROR
+      "Unable to determine zlib version from CMake discovery. Minimum supported version is ${TD_ZLIB_MIN_VERSION}."
+  )
+endif()
+
+if(TD_ZLIB_VERSION VERSION_LESS TD_ZLIB_MIN_VERSION)
+  message(
+    FATAL_ERROR
+      "zlib ${TD_ZLIB_VERSION} is too old. Minimum supported version is ${TD_ZLIB_MIN_VERSION}."
+  )
+endif()
+
+message(STATUS "Found zlib ${TD_ZLIB_VERSION}: ${ZLIB_INCLUDE_DIR} ${ZLIB_LIBRARIES}")
 
 set(TDE2E_ENABLE_INSTALL
     ${TD_INSTALL_STATIC_LIBRARIES}
