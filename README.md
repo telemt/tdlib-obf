@@ -78,6 +78,36 @@ While the TLS handshake and record-sizing layers are highly advanced, the follow
 
 `tdlib-obf` uses CMake. A C++23 compatible compiler, OpenSSL, zlib, and gperf are required.
 
+### Security Dependency Floor (zlib)
+
+Builds require `zlib >= 1.3.2` by default.
+
+Reason: we enforce a conservative minimum to avoid known vulnerable zlib lines associated with early-2026 buffer-overflow reports (notably CVE-2026-22184 in `contrib/untgz`) and to keep CI/dependency scans from accepting outdated zlib packages.
+
+For Debian/Ubuntu system packages, `zlib 1.3` can also be accepted when it is the distro `dfsg` package variant (for example `1:1.3.dfsg-...`), because those repacks exclude `contrib/untgz` and are tracked as not affected for this CVE.
+
+If your system package is older, use one of these options:
+
+1. Upgrade the system zlib package to `1.3.2` or newer.
+2. Use a newer custom zlib install and point CMake to it, for example:
+
+```bash
+cmake -S .. -B . \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DTD_ENABLE_BENCHMARKS=OFF \
+  -DTDLIB_STEALTH_SHAPING=ON \
+  -DZLIB_ROOT=/opt/zlib-1.3.2
+```
+
+If auto-discovery is still ambiguous in your environment, set explicit variables too:
+
+```bash
+cmake -S .. -B . \
+  -DZLIB_INCLUDE_DIR=/opt/zlib-1.3.2/include \
+  -DZLIB_LIBRARY=/opt/zlib-1.3.2/lib/libz.so
+```
+
 ### Build Instructions
 
 To build the library with stealth shaping enabled:

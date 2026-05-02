@@ -27,6 +27,25 @@ class ZlibMinimumVersionContractTest(unittest.TestCase):
             msg="root CMake must compare discovered zlib version against the configured minimum",
         )
 
+    def test_root_cmake_declares_distro_dfsg_exception_switch(self) -> None:
+        root_cmake = ROOT_CMAKE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "TD_ZLIB_ALLOW_DISTRO_DFSG_1_3",
+            root_cmake,
+            msg="root CMake must expose an explicit switch for distro-patched zlib 1.3 packages",
+        )
+        self.assertIn(
+            "dpkg-query -W -f=\\${Version} zlib1g",
+            root_cmake,
+            msg="root CMake must validate the Debian/Ubuntu package variant before allowing zlib 1.3",
+        )
+        self.assertIn(
+            'TD_ZLIB_DPKG_VERSION MATCHES "dfsg"',
+            root_cmake,
+            msg="root CMake must require a dfsg package marker for the zlib 1.3 exception path",
+        )
+
     def test_root_cmake_rejects_unknown_or_old_zlib_versions(self) -> None:
         root_cmake = ROOT_CMAKE_PATH.read_text(encoding="utf-8")
 
@@ -41,6 +60,11 @@ class ZlibMinimumVersionContractTest(unittest.TestCase):
                 "zlib ${TD_ZLIB_VERSION} is too old. Minimum supported version is ${TD_ZLIB_MIN_VERSION}."
             ),
             msg="root CMake must reject zlib versions lower than the configured minimum",
+        )
+        self.assertIn(
+            "AND NOT TD_ZLIB_VERSION_IS_ALLOWED",
+            root_cmake,
+            msg="root CMake must keep the fail-closed minimum-version check unless the explicit distro exception is satisfied",
         )
 
     def test_root_cmake_has_header_parsing_fallback_for_zlib_version(self) -> None:

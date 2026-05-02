@@ -61,6 +61,10 @@ if(NOT CMAKE_CROSSCOMPILING)
          "Use \"ON\" to just generate TDLib source files.")
 endif()
 option(TD_E2E_ONLY "Use \"ON\" to build and install tde2e instead of TDLib.")
+option(
+  TD_ZLIB_ALLOW_DISTRO_DFSG_1_3
+  "Allow Debian/Ubuntu dfsg zlib 1.3 packages that exclude contrib/untgz (CVE-2026-22184 scope)."
+  ON)
 
 include(CTest)
 
@@ -334,7 +338,33 @@ if(TD_ZLIB_VERSION STREQUAL "")
   )
 endif()
 
+set(TD_ZLIB_VERSION_IS_ALLOWED OFF)
 if(TD_ZLIB_VERSION VERSION_LESS TD_ZLIB_MIN_VERSION)
+  if(TD_ZLIB_ALLOW_DISTRO_DFSG_1_3 AND TD_ZLIB_VERSION VERSION_EQUAL "1.3"
+     AND DEFINED ZLIB_INCLUDE_DIR
+     AND ZLIB_INCLUDE_DIR MATCHES "^/usr/include($|/)")
+    set(TD_ZLIB_DPKG_VERSION "")
+    if(EXISTS "/usr/bin/dpkg-query")
+      execute_process(
+        COMMAND /usr/bin/dpkg-query -W -f=\${Version} zlib1g
+        RESULT_VARIABLE TD_ZLIB_DPKG_QUERY_STATUS
+        OUTPUT_VARIABLE TD_ZLIB_DPKG_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+      if(TD_ZLIB_DPKG_QUERY_STATUS EQUAL 0
+         AND TD_ZLIB_DPKG_VERSION MATCHES "dfsg")
+        set(TD_ZLIB_VERSION_IS_ALLOWED ON)
+        message(
+          WARNING
+            "Allowing zlib ${TD_ZLIB_VERSION} from distro package ${TD_ZLIB_DPKG_VERSION}: Debian/Ubuntu dfsg builds exclude contrib/untgz (CVE-2026-22184 scope)."
+        )
+      endif()
+    endif()
+  endif()
+endif()
+
+if(TD_ZLIB_VERSION VERSION_LESS TD_ZLIB_MIN_VERSION
+   AND NOT TD_ZLIB_VERSION_IS_ALLOWED)
   message(
     FATAL_ERROR
       "zlib ${TD_ZLIB_VERSION} is too old. Minimum supported version is ${TD_ZLIB_MIN_VERSION}."
