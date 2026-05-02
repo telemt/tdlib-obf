@@ -81,6 +81,10 @@ class DoxygenBuildContractTest(unittest.TestCase):
             root_cmake,
             r"COMMAND\s+\$\{DOXYGEN_EXECUTABLE\}\s+\$\{CMAKE_CURRENT_BINARY_DIR\}/Doxyfile\.api",
         )
+        self.assertRegex(
+            root_cmake,
+            r"COMMAND\s+\$\{CMAKE_COMMAND\}\s+-E\s+make_directory\s+\$\{TDLIB_DOXYGEN_OUTPUT_DIRECTORY\}",
+        )
         self.assertIn("WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}", root_cmake)
         self.assertIn("DEPENDS tl_generate_common", root_cmake)
         self.assertIn("build/docs/api", root_cmake)

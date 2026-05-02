@@ -267,6 +267,8 @@ if(NOT CMAKE_CROSSCOMPILING)
     # Default in-tree location is build/docs/api/html/index.html.
     add_custom_target(
       td_generate_api_docs
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+              ${TDLIB_DOXYGEN_OUTPUT_DIRECTORY}
       COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.api
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generate tdlib-obf API documentation with Doxygen"
