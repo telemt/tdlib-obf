@@ -435,7 +435,7 @@ class ThreadSafeCounterBench final : public td::Benchmark {
     for (auto &thread : threads) {
       thread.join();
     }
-    CHECK(counter_.sum() == n * thread_count_);
+    CHECK(counter_.sum() == static_cast<td::int64>(n) * thread_count_);
   }
 
  public:
@@ -465,7 +465,7 @@ class AtomicCounterBench final : public td::Benchmark {
     for (auto &thread : threads) {
       thread.join();
     }
-    CHECK(counter_.load() == n * thread_count_);
+    CHECK(counter_.load() == static_cast<td::int64>(n) * thread_count_);
   }
 
  public:

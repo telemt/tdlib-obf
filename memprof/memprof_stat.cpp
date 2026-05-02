@@ -42,7 +42,14 @@ void register_xalloc(malloc_info *info, std::int32_t diff) {
   my_assert(info->size >= 0);
   // TODO: this is very slow in case of several threads.
   // Currently, the statistics are intended only for memory benchmarks.
-  total_memory_used.fetch_add(diff * info->size, std::memory_order_relaxed);
+  auto size = static_cast<std::size_t>(info->size);
+  if (diff == 1) {
+    total_memory_used.fetch_add(size, std::memory_order_relaxed);
+  } else if (diff == -1) {
+    total_memory_used.fetch_sub(size, std::memory_order_relaxed);
+  } else {
+    my_assert(false);
+  }
 }
 
 std::size_t get_used_memory_size() {
@@ -142,7 +149,7 @@ int posix_memalign(void **memptr, size_t alignment, size_t size) {
 
 // C++17 guarantees that it is enough to override these 4 operators
 void *operator new(std::size_t count) {
-  return malloc_with_frame(count, get_backtrace());
+  return do_malloc(count);
 }
 void operator delete(void *ptr) noexcept(true) {
   free(ptr);
