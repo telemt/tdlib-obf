@@ -1,0 +1,79 @@
+name: Deploy Doxygen Docs to Pages
+
+"on":
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/doxygen-pages.yml
+      - Doxyfile
+      - Doxyfile.in
+      - CMakeLists.txt
+      - td/generate/**
+      - docs/api/**
+      - docs/Documentation/API_DOCUMENTATION.md
+      - docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install docs build dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y doxygen gperf cmake ninja-build
+
+      - name: Configure CMake
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DTD_ENABLE_BENCHMARKS=OFF
+
+      - name: Build Doxygen docs
+        run: |
+          set -euxo pipefail
+          cmake --build build --target td_generate_api_docs --parallel 4
+          test -f build/docs/api/html/index.html
+          touch build/docs/api/html/.nojekyll
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/api/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

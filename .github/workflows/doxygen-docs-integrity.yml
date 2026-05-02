@@ -8,6 +8,7 @@ on:
       - 'release/**'
     paths:
       - '.github/workflows/doxygen-docs-integrity.yml'
+      - '.github/workflows/doxygen-pages.yml'
       - '.gitignore'
       - 'Doxyfile'
       - 'Doxyfile.in'
@@ -33,6 +34,7 @@ on:
       - 'release/**'
     paths:
       - '.github/workflows/doxygen-docs-integrity.yml'
+      - '.github/workflows/doxygen-pages.yml'
       - '.gitignore'
       - 'Doxyfile'
       - 'Doxyfile.in'
@@ -87,6 +89,21 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y doxygen gperf cmake ninja-build
 
+      - name: Configure CMake
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DTD_ENABLE_BENCHMARKS=OFF
+
+      - name: Generate TL headers required by docs contracts
+        run: |
+          set -euxo pipefail
+          cmake --build build --target tl_generate_common --parallel 4
+          test -f td/generate/auto/td/telegram/td_api.h
+
       - name: Run docs migration analysis contracts
         run: |
           set -euxo pipefail
@@ -97,15 +114,6 @@ jobs:
           python3 -m unittest discover -s test/analysis -p 'test_dotnet_doc_generator_contract.py'
           python3 -m unittest discover -s test/analysis -p 'test_android_addintdef_contract.py'
           python3 -m unittest discover -s test/analysis -p 'test_docs_ci_workflow_contract.py'
-
-      - name: Configure CMake
-        run: |
-          set -euxo pipefail
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DTD_ENABLE_BENCHMARKS=OFF
 
       - name: Generate Doxygen docs artifact
         run: |

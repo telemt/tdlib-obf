@@ -18,6 +18,7 @@ docs/latex/
 docs/man/
 docs/rtf/
 docs/xml/
+docs/Documentation/DetailedAPI/
 test/analysis/__pycache__/**
 /tdlib/
 vcpkg/
