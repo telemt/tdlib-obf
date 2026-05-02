@@ -934,10 +934,7 @@ if(NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN)
       add_test(run_all_tests run_all_tests)
     endif()
   else()
-    message(
-      STATUS
-        "run_all_tests executable is not available during configure; registering umbrella CTest entry"
-    )
+    message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")
     add_test(run_all_tests run_all_tests)
   endif()
 endif()

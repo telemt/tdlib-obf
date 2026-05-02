@@ -76,9 +76,24 @@ jobs:
             | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
           echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
             | sudo tee /etc/apt/sources.list.d/llvm-22.list
-          # ubuntu-toolchain-r PPA for gcc-15 on ubuntu-24.04
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -qq
+
+          if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
+            # Prefer already-available gcc-15 on runner images, and only hit Launchpad when needed.
+            if ! apt-cache show gcc-15 >/dev/null 2>&1; then
+              for attempt in 1 2 3; do
+                if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; then
+                  break
+                fi
+                if [[ "$attempt" == "3" ]]; then
+                  echo "Failed to add ubuntu-toolchain-r/test PPA after ${attempt} attempts" >&2
+                  exit 1
+                fi
+                echo "Retrying add-apt-repository (attempt ${attempt}/3 failed)" >&2
+              done
+              sudo apt-get update -qq
+            fi
+          fi
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -89,18 +104,21 @@ jobs:
       - name: Install dependencies
         run: |
           set -euxo pipefail
-          sudo apt-get install -y \
-            cmake \
-            g++-15 \
-            gcc-15 \
-            clang-22 \
-            lld-22 \
-            ccache \
-            gperf \
-            libssl-dev \
-            make \
-            ninja-build \
+          common_packages=(
+            cmake
+            ccache
+            gperf
+            libssl-dev
+            make
+            ninja-build
             zlib1g-dev
+          )
+
+          if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
+            sudo apt-get install -y "${common_packages[@]}" gcc-15 g++-15
+          else
+            sudo apt-get install -y "${common_packages[@]}" clang-22 lld-22
+          fi
 
       - name: Cache ccache objects
         uses: actions/cache@v4
