@@ -36,11 +36,15 @@ Standard MTProto traffic is highly susceptible to DPI classification due to pred
 ### Implemented Features
 
 #### DPI Evasion & Stealth Shaping
-*   **Capture-Driven TLS ClientHello Masking:** Realistic, snapshot-backed browser profiles derived from real-world PCAP data, including anchored extension shuffling and accurate GREASE distributions.
-*   **Dynamic Record Sizing (DRS):** TLS record padding to capture-driven targets, eliminating the easily detectable small-record frequency of standard MTProto keepalives and ACKs.
-*   **Inter-Packet Timing (IPT) Obfuscation:** Log-normal and Markov-chain based packet delay scheduling to mimic interactive web browsing, with keepalive bypasses to maintain connection stability.
+*   **Capture-Driven TLS ClientHello Masking:** 11 browser profiles (Chrome 131, 133, 147 Windows, 147 iOS/Chromium; Firefox 148, 149 macOS, 149 Windows; Safari 26.3; iOS 14; Android OkHttp) derived from real-world `curl_cffi`/browser PCAP captures. Profiles carry provenance metadata (`source_kind`, `trust_tier`, `transport_claim_level`) distinguishing high-fidelity cross-layer-validated captures from advisory-tier uTLS snapshots. Includes anchored Chrome extension shuffling (`ChromeShuffleAnchored`), accurate 7-slot GREASE distributions, ML-KEM-768 PQ key share for current Chrome profiles, and BoringSSL-identical padding (plus per-build entropy randomization to defeat static record-size hashing).
+*   **Dynamic Record Sizing (DRS):** Three-phase TLS record payload shaping (SlowStart → CongestionOpen → SteadyState) with empirically calibrated bin distributions per traffic class. Anti-repeat logic prevents consecutive same-size records. Phase transitions use a smooth anchor to avoid discontinuous size jumps. Idle reset (250–1200ms, randomly sampled) reverts to SlowStart after inactivity.
+*   **Greeting Camouflage:** The first 1–5 records after connection open are sized from capture-aligned distributions matching actual browser DNS-resolution + initial-GET sequences, specifically targeting classifiers that profile the initial TLS session's size/timing signature.
+*   **Inter-Packet Timing (IPT) Obfuscation:** Two-state Markov model with lognormal burst delays (μ=3.5ms, σ=0.8; capped 200ms) and heavy-tail Pareto idle gaps (α=1.5, scale=500ms, max=3s) to mimic interactive web browsing. Applied only to `Interactive` traffic; bypassed for `Keepalive`, `BulkData`, and `AuthHandshake`. Fail-closed exponent clamping prevents zero-delay collapse under adversarial parameter values.
+*   **Bidirectional Correlation Defense:** Breaks response-size → request-size correlation used by flow-correlation attacks. After a small inbound response (≤192 bytes), the next outbound record receives a 1200-byte payload floor plus 4–24ms post-response jitter (lognormal sampled), preventing a DPI sensor from linking server responses to proxied client requests by size or timing.
+*   **Traffic Classification:** `TrafficClassifier` maps live MTProto session state to `Interactive`, `BulkData`, `Keepalive`, or `AuthHandshake` hints, driving DRS bin selection, IPT bypass decisions, and chaff eligibility — ensuring statistically appropriate sizing for each traffic class independently.
+*   **Idle Chaff Injection:** `ChaffScheduler` emits synthetic dummy TLS records after 15s of idle traffic, on 5s intervals, within a 4096 bytes/minute sliding budget. Record sizes are drawn from empirically calibrated idle-chaff bins (50–800 bytes). Prevents idle-gap fingerprinting where the absence of traffic is itself a classifier signal. Disabled by default; enabled per operator configuration.
 *   **MTProto Crypto Bucket Elimination:** Random padding applied pre-encryption to break the highly recognizable 64/128-byte quantization peaks of standard MTProto.
-*   **Route-Aware ECH (Encrypted ClientHello):** Fail-closed ECH policies with runtime circuit breakers (e.g., automatically disabling ECH on egress routes where it is actively dropped by censors).
+*   **Route-Aware ECH (Encrypted ClientHello):** Fail-closed ECH policies with per-destination runtime circuit breakers. ECH is enabled only on non-RU, non-Unknown routes; RU and unresolved routes default to ECH-off. The circuit breaker disables ECH for a destination after 3 failures (TCP reset, hello timeout, TLS fatal alert, or ServerHello parser rejection), persisted to the KV store under daily-bucketed keys, with automatic re-enabling after a 300s TTL. This prevents repeated ECH probes on censored egress without operator intervention.
 *   **Stealth Connection Count Capping:** Caps concurrent TCP connections to a single proxy to browser-realistic limits, fixing the behavioral anomaly of standard TDLib opening 18-50 connections to a single endpoint.
 *   **Proxy Retry Spam Hardening:** Exponential backoff enforced for proxy connections even when the client is online, preventing reconnect storms that aid DPI correlation.
 
@@ -54,6 +58,7 @@ Standard MTProto traffic is highly susceptible to DPI classification due to pred
 While the TLS handshake and record-sizing layers are highly advanced, the following areas are currently pending implementation:
 
 *   **L7 HTTP/2 / HTTP/1.1 Payload Framing:** *Crucial limitation.* Currently, after the TLS handshake, raw MTProto is sent inside TLS-like records. True HTTP/2 multiplexing or HTTP/1.1 message grammar is not yet implemented. Advanced DPI looking for strict L7 HTTP semantics may still flag this traffic.
+*   **QUIC / HTTP/3 Transport:** No QUIC transport layer is implemented. QUIC is blocked at the routing layer, forcing downgrade to TLS/TCP. No QUIC fingerprint mimicry (QUIC INITIAL packet structure, connection ID format, transport parameters) exists.
 *   **Active Connection Lifecycle Camouflage:** Make-before-break connection rotation and chunk-boundary rotation to prevent unnaturally long-lived single-origin TLS flows (which browsers rarely exhibit).
 *   **ServerHello Realism:** The client-side ClientHello is highly realistic, and the client-side response parser has been upgraded from a fixed-prefix check to a proper sequential TLS record reader (validating handshake record type, version, length bounds, ChangeCipherSpec, and ApplicationData completion). However, full semantic ServerHello matrix validation — verifying the server's selected cipher suite, extension set, and record layout against real-browser response patterns — still requires pending integration with the `telemt` server.
 
@@ -88,9 +93,24 @@ ctest --test-dir build --output-on-failure
 
 # Run only the stealth/TLS obfuscation slice
 ./build/test/run_all_tests --filter TlsHello
+
+# Other common test slice filters
+./build/test/run_all_tests --filter EntryWindow
+./build/test/run_all_tests --filter AuxChannel
+./build/test/run_all_tests --filter BlobStore
+./build/test/run_all_tests --filter WindowCount
+./build/test/run_all_tests --filter EntryCount
+./build/test/run_all_tests --filter ReferenceTable
+./build/test/run_all_tests --filter SourceLayout
+
+# Statistical corpus tests (fast: 1k iterations)
+./build/test/run_all_tests --filter 1k
+
+# Full nightly corpus (1024-iteration Monte Carlo)
+TD_NIGHTLY_CORPUS=1 ./build/test/run_all_tests --filter 1k
 ```
 
-*Note: Nightly statistical corpus tests require setting the `TD_NIGHTLY_CORPUS=1` environment variable to run the full 1024-iteration Monte Carlo validations.*
+*Note: Nightly statistical corpus tests set `TD_NIGHTLY_CORPUS=1` to run the full 1024-iteration Monte Carlo validations. Without this flag, the corpus tests run a lighter smoke-test subset.*
 
 ---
 
