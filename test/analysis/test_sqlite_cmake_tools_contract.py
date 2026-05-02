@@ -163,15 +163,10 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
             root_cmake,
             msg="root CMake must enable CTest so configure-generated test discovery is available on clean CI trees",
         )
-        self.assertIn(
-            "if (BUILD_TESTING)",
+        self.assertRegex(
             root_cmake,
-            msg="root CMake must gate the test subtree behind BUILD_TESTING",
-        )
-        self.assertIn(
-            "add_subdirectory(test)",
-            root_cmake,
-            msg="root CMake must include the test subtree when BUILD_TESTING is enabled",
+            r"if\s*\(\s*BUILD_TESTING\s*\)\s*\n\s*add_subdirectory\(test\)\s*\n\s*endif(?:\s*\(\s*\))?",
+            msg="root CMake must gate add_subdirectory(test) behind BUILD_TESTING",
         )
 
     def test_test_cmake_discovers_exact_run_all_tests_cases_and_has_clean_tree_fallback(self) -> None:
