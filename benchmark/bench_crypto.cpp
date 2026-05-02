@@ -377,9 +377,10 @@ class AesIgeShortBench final : public td::Benchmark {
 };
 
 BENCH(Rand, "std_rand") {
-  int res = 0;
+  std::uint_fast32_t res = 0;
+  std::minstd_rand g(123);
   for (int i = 0; i < n; i++) {
-    res ^= std::rand();
+    res ^= g();
   }
   td::do_not_optimize_away(res);
 }

@@ -1443,6 +1443,34 @@ struct tl_combinator_tree *tl_tree_dup(struct tl_combinator_tree *T) {
   return S;
 }
 
+static struct tl_combinator_tree *tl_free_combinator_tree(struct tl_combinator_tree *node) {
+  if (!node) {
+    return 0;
+  }
+  tl_free_combinator_tree(node->left);
+  tl_free_combinator_tree(node->right);
+  tfree(node, sizeof(*node));
+  return 0;
+}
+
+static struct tl_combinator_tree *tl_collapse_to_left_and_free_wrapper(struct tl_combinator_tree *node) {
+  struct tl_combinator_tree *left = node->left;
+  node->left = 0;
+  tl_free_combinator_tree(node->right);
+  node->right = 0;
+  tfree(node, sizeof(*node));
+  return left;
+}
+
+static struct tl_combinator_tree *tl_collapse_to_replacement_and_free_wrapper(struct tl_combinator_tree *node,
+                                                                               struct tl_combinator_tree *replacement) {
+  tl_free_combinator_tree(node->left);
+  node->left = 0;
+  node->right = 0;
+  tfree(node, sizeof(*node));
+  return replacement;
+}
+
 struct tl_type *tl_tree_get_type(struct tl_combinator_tree *T) {
   assert(T->type == type_type);
   if (T->act == act_array) {
@@ -2358,7 +2386,7 @@ struct tl_combinator_tree *change_first_var(struct tl_combinator_tree *O, struct
       return (void *)-1l;
     }
     if (t != (void *)-2l) {
-      return t;
+      return tl_collapse_to_replacement_and_free_wrapper(O, t);
     }
     return (void *)-1l;
   }
@@ -2370,7 +2398,7 @@ struct tl_combinator_tree *change_first_var(struct tl_combinator_tree *O, struct
     return 0;
   }
   if (t == (void *)-1l) {
-    return O->left;
+    return tl_collapse_to_left_and_free_wrapper(O);
   }
   if (t != (void *)-2l) {
     O->right = t;
@@ -2410,12 +2438,14 @@ void check_nat_val(struct tl_var_value v) {
 }
 
 int check_constructors_equal(struct tl_combinator_tree *L, struct tl_combinator_tree *R, struct tree_var_value **T) {
+  _T = 0;
   if (!uniformize(L, R, T)) {
     return 0;
   }
   __tok = 1;
   _T = T;
   tree_act_var_value(*T, check_nat_val);
+  _T = 0;
   return __tok;
 }
 
