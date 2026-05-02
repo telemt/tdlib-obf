@@ -79,19 +79,34 @@ jobs:
           sudo apt-get update -qq
 
           if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
-            # Prefer already-available gcc-15 on runner images, and only hit Launchpad when needed.
+            # Prefer already-available gcc-15 on runner images.
             if ! apt-cache show gcc-15 >/dev/null 2>&1; then
-              for attempt in 1 2 3; do
-                if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; then
-                  break
-                fi
-                if [[ "$attempt" == "3" ]]; then
-                  echo "Failed to add ubuntu-toolchain-r/test PPA after ${attempt} attempts" >&2
+              # Add ubuntu-toolchain-r/test without add-apt-repository to avoid
+              # Launchpad API lookups that are flaky on hosted runners.
+              echo "deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu noble main" \
+                | sudo tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list >/dev/null
+
+              set +e
+              ppa_update_output="$(sudo apt-get update 2>&1)"
+              ppa_update_status=$?
+              set -e
+
+              if [[ "$ppa_update_status" -ne 0 ]]; then
+                missing_keys="$(printf '%s\n' "$ppa_update_output" | sed -n 's/.*NO_PUBKEY \([0-9A-F]\+\).*/\1/p' | sort -u)"
+                if [[ -z "$missing_keys" ]]; then
+                  echo "$ppa_update_output" >&2
+                  echo "Failed to update apt metadata for ubuntu-toolchain-r/test and no NO_PUBKEY hints were found" >&2
                   exit 1
                 fi
-                echo "Retrying add-apt-repository (attempt ${attempt}/3 failed)" >&2
-              done
-              sudo apt-get update -qq
+
+                for key in $missing_keys; do
+                  wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${key}" \
+                    | gpg --dearmor \
+                    | sudo tee "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r-${key}.gpg" >/dev/null
+                done
+
+                sudo apt-get update -qq
+              fi
             fi
           fi
 
