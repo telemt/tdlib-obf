@@ -1,0 +1,22 @@
+var searchData=
+[
+  ['validatedorderinfo_0',['validatedOrderInfo',['../classtd_1_1td__api_1_1validatedOrderInfo.html',1,'td::td_api']]],
+  ['validateorderinfo_1',['validateOrderInfo',['../classtd_1_1td__api_1_1validateOrderInfo.html',1,'td::td_api']]],
+  ['vectorpathcommand_2',['VectorPathCommand',['../classtd_1_1td__api_1_1VectorPathCommand.html',1,'td::td_api']]],
+  ['vectorpathcommandcubicbeziercurve_3',['vectorPathCommandCubicBezierCurve',['../classtd_1_1td__api_1_1vectorPathCommandCubicBezierCurve.html',1,'td::td_api']]],
+  ['vectorpathcommandline_4',['vectorPathCommandLine',['../classtd_1_1td__api_1_1vectorPathCommandLine.html',1,'td::td_api']]],
+  ['venue_5',['venue',['../classtd_1_1td__api_1_1venue.html',1,'td::td_api']]],
+  ['verificationstatus_6',['verificationStatus',['../classtd_1_1td__api_1_1verificationStatus.html',1,'td::td_api']]],
+  ['video_7',['video',['../classtd_1_1td__api_1_1video.html',1,'td::td_api']]],
+  ['videochat_8',['videoChat',['../classtd_1_1td__api_1_1videoChat.html',1,'td::td_api']]],
+  ['videomessageadvertisement_9',['videoMessageAdvertisement',['../classtd_1_1td__api_1_1videoMessageAdvertisement.html',1,'td::td_api']]],
+  ['videomessageadvertisements_10',['videoMessageAdvertisements',['../classtd_1_1td__api_1_1videoMessageAdvertisements.html',1,'td::td_api']]],
+  ['videonote_11',['videoNote',['../classtd_1_1td__api_1_1videoNote.html',1,'td::td_api']]],
+  ['videostoryboard_12',['videoStoryboard',['../classtd_1_1td__api_1_1videoStoryboard.html',1,'td::td_api']]],
+  ['viewmessages_13',['viewMessages',['../classtd_1_1td__api_1_1viewMessages.html',1,'td::td_api']]],
+  ['viewpremiumfeature_14',['viewPremiumFeature',['../classtd_1_1td__api_1_1viewPremiumFeature.html',1,'td::td_api']]],
+  ['viewsponsoredchat_15',['viewSponsoredChat',['../classtd_1_1td__api_1_1viewSponsoredChat.html',1,'td::td_api']]],
+  ['viewtrendingstickersets_16',['viewTrendingStickerSets',['../classtd_1_1td__api_1_1viewTrendingStickerSets.html',1,'td::td_api']]],
+  ['viewvideomessageadvertisement_17',['viewVideoMessageAdvertisement',['../classtd_1_1td__api_1_1viewVideoMessageAdvertisement.html',1,'td::td_api']]],
+  ['voicenote_18',['voiceNote',['../classtd_1_1td__api_1_1voiceNote.html',1,'td::td_api']]]
+];

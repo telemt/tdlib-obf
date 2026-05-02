@@ -19,11 +19,12 @@ This document defines the curated public API surface included in generated Doxyg
 6. `td/telegram/TdCallback.h`
 7. `td/telegram/td_json_client.h`
 8. `td/telegram/td_log.h`
-9. `td/tl/tl_jni_object.h`
-10. `tde2e/td/e2e/e2e_api.h`
-11. `tde2e/td/e2e/e2e_errors.h`
-12. `docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md`
-13. `docs/Documentation/API_DOCUMENTATION.md`
+9. `build/td/telegram/tdjson_export.h`
+10. `td/tl/tl_jni_object.h`
+11. `tde2e/td/e2e/e2e_api.h`
+12. `tde2e/td/e2e/e2e_errors.h`
+13. `docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md`
+14. `docs/Documentation/API_DOCUMENTATION.md`
 
 ## Excluded Inputs
 
