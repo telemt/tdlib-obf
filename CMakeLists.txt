@@ -253,6 +253,34 @@ add_subdirectory(tdutils)
 
 add_subdirectory(td/generate)
 
+if(NOT CMAKE_CROSSCOMPILING)
+  find_package(
+    Python3
+    COMPONENTS Interpreter
+    QUIET)
+  find_package(Doxygen QUIET)
+
+  if(DOXYGEN_FOUND AND Python3_EXECUTABLE)
+    set(TDLIB_DOXYGEN_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/api")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in"
+                   "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.api" @ONLY)
+    # Default in-tree location is build/docs/api/html/index.html.
+    add_custom_target(
+      td_generate_api_docs
+      COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.api
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      COMMENT "Generate tdlib-obf API documentation with Doxygen"
+      DEPENDS tl_generate_common)
+  elseif(NOT DOXYGEN_FOUND)
+    message(STATUS "Doxygen not found; td_generate_api_docs target is disabled")
+  else()
+    message(
+      STATUS
+        "Python 3 interpreter not found; td_generate_api_docs target is disabled"
+    )
+  endif()
+endif()
+
 if(NOT CMAKE_CROSSCOMPILING AND NOT TD_SANITIZER_BUILD)
   set(TD_ALWAYS_GENERATE_SOURCE "")
   if(TD_GENERATE_SOURCE_FILES)
@@ -342,7 +370,7 @@ set(TDDB_ENABLE_INSTALL
     CACHE BOOL "" FORCE)
 add_subdirectory(tddb)
 
-if (BUILD_TESTING)
+if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 

@@ -1,0 +1,28 @@
+var classtd_1_1td__api_1_1chatStatisticsChannel =
+[
+    [ "chatStatisticsChannel", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a3193a233a1c96e2451829ee5b37dc4fe", null ],
+    [ "chatStatisticsChannel", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a798e32cd5e0c8d89a69480e8be41dad5", null ],
+    [ "store", "classtd_1_1td__api_1_1chatStatisticsChannel.html#aba98e75299010ee10736e1594c3e4460", null ],
+    [ "enabled_notifications_percentage_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a9bb26704df3ea05e80fc71911e27c4c4", null ],
+    [ "instant_view_interaction_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#ab7f9ee620c8d413d6e32f11d2aa5f20e", null ],
+    [ "join_by_source_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#ac43383b5c9d01d409360a98972b28bb9", null ],
+    [ "join_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a064c917ef82134c15aee60872146ce6c", null ],
+    [ "language_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a959596c7eb60945c61b005b0af63655f", null ],
+    [ "mean_message_reaction_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a400068a8c6fdca34133a273080d610aa", null ],
+    [ "mean_message_share_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a567a86f84f18e2eb1c5df48288a6885f", null ],
+    [ "mean_message_view_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a0f10833fb91c3161d66a23af7634dfe2", null ],
+    [ "mean_story_reaction_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#ac5f3ff8dc5e7585401ef1dac8ca1b7aa", null ],
+    [ "mean_story_share_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#aae9ec9e737bb587d220201ab0d43a860", null ],
+    [ "mean_story_view_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a21dc8aff2fb168d297d6989023ab7ecd", null ],
+    [ "member_count_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a7f78cc0d239bce8ca4288a874597d303", null ],
+    [ "member_count_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a05e124744537d83daad04fc10e0b059a", null ],
+    [ "message_interaction_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a9807e15201a5b4a850ccc321b7761b07", null ],
+    [ "message_reaction_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#ab9ea6f275301fa94b758c345a4b88448", null ],
+    [ "mute_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a40c0c4d57f3095fc045eb007aa893ff0", null ],
+    [ "period_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#ad70a9d8452a6db14850e02a4999bdeca", null ],
+    [ "recent_interactions_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#aeeb2651d957f23b5b69a37a290133f36", null ],
+    [ "story_interaction_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#afd473729bb7afaf4868530c7ed164e23", null ],
+    [ "story_reaction_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a79b8511f0ec98fdab0e719428c216600", null ],
+    [ "view_count_by_hour_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#a759105960c560e60ba5b67c249f60d94", null ],
+    [ "view_count_by_source_graph_", "classtd_1_1td__api_1_1chatStatisticsChannel.html#aefa39e741af95c074da25dd9a8c452c1", null ]
+];

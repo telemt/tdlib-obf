@@ -9452,7 +9452,8 @@ proxyTypeSocks5 username:string password:string = ProxyType;
 //@description A HTTP transparent proxy server @username Username for logging in; may be empty @password Password for logging in; may be empty @http_only Pass true if the proxy supports only HTTP requests and doesn't support transparent TCP connections via HTTP CONNECT method
 proxyTypeHttp username:string password:string http_only:Bool = ProxyType;
 
-//@description An MTProto proxy server @secret The proxy's secret in hexadecimal encoding
+//@description An MTProto proxy server used for MTProto proxy routing
+//@secret The proxy's secret in hexadecimal encoding; pass the provider-issued secret unchanged
 proxyTypeMtproto secret:string = ProxyType;
 
 
@@ -9735,7 +9736,8 @@ phoneNumberCodeTypeConfirmOwnership hash:string = PhoneNumberCodeType;
 
 //@class Update @description Contains notifications about data changes
 
-//@description The user authorization state has changed @authorization_state New authorization state
+//@description The user authorization state has changed. This update is the single source of truth for the authorization flow and session lifecycle in a client
+//@authorization_state New authorization state
 updateAuthorizationState authorization_state:AuthorizationState = Update;
 
 //@description A new message was received; can also be an outgoing message @message The new message
@@ -9810,7 +9812,8 @@ updateMessageLiveLocationViewed chat_id:int53 message_id:int53 = Update;
 //@message_id Identifier of the sent message
 updateVideoPublished chat_id:int53 message_id:int53 = Update;
 
-//@description A new chat has been loaded/created. This update is guaranteed to come before the chat identifier is returned to the application. The chat field changes will be reported through separate updates @chat The chat
+//@description A new chat has been loaded or created. Use this update to seed client-side chat caches before using the identifier elsewhere. This update is guaranteed to come before the chat identifier is returned to the application. The chat field changes will be reported through separate updates
+//@chat The chat
 updateNewChat chat:chat = Update;
 
 //@description The title of a chat was changed @chat_id Chat identifier @title The new chat title
@@ -10073,7 +10076,8 @@ updateServiceNotification type:string content:MessageContent = Update;
 //@url The URL to pass to getOauthLinkInfo; the link is valid for 60 seconds
 updateNewOauthRequest domain:string location:string url:string = Update;
 
-//@description Information about a file was updated @file New data about the file
+//@description Information about a file was updated. Treat this as the authoritative stream for upload and download progress and state transitions
+//@file New data about the file
 updateFile file:file = Update;
 
 //@description The file generation process needs to be started by the application. Use setFileGenerationProgress and finishFileGeneration to generate the file
@@ -10573,7 +10577,7 @@ testVectorStringObject value:vector<testString> = TestVectorStringObject;
 getAuthorizationState = AuthorizationState;
 
 
-//@description Sets the parameters for TDLib initialization. Works only when the current authorization state is authorizationStateWaitTdlibParameters
+//@description Sets bootstrap parameters for TDLib initialization. Call once after receiving authorizationStateWaitTdlibParameters from updateAuthorizationState
 //@use_test_dc Pass true to use Telegram test environment instead of the production environment
 //@database_directory The path to the directory for the persistent database; if empty, the current working directory will be used
 //@files_directory The path to the directory for storing files; if empty, database_directory will be used
@@ -10864,7 +10868,7 @@ getFile file_id:int32 = File;
 //@file_type File type; pass null if unknown
 getRemoteFile remote_file_id:string file_type:FileType = File;
 
-//@description Loads more chats from a chat list. The loaded chats and their positions in the chat list will be sent through updates. Chats are sorted by the pair (chat.position.order, chat.id) in descending order. Returns a 404 error if all chats have been loaded
+//@description Loads more chats from a chat list for incremental chat list synchronization. The loaded chats and their positions in the chat list will be sent through updates. Chats are sorted by the pair (chat.position.order, chat.id) in descending order. Returns a 404 error if all chats have been loaded
 //@chat_list The chat list in which to load chats; pass null to load chats from the main chat list
 //@limit The maximum number of chats to be loaded. For optimal performance, the number of loaded chats is chosen by TDLib and can be smaller than the specified limit, even if the end of the list is not reached
 loadChats chat_list:ChatList limit:int32 = Ok;
@@ -15218,7 +15222,7 @@ saveApplicationLogEvent type:string chat_id:int53 data:JsonValue = Ok;
 getApplicationDownloadLink = HttpUrl;
 
 
-//@description Adds a proxy server for network requests. Can be called before authorization
+//@description Adds a proxy server for network requests. Use together with proxyTypeMtproto to activate MTProto proxy routing when needed. Can be called before authorization
 //@proxy The proxy to add
 //@enable Pass true to immediately enable the proxy
 addProxy proxy:proxy enable:Bool = AddedProxy;

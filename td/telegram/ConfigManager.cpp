@@ -1123,6 +1123,8 @@ class ConfigRecoverer final : public Actor {
   }
 };
 
+ConfigManager::~ConfigManager() = default;
+
 template <class StorerT>
 void ConfigManager::AppConfig::store(StorerT &storer) const {
   td::store(version_, storer);

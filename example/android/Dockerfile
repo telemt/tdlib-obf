@@ -1,10 +1,10 @@
 FROM --platform=linux/amd64 ubuntu:24.04 AS build
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq default-jdk g++ git gperf make perl php-cli unzip wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq default-jdk g++ git gperf make perl python3 unzip wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home
 
-ARG ANDROID_NDK_VERSION=23.2.8568313
+ARG ANDROID_NDK_VERSION=r27b
 COPY ./check-environment.sh ./fetch-sdk.sh ./
 RUN ./fetch-sdk.sh SDK "$ANDROID_NDK_VERSION"
 

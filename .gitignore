@@ -8,9 +8,16 @@
 **/.scannerwork/
 **/.*.swp
 **/.DS_Store
+**/__pycache__/
+**/*.pyc
 **/auto/
 docs/Samples/utls-code/*
 docs/Samples/xray-core-code/*
+docs/html/
+docs/latex/
+docs/man/
+docs/rtf/
+docs/xml/
 test/analysis/__pycache__/**
 /tdlib/
 vcpkg/

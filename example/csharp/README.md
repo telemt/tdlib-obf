@@ -14,7 +14,7 @@ git checkout bc3512a509f9d29b37346a7e7e929f9a26e66c7e
 .\bootstrap-vcpkg.bat
 .\vcpkg.exe install gperf:x64-windows gperf:x86-windows openssl:x64-windows openssl:x86-windows zlib:x64-windows zlib:x86-windows
 ```
-* (Optional. For XML documentation generation.) Download [PHP](https://windows.php.net/download). Add the path to php.exe to the PATH environment variable.
+* (Optional. For XML documentation generation.) Install Python 3 and ensure `python` or `python3` is available in PATH.
 * Build `TDLib` with CMake enabling `.NET` support and specifying correct path to `vcpkg` toolchain file:
 ```
 cd <path to TDLib sources>/example/csharp

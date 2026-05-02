@@ -1,0 +1,148 @@
+name: Doxygen Docs Integrity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - 'release/**'
+    paths:
+      - '.github/workflows/doxygen-docs-integrity.yml'
+      - '.gitignore'
+      - 'Doxyfile'
+      - 'Doxyfile.in'
+      - 'CMakeLists.txt'
+      - 'td/generate/**'
+      - 'docs/api/**'
+      - 'docs/Documentation/API_DOCUMENTATION.md'
+      - 'docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md'
+      - 'example/java/**'
+      - 'example/android/**'
+      - 'example/csharp/**'
+      - 'example/uwp/**'
+      - 'test/analysis/test_*doc*contract.py'
+      - 'test/analysis/test_*doxygen*.py'
+      - 'test/analysis/test_*python_doc_generators*.py'
+      - 'test/analysis/test_java_doc_generator_contract.py'
+      - 'test/analysis/test_dotnet_doc_generator_contract.py'
+      - 'test/analysis/test_android_addintdef_contract.py'
+      - 'test/analysis/test_docs_ci_workflow_contract.py'
+  pull_request:
+    branches:
+      - master
+      - 'release/**'
+    paths:
+      - '.github/workflows/doxygen-docs-integrity.yml'
+      - '.gitignore'
+      - 'Doxyfile'
+      - 'Doxyfile.in'
+      - 'CMakeLists.txt'
+      - 'td/generate/**'
+      - 'docs/api/**'
+      - 'docs/Documentation/API_DOCUMENTATION.md'
+      - 'docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md'
+      - 'example/java/**'
+      - 'example/android/**'
+      - 'example/csharp/**'
+      - 'example/uwp/**'
+      - 'test/analysis/test_*doc*contract.py'
+      - 'test/analysis/test_*doxygen*.py'
+      - 'test/analysis/test_*python_doc_generators*.py'
+      - 'test/analysis/test_java_doc_generator_contract.py'
+      - 'test/analysis/test_dotnet_doc_generator_contract.py'
+      - 'test/analysis/test_android_addintdef_contract.py'
+      - 'test/analysis/test_docs_ci_workflow_contract.py'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doxygen_docs_integrity:
+    name: doxygen_docs_integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install docs build dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y doxygen gperf cmake ninja-build
+
+      - name: Run docs migration analysis contracts
+        run: |
+          set -euxo pipefail
+          python3 -m unittest discover -s test/analysis -p 'test_*doc*contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_*doxygen*.py'
+          python3 -m unittest discover -s test/analysis -p 'test_*python_doc_generators*.py'
+          python3 -m unittest discover -s test/analysis -p 'test_java_doc_generator_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_dotnet_doc_generator_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_android_addintdef_contract.py'
+          python3 -m unittest discover -s test/analysis -p 'test_docs_ci_workflow_contract.py'
+
+      - name: Configure CMake
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DTD_ENABLE_BENCHMARKS=OFF
+
+      - name: Generate Doxygen docs artifact
+        run: |
+          set -euxo pipefail
+          cmake --build build --target td_generate_api_docs --parallel 4
+          test -f build/docs/api/html/index.html
+
+      - name: Record docs artifact publication metadata
+        run: |
+          set -euxo pipefail
+          generated_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          cat > build/docs/api/docs_artifact_manifest.json <<EOF
+          {
+            "workflow": "${{ github.workflow }}",
+            "job": "doxygen_docs_integrity",
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "generated_at_utc": "${generated_at_utc}",
+            "artifact_index": "build/docs/api/html/index.html"
+          }
+          EOF
+          test -f build/docs/api/docs_artifact_manifest.json
+          {
+            echo "## Doxygen Artifact Publication"
+            echo "- run_id: ${{ github.run_id }}"
+            echo "- run_attempt: ${{ github.run_attempt }}"
+            echo "- sha: ${{ github.sha }}"
+            echo "- manifest: build/docs/api/docs_artifact_manifest.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Doxygen HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: |
+            build/docs/api/html
+            build/docs/api/docs_artifact_manifest.json
+          if-no-files-found: error

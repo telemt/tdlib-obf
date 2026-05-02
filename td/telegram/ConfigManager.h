@@ -79,6 +79,7 @@ class ConfigRecoverer;
 class ConfigManager final : public NetQueryCallback {
  public:
   explicit ConfigManager(ActorShared<> parent);
+  ~ConfigManager();
 
   void request_config(bool reopen_sessions);
 

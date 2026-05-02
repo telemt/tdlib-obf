@@ -1,0 +1,25 @@
+var classtd_1_1td__api_1_1messageGift =
+[
+    [ "messageGift", "classtd_1_1td__api_1_1messageGift.html#af4d1a41070e3528152bd028336549c74", null ],
+    [ "messageGift", "classtd_1_1td__api_1_1messageGift.html#a06cb94d7107739bd5ff4eb8cfc1b2a0d", null ],
+    [ "store", "classtd_1_1td__api_1_1messageGift.html#aef4831041fb830cf16e32dcec9ebeb7d", null ],
+    [ "can_be_upgraded_", "classtd_1_1td__api_1_1messageGift.html#ab0e13645e5d2f44008e16aa184fd7005", null ],
+    [ "gift_", "classtd_1_1td__api_1_1messageGift.html#a41c1da6b0bfa7058bdf7b2b3302f85d2", null ],
+    [ "is_from_auction_", "classtd_1_1td__api_1_1messageGift.html#ab1ff51b7eff12922c97c3beef6ff0fc7", null ],
+    [ "is_prepaid_upgrade_", "classtd_1_1td__api_1_1messageGift.html#adf5435fc70494957fb0d6c9b190cfbc1", null ],
+    [ "is_private_", "classtd_1_1td__api_1_1messageGift.html#a60410a20fd72e03a833039d967215e66", null ],
+    [ "is_saved_", "classtd_1_1td__api_1_1messageGift.html#a4e58baa5b112eca0d37e48d1e14e3b97", null ],
+    [ "is_upgrade_separate_", "classtd_1_1td__api_1_1messageGift.html#af20d610a561b9721a1ecf2885d158543", null ],
+    [ "prepaid_upgrade_hash_", "classtd_1_1td__api_1_1messageGift.html#a590425d769ca25a2c5a42489295b1558", null ],
+    [ "prepaid_upgrade_star_count_", "classtd_1_1td__api_1_1messageGift.html#a266651144500f7a3483d8134e61f8ef2", null ],
+    [ "received_gift_id_", "classtd_1_1td__api_1_1messageGift.html#a5fa3114d1036253cda4e5e4e46192d1b", null ],
+    [ "receiver_id_", "classtd_1_1td__api_1_1messageGift.html#a23aac88ae0b41dbb1b5f7dd7cdb9246e", null ],
+    [ "sell_star_count_", "classtd_1_1td__api_1_1messageGift.html#aed41eb5c8036db30877ec4dab92f2c32", null ],
+    [ "sender_id_", "classtd_1_1td__api_1_1messageGift.html#a529a2b6ce5ff8c0223b88e73d781c701", null ],
+    [ "text_", "classtd_1_1td__api_1_1messageGift.html#a22309194e6a493156f2f7514c823e7ed", null ],
+    [ "unique_gift_number_", "classtd_1_1td__api_1_1messageGift.html#ad91b9ea408bbaf121b6b4e9e46907a38", null ],
+    [ "upgraded_received_gift_id_", "classtd_1_1td__api_1_1messageGift.html#a9f2f46d861c4391e88851c97cfa668bb", null ],
+    [ "was_converted_", "classtd_1_1td__api_1_1messageGift.html#afa582b436c1353c2a9b4404edb408bc3", null ],
+    [ "was_refunded_", "classtd_1_1td__api_1_1messageGift.html#a97141ba01a04c440babaabb080693d62", null ],
+    [ "was_upgraded_", "classtd_1_1td__api_1_1messageGift.html#a617b878fd4339797b089ebd4fce7d8d9", null ]
+];

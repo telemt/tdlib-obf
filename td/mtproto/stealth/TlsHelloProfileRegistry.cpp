@@ -15,6 +15,7 @@
 #include "td/utils/port/Clocks.h"
 #include "td/utils/Time.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cstdlib>
@@ -152,6 +153,13 @@ constexpr uint32 kRouteFailureKeyBucketSeconds = 86400;
 struct RouteFailureCacheEntry final {
   RouteFailureState state;
   Timestamp disabled_until;
+};
+
+struct CasefoldStoreLookupCandidate final {
+  string key;
+  string value;
+  bool is_legacy{false};
+  bool from_previous_bucket{false};
 };
 
 struct RuntimeEchCounterStorage final {
@@ -297,8 +305,7 @@ td::vector<string> route_failure_store_keys_for_lookup(Slice destination, int32 
   td::vector<string> destination_variants;
   destination_variants.reserve(3);
   destination_variants.push_back(canonical_destination_key);
-  if (preserved_destination_key != canonical_destination_key &&
-      preserved_destination_key != uppercase_destination_key) {
+  if (preserved_destination_key != canonical_destination_key) {
     destination_variants.push_back(preserved_destination_key);
   }
   if (uppercase_destination_key != canonical_destination_key &&
@@ -339,8 +346,7 @@ td::vector<string> legacy_route_failure_store_keys_for_lookup(Slice destination,
   td::vector<string> destination_variants;
   destination_variants.reserve(3);
   destination_variants.push_back(canonical_destination_key);
-  if (preserved_destination_key != canonical_destination_key &&
-      preserved_destination_key != uppercase_destination_key) {
+  if (preserved_destination_key != canonical_destination_key) {
     destination_variants.push_back(preserved_destination_key);
   }
   if (uppercase_destination_key != canonical_destination_key &&
@@ -459,6 +465,150 @@ bool parse_route_failure_cache_entry(Slice serialized, RouteFailureCacheEntry &e
     entry.disabled_until = Timestamp::in(static_cast<double>(effective_remaining_ms) / 1000.0);
   }
   return entry.state.recent_ech_failures != 0 || entry.state.ech_block_suspected;
+}
+
+bool parse_casefold_store_lookup_candidate_key(Slice store_key, string &destination_key, bool &is_legacy,
+                                               bool &from_previous_bucket, int32 unix_time) {
+  if (store_key.size() < kRuntimeEchStoreKeyPrefix.size() ||
+      store_key.substr(0, kRuntimeEchStoreKeyPrefix.size()) != kRuntimeEchStoreKeyPrefix) {
+    return false;
+  }
+
+  auto suffix = store_key.substr(kRuntimeEchStoreKeyPrefix.size()).str();
+  auto bucket_delim_pos = suffix.rfind('|');
+  if (bucket_delim_pos == string::npos) {
+    destination_key = std::move(suffix);
+    is_legacy = false;
+    from_previous_bucket = false;
+    return true;
+  }
+
+  auto bucket_text = Slice(suffix).substr(bucket_delim_pos + 1);
+  uint32 parsed_bucket = 0;
+  if (!parse_uint32_str(bucket_text, parsed_bucket)) {
+    return false;
+  }
+
+  auto current_bucket = legacy_route_failure_bucket(unix_time);
+  bool current_bucket_match = parsed_bucket == current_bucket;
+  bool previous_bucket_match = current_bucket > 0 && parsed_bucket == current_bucket - 1;
+  if (!current_bucket_match && !previous_bucket_match) {
+    return false;
+  }
+
+  destination_key = suffix.substr(0, bucket_delim_pos);
+  is_legacy = true;
+  from_previous_bucket = previous_bucket_match;
+  return true;
+}
+
+td::vector<CasefoldStoreLookupCandidate> collect_casefold_store_lookup_candidates_locked(Slice destination,
+                                                                                          int32 unix_time) {
+  td::vector<CasefoldStoreLookupCandidate> candidates;
+  auto store = route_failure_store();
+  if (store == nullptr) {
+    return candidates;
+  }
+
+  auto canonical_destination_key = normalized_runtime_destination_key(destination);
+  auto direct_preserved_destination_key = runtime_destination_key_preserving_case(destination);
+  auto direct_uppercase_destination_key = uppercase_runtime_destination_key(destination);
+
+  auto entries = store->prefix_get(kRuntimeEchStoreKeyPrefix);
+  candidates.reserve(entries.size());
+  for (const auto &it : entries) {
+    string candidate_destination_key;
+    bool candidate_is_legacy = false;
+    bool candidate_from_previous_bucket = false;
+    if (!parse_casefold_store_lookup_candidate_key(it.first, candidate_destination_key, candidate_is_legacy,
+                                                   candidate_from_previous_bucket, unix_time)) {
+      continue;
+    }
+    if (normalized_runtime_destination_key(candidate_destination_key) != canonical_destination_key) {
+      continue;
+    }
+
+    // Direct lookups already handle canonical, query-preserved, and uppercase
+    // aliases (with dotted variants). The fallback is strictly for remaining
+    // mixed-case historical keys.
+    auto candidate_exact = Slice(candidate_destination_key);
+    if (candidate_exact == canonical_destination_key || candidate_exact == direct_preserved_destination_key ||
+        candidate_exact == direct_uppercase_destination_key) {
+      continue;
+    }
+
+    CasefoldStoreLookupCandidate candidate;
+    candidate.key = it.first;
+    candidate.value = it.second;
+    candidate.is_legacy = candidate_is_legacy;
+    candidate.from_previous_bucket = candidate_from_previous_bucket;
+    candidates.push_back(std::move(candidate));
+  }
+
+  auto candidate_rank = [](const CasefoldStoreLookupCandidate &candidate) {
+    if (!candidate.is_legacy) {
+      return 0;
+    }
+    if (candidate.from_previous_bucket) {
+      return 2;
+    }
+    return 1;
+  };
+
+  std::ranges::sort(candidates, [&](const auto &lhs, const auto &rhs) {
+    auto lhs_rank = candidate_rank(lhs);
+    auto rhs_rank = candidate_rank(rhs);
+    if (lhs_rank != rhs_rank) {
+      return lhs_rank < rhs_rank;
+    }
+    return lhs.key < rhs.key;
+  });
+  return candidates;
+}
+
+void erase_casefold_store_lookup_candidates_locked(const td::vector<CasefoldStoreLookupCandidate> &candidates) {
+  auto store = route_failure_store();
+  if (store == nullptr) {
+    return;
+  }
+
+  for (const auto &candidate : candidates) {
+    store->erase(candidate.key);
+  }
+}
+
+bool try_load_casefold_route_failure_cache_entry_locked(Slice destination, int32 unix_time, RouteFailureCacheEntry &entry,
+                                                        bool *saw_expired_blocked_entry = nullptr) {
+  auto store = route_failure_store();
+  if (store == nullptr) {
+    return false;
+  }
+
+  auto candidates = collect_casefold_store_lookup_candidates_locked(destination, unix_time);
+  for (const auto &candidate : candidates) {
+    if (candidate.value.empty()) {
+      store->erase(candidate.key);
+      continue;
+    }
+
+    if (!parse_route_failure_cache_entry(candidate.value, entry)) {
+      entry = make_fail_closed_route_failure_cache_entry();
+      erase_casefold_store_lookup_candidates_locked(candidates);
+      return true;
+    }
+    if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
+      if (saw_expired_blocked_entry != nullptr && entry.state.ech_block_suspected) {
+        *saw_expired_blocked_entry = true;
+      }
+      store->erase(candidate.key);
+      continue;
+    }
+
+    erase_casefold_store_lookup_candidates_locked(candidates);
+    return true;
+  }
+
+  return false;
 }
 
 bool clamp_route_failure_disabled_until(RouteFailureCacheEntry &entry, Timestamp max_disabled_until) {
@@ -590,6 +740,13 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
       return inserted.first->second.state;
     }
+    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry,
+                                                           saw_expired_blocked_entry)) {
+      clamp_route_failure_disabled_until(entry, max_disabled_until);
+      auto inserted = cache.emplace(key, entry);
+      persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
+      return inserted.first->second.state;
+    }
     return RouteFailureState{};
   }
   if (clamp_route_failure_disabled_until(it->second, max_disabled_until)) {
@@ -634,6 +791,13 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
 
     RouteFailureCacheEntry entry;
     if (try_load_legacy_route_failure_cache_entry_locked(destination, unix_time, entry, saw_expired_blocked_entry)) {
+      clamp_route_failure_disabled_until(entry, max_disabled_until);
+      auto inserted = cache.emplace(key, entry);
+      persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
+      return inserted.first->second.state;
+    }
+    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry,
+                                                           saw_expired_blocked_entry)) {
       clamp_route_failure_disabled_until(entry, max_disabled_until);
       auto inserted = cache.emplace(key, entry);
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);

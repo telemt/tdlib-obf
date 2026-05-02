@@ -1,7 +1,7 @@
 # TDLib Java example
 
 To run this example, you will need installed JDK >= 1.6.
-For Javadoc documentation generation PHP is needed.
+For Javadoc documentation generation Python 3 is needed.
 
 You can find complete build instructions for your operating system at https://tdlib.github.io/td/build.html?language=Java.
 
