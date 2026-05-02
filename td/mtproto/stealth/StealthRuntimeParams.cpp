@@ -193,18 +193,11 @@ Status validate_route_entry(Slice name, const RuntimeRoutePolicyEntry &entry, bo
 }
 
 Status validate_profile_weights(const ProfileWeights &weights) {
-  const uint32 darwin_total =
-      weights.chrome133 + weights.chrome131 + weights.chrome120 + weights.firefox148 + weights.safari26_3;
-  const uint32 non_darwin_total = weights.chrome133 + weights.chrome131 + weights.chrome120 + weights.firefox148;
-  const uint32 mobile_total = weights.ios14 + weights.android11_okhttp_advisory;
-  if (darwin_total == 0) {
-    return Status::Error("desktop darwin profile weights must not be empty");
-  }
-  if (non_darwin_total == 0) {
-    return Status::Error("desktop non-darwin profile weights must not be empty");
-  }
-  if (mobile_total == 0) {
-    return Status::Error("mobile profile weights must not be empty");
+  const uint32 total = weights.chrome133 + weights.chrome131 + weights.chrome120 + weights.chrome147_windows +
+                       weights.chrome147_ios_chromium + weights.firefox148 + weights.firefox149_windows +
+                       weights.safari26_3 + weights.ios14 + weights.android11_okhttp_advisory;
+  if (total == 0) {
+    return Status::Error("profile_weights must not be empty");
   }
   return Status::OK();
 }

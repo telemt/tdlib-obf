@@ -293,6 +293,28 @@ TEST(EchRouteFailureCaseAliasAdversarial, LegacyUppercasePersistedKeyReloadsForU
   ASSERT_FALSE(store->get("stealth_ech_cb#mixed.case.example.com").empty());
 }
 
+TEST(EchRouteFailureCaseAliasAdversarial,
+     SuccessClearsLegacyMixedCasePersistedAliasWithoutTransientCircuitBreakerReactivation) {
+  RuntimeCaseAliasGuard guard;
+  configure_threshold_one();
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  const td::int32 unix_time = 1712345678;
+  const td::string mixed_case_destination = "MiXeD.Case.Example.com";
+  const td::string legacy_mixed_case_key = "stealth_ech_cb#" + mixed_case_destination;
+  store->set(legacy_mixed_case_key, "3|1|300000|9223372036854770000");
+
+  note_runtime_ech_success("mixed.case.example.com", unix_time);
+
+  ASSERT_TRUE(store->get(legacy_mixed_case_key).empty());
+
+  auto decision = get_runtime_ech_decision("mixed.case.example.com", unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode == EchMode::Rfc9180Outer);
+  ASSERT_FALSE(decision.disabled_by_circuit_breaker);
+}
+
 TEST(EchRouteFailureCaseAliasAdversarial, LegacyBucketedUppercaseKeyReloadsForUppercaseAlias) {
   RuntimeCaseAliasGuard guard;
   configure_threshold_one();

@@ -48,6 +48,14 @@ RuntimePlatformHints ios_platform() {
   return platform;
 }
 
+RuntimePlatformHints windows_platform() {
+  RuntimePlatformHints platform;
+  platform.device_class = DeviceClass::Desktop;
+  platform.mobile_os = MobileOs::None;
+  platform.desktop_os = DesktopOs::Windows;
+  return platform;
+}
+
 TEST(TlsRuntimePlatformWeightGateAdversarial, IosChromiumOnlyLaneCanBePublished) {
   RuntimeParamsGuard guard;
 
@@ -66,6 +74,55 @@ TEST(TlsRuntimePlatformWeightGateAdversarial, IosChromiumOnlyLaneCanBePublished)
     td::string domain = "ios-chromium-only-" + td::to_string(i) + ".example.com";
     auto profile = pick_runtime_profile(domain, unix_time, params.platform_hints);
     ASSERT_TRUE(profile == BrowserProfile::Chrome147_IOSChromium);
+  }
+}
+
+TEST(TlsRuntimePlatformWeightGateAdversarial, IosChromiumOnlyLaneWithZeroAndroidCanBePublished) {
+  RuntimeParamsGuard guard;
+
+  auto params = default_runtime_stealth_params();
+  params.transport_confidence = TransportConfidence::Partial;
+  params.platform_hints = ios_platform();
+
+  params.profile_weights.ios14 = 0;
+  params.profile_weights.chrome147_ios_chromium = 100;
+  params.profile_weights.android11_okhttp_advisory = 0;
+
+  auto status = set_runtime_stealth_params_for_tests(params);
+  ASSERT_TRUE(status.is_ok());
+
+  for (td::uint32 i = 0; i < 128; i++) {
+    auto unix_time = static_cast<td::int32>(1712345678 + i * 17);
+    td::string domain = "ios-chromium-only-no-android-" + td::to_string(i) + ".example.com";
+    auto profile = pick_runtime_profile(domain, unix_time, params.platform_hints);
+    ASSERT_TRUE(profile == BrowserProfile::Chrome147_IOSChromium);
+  }
+}
+
+TEST(TlsRuntimePlatformWeightGateAdversarial, WindowsExplicitLaneCanBePublishedWithoutLegacyNonDarwinDesktopWeights) {
+  RuntimeParamsGuard guard;
+
+  auto params = default_runtime_stealth_params();
+  params.transport_confidence = TransportConfidence::Partial;
+  params.platform_hints = windows_platform();
+
+  params.profile_weights.chrome133 = 0;
+  params.profile_weights.chrome131 = 0;
+  params.profile_weights.chrome120 = 0;
+  params.profile_weights.firefox148 = 0;
+  params.profile_weights.safari26_3 = 0;
+
+  params.profile_weights.chrome147_windows = 100;
+  params.profile_weights.firefox149_windows = 0;
+
+  auto status = set_runtime_stealth_params_for_tests(params);
+  ASSERT_TRUE(status.is_ok());
+
+  for (td::uint32 i = 0; i < 128; i++) {
+    auto unix_time = static_cast<td::int32>(1715345678 + i * 31);
+    td::string domain = "windows-explicit-lane-" + td::to_string(i) + ".example.com";
+    auto profile = pick_runtime_profile(domain, unix_time, params.platform_hints);
+    ASSERT_TRUE(profile == BrowserProfile::Chrome147_Windows);
   }
 }
 

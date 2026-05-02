@@ -503,7 +503,7 @@ bool parse_casefold_store_lookup_candidate_key(Slice store_key, string &destinat
 }
 
 td::vector<CasefoldStoreLookupCandidate> collect_casefold_store_lookup_candidates_locked(Slice destination,
-                                                                                          int32 unix_time) {
+                                                                                         int32 unix_time) {
   td::vector<CasefoldStoreLookupCandidate> candidates;
   auto store = route_failure_store();
   if (store == nullptr) {
@@ -577,7 +577,8 @@ void erase_casefold_store_lookup_candidates_locked(const td::vector<CasefoldStor
   }
 }
 
-bool try_load_casefold_route_failure_cache_entry_locked(Slice destination, int32 unix_time, RouteFailureCacheEntry &entry,
+bool try_load_casefold_route_failure_cache_entry_locked(Slice destination, int32 unix_time,
+                                                        RouteFailureCacheEntry &entry,
                                                         bool *saw_expired_blocked_entry = nullptr) {
   auto store = route_failure_store();
   if (store == nullptr) {
@@ -740,8 +741,7 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
       return inserted.first->second.state;
     }
-    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry,
-                                                           saw_expired_blocked_entry)) {
+    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry, saw_expired_blocked_entry)) {
       clamp_route_failure_disabled_until(entry, max_disabled_until);
       auto inserted = cache.emplace(key, entry);
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
@@ -796,8 +796,7 @@ RouteFailureState get_runtime_route_failure_state_locked(Slice destination, int3
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
       return inserted.first->second.state;
     }
-    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry,
-                                                           saw_expired_blocked_entry)) {
+    if (try_load_casefold_route_failure_cache_entry_locked(destination, unix_time, entry, saw_expired_blocked_entry)) {
       clamp_route_failure_disabled_until(entry, max_disabled_until);
       auto inserted = cache.emplace(key, entry);
       persist_route_failure_cache_entry_locked(destination, unix_time, inserted.first->second);
@@ -960,6 +959,9 @@ void note_runtime_ech_success(Slice destination, int32 unix_time) {
       tls_hello_profile_registry_internal::route_failure_cache_key(destination, unix_time));
   tls_hello_profile_registry_internal::erase_route_failure_cache_entry_locked(destination, unix_time);
   tls_hello_profile_registry_internal::erase_legacy_route_failure_cache_entries_locked(destination, unix_time);
+  auto casefold_candidates =
+      tls_hello_profile_registry_internal::collect_casefold_store_lookup_candidates_locked(destination, unix_time);
+  tls_hello_profile_registry_internal::erase_casefold_store_lookup_candidates_locked(casefold_candidates);
 }
 
 void reset_runtime_ech_failure_state_for_tests() {
