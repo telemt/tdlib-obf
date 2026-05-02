@@ -12,6 +12,10 @@
 
 This fork is designed to work in tandem with the [telemt](https://github.com/telemt) Rust MTProxy server.
 
+Published API documentation for this fork: [https://telemt.github.io/tdlib-obf/](https://telemt.github.io/tdlib-obf/)
+
+Custom client integrators should start with: [Custom Client Integration Guide](docs/Documentation/CUSTOM_CLIENT_INTEGRATION_GUIDE.md)
+
 > **Scope:** The entire stealth traffic-masking subsystem (DRS, IPT, greeting camouflage, chaff, bidirectional correlation defense, profile mimicry, ECH circuit breaking) is **active only when the client connects through an MTProto proxy** (i.e. when `ProxySecret::emulate_tls()` is true). Direct Telegram connections that do not go through a proxy are **not affected** by any of these mechanisms.
 
 ---

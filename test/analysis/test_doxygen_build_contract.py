@@ -8,7 +8,6 @@ from __future__ import annotations
 import pathlib
 import unittest
 
-
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 DOXYFILE_TEMPLATE_PATH = REPO_ROOT / "Doxyfile.in"
 ROOT_CMAKE_PATH = REPO_ROOT / "CMakeLists.txt"

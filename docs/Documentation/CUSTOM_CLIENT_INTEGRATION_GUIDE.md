@@ -29,6 +29,8 @@ You do **not** need to start with the original TDLib documentation to integrate 
 
 Use this guide as the primary integration contract for `tdlib-obf`, and use the original TDLib docs as a secondary reference for object names, authorization states, and generic TDLib behavior.
 
+Published `tdlib-obf` API documentation website: [https://telemt.github.io/tdlib-obf/](https://telemt.github.io/tdlib-obf/)
+
 ---
 
 ## Hard Integration Contract
