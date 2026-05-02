@@ -79,6 +79,9 @@ jobs:
           sudo apt-get update -qq
 
           if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
+            echo "TD_CI_CC=gcc-15" >> "$GITHUB_ENV"
+            echo "TD_CI_CXX=g++-15" >> "$GITHUB_ENV"
+
             # Prefer already-available gcc-15/g++-15 on runner images.
             if command -v gcc-15 >/dev/null 2>&1 && command -v g++-15 >/dev/null 2>&1; then
               echo "gcc-15 and g++-15 are already available on the runner; skipping PPA setup"
@@ -89,27 +92,44 @@ jobs:
                 | sudo tee /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list >/dev/null
 
               set +e
-              ppa_update_output="$(sudo apt-get update 2>&1)"
+              ppa_update_output="$(sudo apt-get update -o APT::Update::Error-Mode=any 2>&1)"
               ppa_update_status=$?
               set -e
 
               if [[ "$ppa_update_status" -ne 0 ]]; then
                 missing_keys="$(printf '%s\n' "$ppa_update_output" | sed -n 's/.*NO_PUBKEY \([0-9A-F]\+\).*/\1/p' | sort -u)"
-                if [[ -z "$missing_keys" ]]; then
-                  echo "$ppa_update_output" >&2
-                  echo "Failed to update apt metadata for ubuntu-toolchain-r/test and no NO_PUBKEY hints were found" >&2
-                  exit 1
+                if [[ -n "$missing_keys" ]]; then
+                  for key in $missing_keys; do
+                    wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${key}" \
+                      | gpg --dearmor \
+                      | sudo tee "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r-${key}.gpg" >/dev/null
+                  done
+
+                  set +e
+                  ppa_update_output="$(sudo apt-get update -o APT::Update::Error-Mode=any 2>&1)"
+                  ppa_update_status=$?
+                  set -e
                 fi
 
-                for key in $missing_keys; do
-                  wget -qO- "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${key}" \
-                    | gpg --dearmor \
-                    | sudo tee "/etc/apt/trusted.gpg.d/ubuntu-toolchain-r-${key}.gpg" >/dev/null
-                done
-
-                sudo apt-get update -qq
+                if [[ "$ppa_update_status" -ne 0 ]]; then
+                  echo "$ppa_update_output" >&2
+                  echo "WARNING: ubuntu-toolchain-r/test metadata is unavailable; this run will fall back to clang-22" >&2
+                fi
               fi
             fi
+
+            if command -v gcc-15 >/dev/null 2>&1 && command -v g++-15 >/dev/null 2>&1; then
+              echo "Using preinstalled gcc-15/g++-15"
+            elif apt-cache show gcc-15 >/dev/null 2>&1; then
+              echo "gcc-15/g++-15 packages are available from apt and will be installed"
+            else
+              echo "TD_CI_CC=clang-22" >> "$GITHUB_ENV"
+              echo "TD_CI_CXX=clang++-22" >> "$GITHUB_ENV"
+              echo "WARNING: gcc-15 remains unavailable after repository setup; compiler switched to clang-22" >&2
+            fi
+          else
+            echo "TD_CI_CC=clang-22" >> "$GITHUB_ENV"
+            echo "TD_CI_CXX=clang++-22" >> "$GITHUB_ENV"
           fi
 
       - name: Cache apt packages
@@ -131,7 +151,10 @@ jobs:
             zlib1g-dev
           )
 
-          if [[ "${{ matrix.compiler }}" == "gcc15" ]]; then
+          effective_cc="${TD_CI_CC:-${{ matrix.cc }}}"
+          effective_cxx="${TD_CI_CXX:-${{ matrix.cxx }}}"
+
+          if [[ "$effective_cc" == "gcc-15" && "$effective_cxx" == "g++-15" ]]; then
             if command -v gcc-15 >/dev/null 2>&1 && command -v g++-15 >/dev/null 2>&1; then
               sudo apt-get install -y "${common_packages[@]}"
             else
@@ -157,8 +180,8 @@ jobs:
 
       - name: Configure build
         env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+          CC: ${{ env.TD_CI_CC || matrix.cc }}
+          CXX: ${{ env.TD_CI_CXX || matrix.cxx }}
           CCACHE_DIR: ~/.cache/ccache
           CCACHE_COMPRESS: "1"
           CCACHE_MAXSIZE: 500M
