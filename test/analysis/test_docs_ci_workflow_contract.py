@@ -24,6 +24,8 @@ class DocsCiWorkflowContractTest(unittest.TestCase):
 
         self.assertIn("name: Doxygen Docs Integrity", workflow)
         self.assertIn("actions/setup-python@v5", workflow)
+        self.assertIn("actions/setup-node@v4", workflow)
+        self.assertIn("node-version: 24.15.0", workflow)
         self.assertIn("cmake --build build --target td_generate_api_docs", workflow)
         self.assertIn("build/docs/api/html/index.html", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)

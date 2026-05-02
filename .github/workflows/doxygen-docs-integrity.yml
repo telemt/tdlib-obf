@@ -83,6 +83,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          check-latest: true
+
       - name: Install docs build dependencies
         run: |
           set -euxo pipefail
