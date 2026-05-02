@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -133,7 +133,7 @@ jobs:
           fi
 
       - name: Cache apt packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /var/cache/apt/archives
           key: apt-gcc-clang-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
@@ -165,7 +165,7 @@ jobs:
           fi
 
       - name: Cache ccache objects
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ccache-core-${{ matrix.compiler }}-${{ runner.os }}-${{ github.sha }}
@@ -215,7 +215,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -230,7 +230,7 @@ jobs:
           sudo apt-get update -qq
 
       - name: Cache apt packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /var/cache/apt/archives
           key: apt-asan-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
@@ -250,7 +250,7 @@ jobs:
             zlib1g-dev
 
       - name: Cache ccache objects
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ccache-asan-${{ runner.os }}-${{ github.sha }}
@@ -314,7 +314,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -329,7 +329,7 @@ jobs:
           sudo apt-get update -qq
 
       - name: Cache apt packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /var/cache/apt/archives
           key: apt-tsan-${{ runner.os }}-${{ hashFiles('.github/workflows/cpp23-compat.yml') }}-v2
@@ -349,7 +349,7 @@ jobs:
             zlib1g-dev
 
       - name: Cache ccache objects
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ccache-tsan-${{ runner.os }}-${{ github.sha }}

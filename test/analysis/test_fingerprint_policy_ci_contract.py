@@ -91,7 +91,7 @@ class FingerprintPolicyCiContractTest(unittest.TestCase):
         self.assertIn("python3 test/analysis/refresh_active_probing_nightly_observations.py", workflow_text)
         self.assertIn("python3 test/analysis/build_active_probing_status.py", workflow_text)
         self.assertIn("test_refresh_active_probing_nightly_observations_contract.py", workflow_text)
-        self.assertIn("uses: actions/upload-artifact@v4", workflow_text)
+        self.assertIn("uses: actions/upload-artifact@v7", workflow_text)
         self.assertIn("active-probing-nightly-evidence", workflow_text)
 
 
