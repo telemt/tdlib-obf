@@ -27,6 +27,7 @@ class TdExample:
         self.api_hash = api_hash
         self._load_library()
         self._setup_functions()
+        self._log_message_callback = None
         self._setup_logging()
         self.client_id = self._td_create_client_id()
 
@@ -89,7 +90,9 @@ class TdExample:
             if verbosity_level == 0:
                 sys.exit(f"TDLib fatal error: {message.decode('utf-8')}")
 
-        self._td_set_log_message_callback(2, on_log_message_callback)
+        # Keep a strong reference to avoid callback garbage collection.
+        self._log_message_callback = on_log_message_callback
+        self._td_set_log_message_callback(2, self._log_message_callback)
         self.execute(
             {"@type": "setLogVerbosityLevel", "new_verbosity_level": verbosity_level}
         )
