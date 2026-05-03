@@ -108,6 +108,20 @@ TEST(ConnectionDestinationBudgetController, ConnectRateLimitBlocksBurstForSameDe
   assert_double_eq(5.0, controller.get_wakeup_at(5.0, destination_b, params.flow_behavior));
 }
 
+TEST(ConnectionDestinationBudgetController, ZeroPerWindowLimitDisablesBurstCapAfterAntiChurnWindow) {
+  auto params = default_runtime_stealth_params();
+  params.flow_behavior.max_connects_per_10s_per_destination = 0;
+  params.flow_behavior.anti_churn_min_reconnect_interval_ms = 50;
+
+  ConnectionDestinationBudgetController controller;
+  auto destination = make_destination(2);
+
+  controller.on_connect_started(0.0, destination, params.flow_behavior);
+
+  // Anti-churn window already elapsed, so zero cap should not apply 10s burst throttling.
+  assert_double_eq(1.0, controller.get_wakeup_at(1.0, destination, params.flow_behavior));
+}
+
 TEST(ConnectionDestinationBudgetController, DestinationBudgetUsesFullRouteKeyIsolation) {
   auto params = default_runtime_stealth_params();
   params.flow_behavior.max_connects_per_10s_per_destination = 2;

@@ -88,7 +88,7 @@ Status validate_probability(const char *name, double value) {
 
 Status validate_microsecond_delay_cap(const char *name, double value_ms) {
   constexpr double kMaxRepresentableDelayMs = static_cast<double>(std::numeric_limits<uint64>::max()) / 1000.0;
-  if (value_ms > kMaxRepresentableDelayMs) {
+  if (value_ms >= kMaxRepresentableDelayMs) {
     return error_from_owned_message(std::string(name) + " must fit into uint64 microseconds");
   }
   return Status::OK();
@@ -303,6 +303,16 @@ void apply_profile_record_size_limit(StealthConfig &config) {
       std::min(config.record_size_policy.slow_start_max, config.drs_policy.max_payload_cap);
   config.record_size_policy.slow_start_min =
       std::min(config.record_size_policy.slow_start_min, config.record_size_policy.slow_start_max);
+
+  // Clamp greeting and chaff record models to the same cap so they can never
+  // emit records that exceed the profile's declared record_size_limit.
+  for (size_t i = 0; i < config.greeting_camouflage_policy.greeting_record_count; i++) {
+    clamp_phase_model_to_max_payload_cap(config.greeting_camouflage_policy.record_models[i],
+                                         config.drs_policy.max_payload_cap);
+  }
+  if (config.chaff_policy.enabled) {
+    clamp_phase_model_to_max_payload_cap(config.chaff_policy.record_model, config.drs_policy.max_payload_cap);
+  }
 }
 
 }  // namespace stealth_config_internal

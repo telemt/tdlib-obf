@@ -11,7 +11,9 @@
 // 2) Ensure proxy-mode ALPN never leaks h2 (L7 mismatch hardening).
 // 3) Ensure per-profile JA4-C set stability (no extension-set drift).
 
+#include "test/stealth/CorpusStatHelpers.h"
 #include "test/stealth/MockRng.h"
+#include "test/stealth/ReviewedFamilyLaneBaselines.h"
 #include "test/stealth/TlsHelloParsers.h"
 #include "test/stealth/WireClassifierFeatures.h"
 
@@ -23,6 +25,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -33,8 +37,10 @@ using td::mtproto::stealth::BrowserProfile;
 using td::mtproto::stealth::build_proxy_tls_client_hello_for_profile;
 using td::mtproto::stealth::build_tls_client_hello_for_profile;
 using td::mtproto::stealth::EchMode;
+using td::mtproto::test::baselines::get_baseline;
 using td::mtproto::test::find_extension;
 using td::mtproto::test::MockRng;
+using td::mtproto::test::non_grease_extension_sequence;
 using td::mtproto::test::parse_tls_client_hello;
 using td::mtproto::test::wire_classifier::extract_generated_features;
 using td::mtproto::test::wire_classifier::kFeatureCount;
@@ -315,6 +321,160 @@ TEST(WireClassifierBlackhat, GreaseSetIsNotCollapsedToSingleValue) {
     }
   }
   ASSERT_TRUE(seen.size() >= 4u);
+}
+
+// ---------------------------------------------------------------------------
+// LOOCV classifier gate — plan §12 (Tier 3, n ≥ 15).
+//
+// Checks that generated Chrome extension orderings are NOT grossly
+// distinguishable from real captured orderings via a 1-NN leave-one-out
+// cross-validator.  The classifier feature is the non-GREASE, non-padding
+// extension sequence (ordered).  Distance is normalised positional Hamming.
+//
+// AUC interpretation:
+//   ~0.5 → synthetic is indistinguishable from real (desired)
+//     > kGrossLeakThreshold → generator has a systematic ordering bias
+//       that a simple 1-NN classifier can exploit.
+//
+// Gate threshold: AUC < 0.80 (plan §12 Tier-3 gross-leak bound, n ≥ 15).
+// ---------------------------------------------------------------------------
+namespace loocv {
+
+constexpr double kGrossLeakAucThreshold = 0.80;
+// Number of synthetics generated per LOO gate; kept small for CI speed.
+// The gate catches GROSS leaks only at this sample count; subtle
+// statistical drift requires the nightly corpus run (kSpotIterations).
+constexpr size_t kSyntheticCount = 200;
+
+// Positional Hamming distance between two extension order sequences.
+// Range [0.0, 1.0].  Handles different lengths (length mismatch counts as
+// mismatches in the tail).
+double ext_order_hamming(const std::vector<td::uint16> &a, const std::vector<td::uint16> &b) {
+  const size_t max_len = std::max(a.size(), b.size());
+  if (max_len == 0) {
+    return 0.0;
+  }
+  size_t mismatches = 0;
+  const size_t common = std::min(a.size(), b.size());
+  for (size_t i = 0; i < common; i++) {
+    if (a[i] != b[i]) {
+      mismatches++;
+    }
+  }
+  mismatches += (a.size() > b.size()) ? (a.size() - b.size()) : (b.size() - a.size());
+  return static_cast<double>(mismatches) / static_cast<double>(max_len);
+}
+
+// Extract non-GREASE, non-padding extension ordering from a generated wire.
+std::vector<td::uint16> extract_ext_ordering(const td::string &wire) {
+  auto parsed = parse_tls_client_hello(td::Slice(wire));
+  CHECK(parsed.is_ok());
+  return non_grease_extension_sequence(parsed.ok_ref());
+}
+
+// Generate kSyntheticCount synthetics for `profile` / `ech_mode` and return
+// their extension orderings.  Deterministic: seed = index × prime ^ salt.
+std::vector<std::vector<td::uint16>> generate_synthetic_orderings(BrowserProfile profile, EchMode ech_mode,
+                                                                  td::uint64 salt) {
+  std::vector<std::vector<td::uint16>> out;
+  out.reserve(kSyntheticCount);
+  for (size_t i = 0; i < kSyntheticCount; i++) {
+    MockRng rng((static_cast<td::uint64>(i) * 0x9e3779b97f4a7c15ULL) ^ salt);
+    auto wire = build_tls_client_hello_for_profile("www.google.com", "0123456789abcdef",
+                                                   kUnixTime + static_cast<td::int32>(i), profile, ech_mode, rng);
+    out.push_back(extract_ext_ordering(wire));
+  }
+  return out;
+}
+
+// Run 1-NN LOO classifier on `real_templates` (class 1) vs `synthetics`
+// (class 0).  For each real[i] (leaving it out of the real pool):
+//   - compute min Hamming distance to the remaining reals
+//   - compute min Hamming distance to all synthetics
+//   - score[i] = (d_real < d_synthetic) ? 1.0 : (d_real == d_synthetic ? 0.5 : 0.0)
+// Returns AUC = mean(scores).
+double run_loocv_ext_order_auc(const std::vector<std::vector<td::uint16>> &real_templates,
+                               const std::vector<std::vector<td::uint16>> &synthetics) {
+  const size_t n = real_templates.size();
+  if (n < 2) {
+    return 0.5;
+  }
+
+  double score_sum = 0.0;
+  for (size_t i = 0; i < n; i++) {
+    // Nearest real neighbour (excluding self)
+    double min_d_real = std::numeric_limits<double>::max();
+    for (size_t j = 0; j < n; j++) {
+      if (j == i) {
+        continue;
+      }
+      const double d = ext_order_hamming(real_templates[i], real_templates[j]);
+      if (d < min_d_real) {
+        min_d_real = d;
+      }
+    }
+    // Nearest synthetic neighbour
+    double min_d_synth = std::numeric_limits<double>::max();
+    for (const auto &s : synthetics) {
+      const double d = ext_order_hamming(real_templates[i], s);
+      if (d < min_d_synth) {
+        min_d_synth = d;
+      }
+    }
+    if (min_d_real < min_d_synth) {
+      score_sum += 1.0;  // nearest neighbour is another real → classified "real" (correct)
+    } else if (min_d_real == min_d_synth) {
+      score_sum += 0.5;  // tie
+    }
+    // else: nearest is a synthetic → misclassified (score += 0)
+  }
+
+  return score_sum / static_cast<double>(n);
+}
+
+void run_loocv_gate(const char *family_id, const char *route_lane, BrowserProfile profile, EchMode ech_mode,
+                    td::uint64 salt) {
+  const auto *baseline = get_baseline(td::Slice(family_id), td::Slice(route_lane));
+  ASSERT_TRUE(baseline != nullptr);
+
+  const auto &real_templates = baseline->set_catalog.observed_extension_order_templates;
+  // Gate is only meaningful at Tier 3 (n ≥ 15).
+  if (real_templates.size() < 15) {
+    return;
+  }
+
+  const auto synthetics = generate_synthetic_orderings(profile, ech_mode, salt);
+  const double auc = run_loocv_ext_order_auc(real_templates, synthetics);
+
+  // Gross-leak gate: AUC must be below kGrossLeakAucThreshold.
+  // AUC ≈ 0.5 → indistinguishable.  AUC > 0.80 → generator bias detected.
+  ASSERT_TRUE(auc < kGrossLeakAucThreshold);
+}
+
+}  // namespace loocv
+
+// chromium_windows / non_ru_egress (Chrome147_Windows, Tier3, 130 templates)
+TEST(WireClassifierBlackhat, LOOCVExtOrderChromiumWindowsNotGrosslyLeaking) {
+  loocv::run_loocv_gate("chromium_windows", "non_ru_egress", BrowserProfile::Chrome147_Windows, EchMode::Rfc9180Outer,
+                        0xC0FFEE01ULL);
+}
+
+// android_chromium / non_ru_egress (Chrome133, Tier3, 69 templates)
+TEST(WireClassifierBlackhat, LOOCVExtOrderAndroidChromiumNotGrosslyLeaking) {
+  loocv::run_loocv_gate("android_chromium", "non_ru_egress", BrowserProfile::Chrome133, EchMode::Rfc9180Outer,
+                        0xC0FFEE02ULL);
+}
+
+// chromium_linux_desktop / non_ru_egress (Chrome133, Tier3, 16 templates)
+TEST(WireClassifierBlackhat, LOOCVExtOrderChromiumLinuxDesktopNotGrosslyLeaking) {
+  loocv::run_loocv_gate("chromium_linux_desktop", "non_ru_egress", BrowserProfile::Chrome133, EchMode::Rfc9180Outer,
+                        0xC0FFEE03ULL);
+}
+
+// chromium_macos / non_ru_egress (Chrome133, Tier3, 21 templates)
+TEST(WireClassifierBlackhat, LOOCVExtOrderChromiumMacosNotGrosslyLeaking) {
+  loocv::run_loocv_gate("chromium_macos", "non_ru_egress", BrowserProfile::Chrome133, EchMode::Rfc9180Outer,
+                        0xC0FFEE04ULL);
 }
 
 }  // namespace

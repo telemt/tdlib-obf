@@ -826,7 +826,7 @@ Checked-in reviewed corpus уже содержит более свежие captu
 - ✅ JA3/JA4 audit через `test_tls_ja3_ja4_cross_validation.cpp` и `test_tls_ja4_fingerprint_adversarial.cpp` — существует
 
 Остатки:
-- ❌ `test_tls_fingerprint_classifier_blackhat.cpp` — не найден (LOOCV classifier gate как в плане §12)
+- ✅ `test_tls_fingerprint_classifier_blackhat.cpp` — LOOCV classifier gate (план §12) реализован: 4 теста для Tier3 семейств (chromium_windows/130, android_chromium/69, chromium_linux_desktop/16, chromium_macos/21)
 
 #### Workstream F: Nightly Fuzz, Monte Carlo, Boundary Falsification
 **Статус: РЕАЛИЗОВАНО ~80%**
@@ -933,7 +933,7 @@ Gap 4: Release family trust tiers
 - ✅ Basic CI gating (§15) — на ~70%
 
 Что требует завершения:
-- ❌ LOOCV classifier gate (Workstream E, plan §12) — не найден
+- ✅ LOOCV classifier gate (Workstream E, plan §12) — реализован в `test_tls_fingerprint_classifier_blackhat.cpp` (4 теста, AUC < 0.80 для Tier3 Chrome семейств)
 - ❌ Large corpus stress для baselines (Workstream F) — не найден явно
 - ⚠️ Android/iOS advisory profile promotion и release semantics всё ещё требуют явного решения (Workstream G)
 - ⚠️ Этот файл нужно держать синхронным с generated tier metadata, imported corpus и release-gating snapshot-ами

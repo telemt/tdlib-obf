@@ -89,4 +89,19 @@ TEST(ConnectionFlowController, OverLimitBurstRetainsFullWindowHistoryUntilBudget
   assert_double_eq(10.2, controller.get_wakeup_at(10.1, params.flow_behavior));
 }
 
+TEST(ConnectionFlowController, ZeroPerWindowLimitDisablesBurstCapWithoutCrashing) {
+  auto params = default_runtime_stealth_params();
+  params.flow_behavior.max_connects_per_10s_per_destination = 0;
+  params.flow_behavior.anti_churn_min_reconnect_interval_ms = 300;
+
+  ConnectionFlowController controller;
+
+  // Must not crash when history is empty and per-window cap is zero.
+  assert_double_eq(1.0, controller.get_wakeup_at(1.0, params.flow_behavior));
+
+  controller.on_connect_started(10.0, params.flow_behavior);
+  // With zero cap, anti-churn is still enforced for recent attempts.
+  assert_double_eq(10.3, controller.get_wakeup_at(10.05, params.flow_behavior));
+}
+
 }  // namespace

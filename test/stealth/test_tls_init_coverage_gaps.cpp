@@ -6,6 +6,7 @@
 
 #include "td/actor/ConcurrentScheduler.h"
 
+#include "td/mtproto/stealth/StealthRuntimeParams.h"
 #include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
 #include "td/mtproto/TlsInit.h"
 
@@ -18,8 +19,8 @@
 #include "td/utils/common.h"
 #include "td/utils/port/PollFlags.h"
 #include "td/utils/Status.h"
-#include "td/utils/Time.h"
 #include "td/utils/tests.h"
+#include "td/utils/Time.h"
 
 #include "td/utils/port/config.h"
 
@@ -34,6 +35,7 @@ using td::mtproto::stealth::pick_runtime_profile;
 using td::mtproto::stealth::profile_spec;
 using td::mtproto::stealth::reset_runtime_ech_counters_for_tests;
 using td::mtproto::stealth::reset_runtime_ech_failure_state_for_tests;
+using td::mtproto::stealth::reset_runtime_stealth_params_for_tests;
 using td::mtproto::test::append_u16_be;
 using td::mtproto::test::create_socket_pair;
 using td::mtproto::test::parse_tls_client_hello;
@@ -106,8 +108,8 @@ TlsInit create_tls_init(td::SocketFd socket_fd) {
   NetworkRouteHints route_hints;
   route_hints.is_known = true;
   route_hints.is_ru = false;
-  return TlsInit(std::move(socket_fd), "www.google.com", "0123456789secret", td::make_unique<NoopCallback>(), {},
-                 0.0, route_hints);
+  return TlsInit(std::move(socket_fd), "www.google.com", "0123456789secret", td::make_unique<NoopCallback>(), {}, 0.0,
+                 route_hints);
 }
 
 TlsInit create_tls_init(td::SocketFd socket_fd, td::Slice domain, td::int32 unix_time) {
@@ -245,6 +247,7 @@ TEST(TlsInitCoverageGaps, NearHttpPrefixVariantsFailClosedAsWrongRegime) {
 
 TEST(TlsInitCoverageGaps, ShortCompleteResponseFailsClosedAndDisablesEchAfterRepeatedAttempts) {
   SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_stealth_params_for_tests();
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
   auto candidate = find_ech_enabled_runtime_candidate();
@@ -284,7 +287,8 @@ TEST(TlsInitCoverageGaps, UnknownRouteWrongRegimeResponseFailsClosedWithoutEch) 
   reset_runtime_ech_failure_state_for_tests();
   auto candidate = find_ech_enabled_runtime_candidate();
   auto socket_pair = create_socket_pair().move_as_ok();
-  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
+  auto tls_init =
+      create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
   TlsInitTestPeer::send_hello(tls_init);
 
   auto hello = flush_client_hello(tls_init, socket_pair.peer);
@@ -303,7 +307,8 @@ TEST(TlsInitCoverageGaps, UnknownRouteShortCompleteResponseFailsClosedWithoutEch
   reset_runtime_ech_failure_state_for_tests();
   auto candidate = find_ech_enabled_runtime_candidate();
   auto socket_pair = create_socket_pair().move_as_ok();
-  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
+  auto tls_init =
+      create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
   TlsInitTestPeer::send_hello(tls_init);
 
   auto hello = flush_client_hello(tls_init, socket_pair.peer);
@@ -322,7 +327,8 @@ TEST(TlsInitCoverageGaps, UnknownRouteHashMismatchFailsClosedWithoutEch) {
   reset_runtime_ech_failure_state_for_tests();
   auto candidate = find_ech_enabled_runtime_candidate();
   auto socket_pair = create_socket_pair().move_as_ok();
-  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
+  auto tls_init =
+      create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
   TlsInitTestPeer::send_hello(tls_init);
 
   auto hello = flush_client_hello(tls_init, socket_pair.peer);
@@ -344,7 +350,8 @@ TEST(TlsInitCoverageGaps, UnknownRouteSuccessfulResponseSucceedsWithoutEch) {
   reset_runtime_ech_failure_state_for_tests();
   auto candidate = find_ech_enabled_runtime_candidate();
   auto socket_pair = create_socket_pair().move_as_ok();
-  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
+  auto tls_init =
+      create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time, unknown_route());
   TlsInitTestPeer::send_hello(tls_init);
 
   auto hello = flush_client_hello(tls_init, socket_pair.peer);
@@ -360,17 +367,17 @@ TEST(TlsInitCoverageGaps, UnknownRouteSuccessfulResponseSucceedsWithoutEch) {
 
 TEST(TlsInitCoverageGaps, ActorSuccessPathExercisesLoopImplAndCompletes) {
   SKIP_IF_NO_SOCKET_PAIR();
-  auto observation = run_tls_init_actor([](td::ConcurrentScheduler &scheduler, td::SocketFd &peer_fd,
-                                           ActorRunObservation &) {
-    scheduler.run_main(10);
-    auto hello = read_full_tls_record(peer_fd);
-    ASSERT_TRUE(hello.size() >= 43);
-    auto hello_rand = hello.substr(11, 32);
+  auto observation =
+      run_tls_init_actor([](td::ConcurrentScheduler &scheduler, td::SocketFd &peer_fd, ActorRunObservation &) {
+        scheduler.run_main(10);
+        auto hello = read_full_tls_record(peer_fd);
+        ASSERT_TRUE(hello.size() >= 43);
+        auto hello_rand = hello.substr(11, 32);
 
-    auto response = td::mtproto::test::make_tls_init_response("0123456789secret", hello_rand, "\x16\x03\x03",
-                                                              "\x14\x03\x03\x00\x01\x01\x17\x03\x03");
-    ASSERT_TRUE(write_all(peer_fd, response).is_ok());
-  });
+        auto response = td::mtproto::test::make_tls_init_response("0123456789secret", hello_rand, "\x16\x03\x03",
+                                                                  "\x14\x03\x03\x00\x01\x01\x17\x03\x03");
+        ASSERT_TRUE(write_all(peer_fd, response).is_ok());
+      });
 
   ASSERT_TRUE(observation.finished);
   ASSERT_TRUE(observation.success);
@@ -378,14 +385,14 @@ TEST(TlsInitCoverageGaps, ActorSuccessPathExercisesLoopImplAndCompletes) {
 
 TEST(TlsInitCoverageGaps, ActorMalformedFirstRecordExercisesLoopImplErrorPath) {
   SKIP_IF_NO_SOCKET_PAIR();
-  auto observation = run_tls_init_actor([](td::ConcurrentScheduler &scheduler, td::SocketFd &peer_fd,
-                                           ActorRunObservation &) {
-    scheduler.run_main(10);
-    auto hello = read_full_tls_record(peer_fd);
-    ASSERT_TRUE(hello.size() >= 43);
+  auto observation =
+      run_tls_init_actor([](td::ConcurrentScheduler &scheduler, td::SocketFd &peer_fd, ActorRunObservation &) {
+        scheduler.run_main(10);
+        auto hello = read_full_tls_record(peer_fd);
+        ASSERT_TRUE(hello.size() >= 43);
 
-    ASSERT_TRUE(write_all(peer_fd, make_tls_record(0x17, "\x42")).is_ok());
-  });
+        ASSERT_TRUE(write_all(peer_fd, make_tls_record(0x17, "\x42")).is_ok());
+      });
 
   ASSERT_TRUE(observation.finished);
   ASSERT_FALSE(observation.success);

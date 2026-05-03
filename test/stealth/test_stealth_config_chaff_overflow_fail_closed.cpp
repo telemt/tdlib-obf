@@ -61,7 +61,7 @@ TEST(StealthConfigChaffOverflowFailClosed, RejectsMinimumIntervalThatDoesNotFitI
 
 TEST(StealthConfigChaffOverflowFailClosed, ExactRepresentableMinimumIntervalStillValidates) {
   auto config = make_valid_config();
-  config.chaff_policy.min_interval_ms = kMaxRepresentableDelayMs;
+  config.chaff_policy.min_interval_ms = std::nextafter(kMaxRepresentableDelayMs, 0.0);
 
   auto status = config.validate();
   ASSERT_TRUE(status.is_ok());

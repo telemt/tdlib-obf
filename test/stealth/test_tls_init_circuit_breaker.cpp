@@ -6,6 +6,7 @@
 
 #include "td/actor/actor.h"
 #include "td/mtproto/stealth/Interfaces.h"
+#include "td/mtproto/stealth/StealthRuntimeParams.h"
 #include "td/mtproto/stealth/TlsHelloProfileRegistry.h"
 #include "td/net/ProxySetupError.h"
 #include "td/utils/common.h"
@@ -34,12 +35,16 @@
 namespace {
 
 using td::mtproto::stealth::default_runtime_platform_hints;
+using td::mtproto::stealth::default_runtime_stealth_params;
 using td::mtproto::stealth::get_runtime_ech_counters;
 using td::mtproto::stealth::NetworkRouteHints;
+using td::mtproto::stealth::note_runtime_ech_failure;
 using td::mtproto::stealth::pick_runtime_profile;
 using td::mtproto::stealth::profile_spec;
 using td::mtproto::stealth::reset_runtime_ech_counters_for_tests;
 using td::mtproto::stealth::reset_runtime_ech_failure_state_for_tests;
+using td::mtproto::stealth::reset_runtime_stealth_params_for_tests;
+using td::mtproto::stealth::set_runtime_stealth_params_for_tests;
 using td::mtproto::test::create_socket_pair;
 using td::mtproto::test::find_extension;
 using td::mtproto::test::make_tls_init_response;
@@ -105,6 +110,33 @@ RuntimeProfileCandidate find_distinct_ech_enabled_runtime_candidate(td::Slice ex
   return RuntimeProfileCandidate{};
 }
 
+RuntimeProfileCandidate find_ech_enabled_runtime_candidate_with_prefix(td::Slice prefix) {
+  auto platform = default_runtime_platform_hints();
+  for (td::uint32 bucket = 20000; bucket < 20256; bucket++) {
+    auto unix_time = static_cast<td::int32>(bucket * 86400 + 1800);
+    for (td::uint32 i = 0; i < 512; i++) {
+      td::string domain = prefix.str() + td::to_string(bucket) + "-" + td::to_string(i) + ".example.com";
+      auto profile = pick_runtime_profile(domain, unix_time, platform);
+      if (profile_spec(profile).allows_ech) {
+        return RuntimeProfileCandidate{std::move(domain), unix_time};
+      }
+    }
+  }
+
+  UNREACHABLE();
+  return RuntimeProfileCandidate{};
+}
+
+td::mtproto::stealth::StealthRuntimeParams make_runtime_params(bool non_ru_ech_enabled, td::uint32 threshold,
+                                                               double ttl_seconds) {
+  auto params = default_runtime_stealth_params();
+  params.route_policy.non_ru.ech_mode =
+      non_ru_ech_enabled ? td::mtproto::stealth::EchMode::Rfc9180Outer : td::mtproto::stealth::EchMode::Disabled;
+  params.route_failure.ech_failure_threshold = threshold;
+  params.route_failure.ech_disable_ttl_seconds = ttl_seconds;
+  return params;
+}
+
 td::string flush_client_hello(TlsInit &tls_init, td::SocketFd &peer_fd) {
   auto bytes_to_read = TlsInitTestPeer::fd(tls_init).ready_for_flush_write();
   CHECK(bytes_to_read > 0);
@@ -157,7 +189,7 @@ TEST(TlsInitCircuitBreaker, RepeatedEchFailuresDisableEchForNextConnection) {
   SKIP_IF_NO_SOCKET_PAIR();
   reset_runtime_ech_failure_state_for_tests();
   reset_runtime_ech_counters_for_tests();
-  auto candidate = find_ech_enabled_runtime_candidate();
+  auto candidate = find_ech_enabled_runtime_candidate_with_prefix("cb-ttl0-");
 
   for (td::int32 attempt = 0; attempt < 3; attempt++) {
     auto socket_pair = create_socket_pair().move_as_ok();
@@ -456,6 +488,174 @@ TEST(TlsInitCircuitBreaker, SuccessForDifferentDestinationMustNotClearBlockedDes
     auto parsed = parse_tls_client_hello(wire);
     ASSERT_TRUE(parsed.is_ok());
     ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
+  }
+}
+
+TEST(TlsInitCircuitBreaker, RuntimeReloadDisablingRouteBeforeResponseStillRecordsEchFailureForInFlightHello) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  reset_runtime_stealth_params_for_tests();
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  auto candidate = find_ech_enabled_runtime_candidate();
+
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto wire = flush_client_hello(tls_init, socket_pair.peer);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+  ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/false,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  flush_invalid_response_and_expect_error(tls_init, socket_pair.peer);
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  auto next_socket_pair = create_socket_pair().move_as_ok();
+  auto next_tls_init = create_tls_init(std::move(next_socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(next_tls_init);
+
+  auto next_wire = flush_client_hello(next_tls_init, next_socket_pair.peer);
+  auto next_parsed = parse_tls_client_hello(next_wire);
+  ASSERT_TRUE(next_parsed.is_ok());
+  ASSERT_TRUE(find_extension(next_parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
+}
+
+TEST(TlsInitCircuitBreaker, RuntimeReloadDisablingRouteBeforeResponseStillClearsPriorBreakerStateOnInFlightEchSuccess) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  reset_runtime_stealth_params_for_tests();
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/2,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  auto candidate = find_ech_enabled_runtime_candidate();
+  note_runtime_ech_failure(candidate.domain, candidate.unix_time);
+
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto wire = flush_client_hello(tls_init, socket_pair.peer);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+  ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/false,
+                                                                       /*threshold=*/2,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  flush_valid_response_and_expect_success(tls_init, socket_pair.peer);
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  auto next_socket_pair = create_socket_pair().move_as_ok();
+  auto next_tls_init = create_tls_init(std::move(next_socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(next_tls_init);
+
+  auto next_wire = flush_client_hello(next_tls_init, next_socket_pair.peer);
+  auto next_parsed = parse_tls_client_hello(next_wire);
+  ASSERT_TRUE(next_parsed.is_ok());
+  ASSERT_TRUE(find_extension(next_parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+}
+
+TEST(TlsInitCircuitBreaker, RuntimeReloadEnablingRouteBeforeResponseDoesNotRecordFailureForInFlightNonEchHello) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  reset_runtime_stealth_params_for_tests();
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/false,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  auto candidate = find_ech_enabled_runtime_candidate();
+
+  auto socket_pair = create_socket_pair().move_as_ok();
+  auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(tls_init);
+
+  auto wire = flush_client_hello(tls_init, socket_pair.peer);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+  ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) == nullptr);
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/300.0))
+                  .is_ok());
+
+  flush_invalid_response_and_expect_error(tls_init, socket_pair.peer);
+
+  auto next_socket_pair = create_socket_pair().move_as_ok();
+  auto next_tls_init = create_tls_init(std::move(next_socket_pair.client), candidate.domain, candidate.unix_time);
+  TlsInitTestPeer::send_hello(next_tls_init);
+
+  auto next_wire = flush_client_hello(next_tls_init, next_socket_pair.peer);
+  auto next_parsed = parse_tls_client_hello(next_wire);
+  ASSERT_TRUE(next_parsed.is_ok());
+  ASSERT_TRUE(find_extension(next_parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+}
+
+TEST(TlsInitCircuitBreaker, MinimumDisableTtlReenablesEchAfterExpiry) {
+  SKIP_IF_NO_SOCKET_PAIR();
+  reset_runtime_ech_failure_state_for_tests();
+  reset_runtime_ech_counters_for_tests();
+  reset_runtime_stealth_params_for_tests();
+
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(make_runtime_params(/*non_ru_ech_enabled=*/true,
+                                                                       /*threshold=*/1,
+                                                                       /*ttl_seconds=*/60.0))
+                  .is_ok());
+
+  auto candidate = find_ech_enabled_runtime_candidate();
+
+  {
+    auto socket_pair = create_socket_pair().move_as_ok();
+    auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+    TlsInitTestPeer::send_hello(tls_init);
+
+    auto wire = flush_client_hello(tls_init, socket_pair.peer);
+    auto parsed = parse_tls_client_hello(wire);
+    ASSERT_TRUE(parsed.is_ok());
+    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
+
+    flush_invalid_response_and_expect_error(tls_init, socket_pair.peer);
+  }
+
+  td::Time::jump_in_future(td::Time::now() + 61.0);
+
+  {
+    auto socket_pair = create_socket_pair().move_as_ok();
+    auto tls_init = create_tls_init(std::move(socket_pair.client), candidate.domain, candidate.unix_time);
+    TlsInitTestPeer::send_hello(tls_init);
+
+    auto wire = flush_client_hello(tls_init, socket_pair.peer);
+    auto parsed = parse_tls_client_hello(wire);
+    ASSERT_TRUE(parsed.is_ok());
+    ASSERT_TRUE(find_extension(parsed.ok(), td::mtproto::test::fixtures::kEchExtensionType) != nullptr);
   }
 }
 

@@ -28,7 +28,15 @@ uint64 to_delay_us(double delay_ms) {
     return 0;
   }
 
-  auto delay_us = static_cast<uint64>(delay_ms * 1000.0);
+  // Guard against static_cast<uint64> UB when delay_ms * 1000.0 >= 2^64.
+  // static_cast<double>(UINT64_MAX) rounds up to 2^64, so we use a long double comparison
+  // which can represent UINT64_MAX exactly on platforms with 64-bit mantissa.
+  auto delay_us_d = static_cast<long double>(delay_ms) * 1000.0L;
+  constexpr auto kUint64Max = static_cast<long double>(std::numeric_limits<uint64>::max());
+  if (!(delay_us_d < kUint64Max)) {
+    return std::numeric_limits<uint64>::max();
+  }
+  auto delay_us = static_cast<uint64>(delay_us_d);
   return delay_us == 0 ? 1 : delay_us;
 }
 
@@ -58,6 +66,7 @@ IptController::IptController(const IptParams &params, IRng &rng) : params_(param
 uint64 IptController::next_delay_us(bool has_pending_data, TrafficHint hint) {
   hint = normalize_hint(hint);
   if (is_bypass_hint(hint)) {
+    state_ = State::Idle;
     return 0;
   }
 

@@ -26,7 +26,8 @@ double ConnectionFlowController::get_wakeup_at(double now, const mtproto::stealt
   if (last_connect_started_at_ >= 0.0) {
     wakeup_at = std::max(wakeup_at, last_connect_started_at_ + anti_churn_delay_seconds(policy));
   }
-  if (recent_connect_attempts_.size() >= policy.max_connects_per_10s_per_destination) {
+  if (policy.max_connects_per_10s_per_destination > 0 &&
+      recent_connect_attempts_.size() >= policy.max_connects_per_10s_per_destination) {
     wakeup_at = std::max(wakeup_at, recent_connect_attempts_.front() + kConnectWindowSeconds);
   }
   return wakeup_at;

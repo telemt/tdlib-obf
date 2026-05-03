@@ -26,9 +26,9 @@ using td::mtproto::test::client_hello_advertises_cipher_suite;
 using td::mtproto::test::find_extension;
 using td::mtproto::test::load_server_hello_fixture_relative;
 using td::mtproto::test::MockRng;
+using td::mtproto::test::pairing_server_hello_path_for_profile;
 using td::mtproto::test::parse_tls_client_hello;
 using td::mtproto::test::parse_tls_server_hello;
-using td::mtproto::test::reviewed_server_hello_path_for_profile;
 using td::mtproto::test::ru_route;
 using td::mtproto::test::RuntimeParamsGuard;
 using td::mtproto::test::single_runtime_profile_params;
@@ -41,9 +41,14 @@ struct Scenario final {
   td::uint64 seed;
 };
 
-const std::array<Scenario, 6> kScenarios{{
+const std::array<Scenario, 11> kScenarios{{
+    {BrowserProfile::Chrome133, "runtime-adversarial-linux-chrome133.example.com", 1712349001, 0x82000011u},
+    {BrowserProfile::Chrome131, "runtime-adversarial-linux-chrome131.example.com", 1712349555, 0x82000012u},
+    {BrowserProfile::Chrome120, "runtime-adversarial-linux-chrome120.example.com", 1712349777, 0x82000013u},
     {BrowserProfile::Chrome147_Windows, "runtime-adversarial-win-chrome.example.com", 1712350001, 0x82000001u},
     {BrowserProfile::Firefox149_Windows, "runtime-adversarial-win-firefox.example.com", 1712351112, 0x82000002u},
+    {BrowserProfile::Firefox148, "runtime-adversarial-linux-firefox148.example.com", 1712351666, 0x82000014u},
+    {BrowserProfile::Firefox149_MacOS26_3, "runtime-adversarial-macos-firefox149.example.com", 1712351888, 0x82000015u},
     {BrowserProfile::Chrome147_IOSChromium, "runtime-adversarial-ios-chromium.example.com", 1712352223, 0x82000003u},
     {BrowserProfile::Safari26_3, "runtime-adversarial-safari.example.com", 1712353334, 0x82000004u},
     {BrowserProfile::IOS14, "runtime-adversarial-ios-native.example.com", 1712354445, 0x82000005u},
@@ -63,7 +68,7 @@ TEST(TlsRuntimeServerHelloPairingAdversarial, RuRouteDisablesEchWithoutDroppingR
     auto decision = get_runtime_ech_decision(domain, scenario.unix_time, ru_route());
     ASSERT_TRUE(decision.disabled_by_route);
 
-    const auto relative = reviewed_server_hello_path_for_profile(scenario.profile);
+    const auto relative = pairing_server_hello_path_for_profile(scenario.profile);
     auto sample_result = load_server_hello_fixture_relative(td::CSlice(relative));
     ASSERT_TRUE(sample_result.is_ok());
     const auto sample = sample_result.move_as_ok();

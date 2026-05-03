@@ -17,6 +17,7 @@
 #include "td/utils/tests.h"
 
 #include <algorithm>
+#include <array>
 
 #if !TD_DARWIN
 
@@ -78,8 +79,12 @@ td::Slice family_id_for_profile(BrowserProfile profile) {
       return td::Slice("ios_chromium");
     case BrowserProfile::Firefox148:
       return td::Slice("firefox_linux_desktop");
+    case BrowserProfile::Firefox149_MacOS26_3:
+      return td::Slice("firefox_macos");
     case BrowserProfile::Firefox149_Windows:
       return td::Slice("firefox_windows");
+    case BrowserProfile::Safari26_3:
+      return td::Slice("apple_macos_tls");
     case BrowserProfile::IOS14:
       return td::Slice("apple_ios_tls");
     default:
@@ -102,10 +107,24 @@ RuntimePlatformHints make_windows_platform() {
   return platform;
 }
 
+RuntimePlatformHints make_darwin_platform() {
+  RuntimePlatformHints platform;
+  platform.device_class = DeviceClass::Desktop;
+  platform.desktop_os = DesktopOs::Darwin;
+  return platform;
+}
+
 RuntimePlatformHints make_ios_platform() {
   RuntimePlatformHints platform;
   platform.device_class = DeviceClass::Mobile;
   platform.mobile_os = MobileOs::IOS;
+  return platform;
+}
+
+RuntimePlatformHints make_android_platform() {
+  RuntimePlatformHints platform;
+  platform.device_class = DeviceClass::Mobile;
+  platform.mobile_os = MobileOs::Android;
   return platform;
 }
 
@@ -244,49 +263,117 @@ StealthRuntimeParams make_forced_profile_params(BrowserProfile profile) {
     case BrowserProfile::Chrome133:
       params.platform_hints = make_linux_platform();
       params.profile_weights.chrome133 = 100;
-      params.profile_weights.ios14 = 100;
-      params.profile_weights.android11_okhttp_advisory = 100;
       break;
     case BrowserProfile::Chrome131:
       params.platform_hints = make_linux_platform();
       params.profile_weights.chrome131 = 100;
-      params.profile_weights.ios14 = 100;
-      params.profile_weights.android11_okhttp_advisory = 100;
       break;
     case BrowserProfile::Firefox148:
       params.platform_hints = make_linux_platform();
       params.profile_weights.firefox148 = 100;
-      params.profile_weights.ios14 = 100;
-      params.profile_weights.android11_okhttp_advisory = 100;
+      break;
+    case BrowserProfile::Firefox149_MacOS26_3:
+      params.platform_hints = make_darwin_platform();
+      params.profile_weights.firefox148 = 100;
+      break;
+    case BrowserProfile::Safari26_3:
+      params.platform_hints = make_darwin_platform();
+      params.profile_weights.safari26_3 = 100;
       break;
     case BrowserProfile::Chrome147_Windows:
       params.platform_hints = make_windows_platform();
       params.profile_weights.chrome147_windows = 100;
-      params.profile_weights.firefox148 = 1;
-      params.profile_weights.ios14 = 1;
       break;
     case BrowserProfile::Firefox149_Windows:
       params.platform_hints = make_windows_platform();
       params.profile_weights.firefox149_windows = 100;
-      params.profile_weights.firefox148 = 1;
-      params.profile_weights.ios14 = 1;
       break;
     case BrowserProfile::Chrome147_IOSChromium:
       params.platform_hints = make_ios_platform();
       params.profile_weights.chrome147_ios_chromium = 100;
-      params.profile_weights.firefox148 = 1;
-      params.profile_weights.ios14 = 1;
       break;
     case BrowserProfile::IOS14:
       params.platform_hints = make_ios_platform();
       params.profile_weights.ios14 = 100;
-      params.profile_weights.firefox148 = 1;
+      break;
+    case BrowserProfile::Android11_OkHttp_Advisory:
+      params.platform_hints = make_android_platform();
+      params.profile_weights.android11_okhttp_advisory = 100;
       break;
     default:
       UNREACHABLE();
   }
 
   return params;
+}
+
+size_t count_allowed_nonzero_profile_weights(const StealthRuntimeParams &params) {
+  size_t count = 0;
+  const auto count_if_nonzero = [&](td::uint8 weight) {
+    if (weight != 0) {
+      ++count;
+    }
+  };
+
+  if (params.platform_hints.device_class == DeviceClass::Mobile) {
+    switch (params.platform_hints.mobile_os) {
+      case MobileOs::IOS:
+        count_if_nonzero(params.profile_weights.ios14);
+        count_if_nonzero(params.profile_weights.chrome147_ios_chromium);
+        break;
+      case MobileOs::Android:
+        count_if_nonzero(params.profile_weights.android11_okhttp_advisory);
+        break;
+      case MobileOs::None:
+      default:
+        count_if_nonzero(params.profile_weights.ios14);
+        count_if_nonzero(params.profile_weights.chrome147_ios_chromium);
+        count_if_nonzero(params.profile_weights.android11_okhttp_advisory);
+        break;
+    }
+    return count;
+  }
+
+  if (params.platform_hints.desktop_os == DesktopOs::Darwin) {
+    count_if_nonzero(params.profile_weights.chrome133);
+    count_if_nonzero(params.profile_weights.chrome131);
+    count_if_nonzero(params.profile_weights.chrome120);
+    count_if_nonzero(params.profile_weights.firefox148);
+    count_if_nonzero(params.profile_weights.safari26_3);
+    return count;
+  }
+
+  if (params.platform_hints.desktop_os == DesktopOs::Windows) {
+    count_if_nonzero(params.profile_weights.chrome147_windows);
+    count_if_nonzero(params.profile_weights.firefox149_windows);
+    return count;
+  }
+
+  count_if_nonzero(params.profile_weights.chrome133);
+  count_if_nonzero(params.profile_weights.chrome131);
+  count_if_nonzero(params.profile_weights.chrome120);
+  count_if_nonzero(params.profile_weights.firefox148);
+  return count;
+}
+
+TEST(TlsRuntimeRealFixtureAlignment, ForcedProfileParamsKeepSingleSelectableWeightPerPlatform) {
+  const std::array<BrowserProfile, 10> profiles = {{
+      BrowserProfile::Chrome133,
+      BrowserProfile::Chrome131,
+      BrowserProfile::Firefox148,
+      BrowserProfile::Firefox149_MacOS26_3,
+      BrowserProfile::Safari26_3,
+      BrowserProfile::Chrome147_Windows,
+      BrowserProfile::Firefox149_Windows,
+      BrowserProfile::Chrome147_IOSChromium,
+      BrowserProfile::IOS14,
+      BrowserProfile::Android11_OkHttp_Advisory,
+  }};
+
+  for (auto profile : profiles) {
+    const auto params = make_forced_profile_params(profile);
+    ASSERT_EQ(static_cast<size_t>(1), count_allowed_nonzero_profile_weights(params));
+  }
 }
 
 TEST(TlsRuntimeRealFixtureAlignment, ForcedRuntimeProfilesStayWithinReviewedFamilyLaneCatalog) {
@@ -307,6 +394,8 @@ TEST(TlsRuntimeRealFixtureAlignment, ForcedRuntimeProfilesStayWithinReviewedFami
       {BrowserProfile::Chrome133, "fixture-runtime-chrome133.example.com", 20000 * 86400 + 3600, 11},
       {BrowserProfile::Chrome131, "fixture-runtime-chrome131.example.com", 20001 * 86400 + 7200, 17},
       {BrowserProfile::Firefox148, "fixture-runtime-firefox148.example.com", 20002 * 86400 + 10800, 23},
+      {BrowserProfile::Firefox149_MacOS26_3, "fixture-runtime-firefox149-macos.example.com", 20002 * 86400 + 14400, 27},
+      {BrowserProfile::Safari26_3, "fixture-runtime-safari26-3.example.com", 20002 * 86400 + 18000, 28},
       {BrowserProfile::Chrome147_Windows, "fixture-runtime-chrome147-windows.example.com", 20003 * 86400 + 3600, 29},
       {BrowserProfile::Firefox149_Windows, "fixture-runtime-firefox149-windows.example.com", 20004 * 86400 + 7200, 31},
       {BrowserProfile::Chrome147_IOSChromium, "fixture-runtime-chrome147-ios.example.com", 20005 * 86400 + 10800, 37},
@@ -376,6 +465,9 @@ TEST(TlsRuntimeRealFixtureAlignment, ForcedRuntimeProfilesFailClosedOnRuAndUnkno
       {BrowserProfile::Chrome133, "fixture-runtime-chrome133.example.com", 20000 * 86400 + 3600, 101},
       {BrowserProfile::Chrome131, "fixture-runtime-chrome131.example.com", 20001 * 86400 + 7200, 103},
       {BrowserProfile::Firefox148, "fixture-runtime-firefox148.example.com", 20002 * 86400 + 10800, 107},
+      {BrowserProfile::Firefox149_MacOS26_3, "fixture-runtime-firefox149-macos.example.com", 20002 * 86400 + 14400,
+       111},
+      {BrowserProfile::Safari26_3, "fixture-runtime-safari26-3.example.com", 20002 * 86400 + 18000, 112},
       {BrowserProfile::Chrome147_Windows, "fixture-runtime-chrome147-windows.example.com", 20003 * 86400 + 3600, 109},
       {BrowserProfile::Firefox149_Windows, "fixture-runtime-firefox149-windows.example.com", 20004 * 86400 + 7200, 113},
       {BrowserProfile::Chrome147_IOSChromium, "fixture-runtime-chrome147-ios.example.com", 20005 * 86400 + 10800, 127},
@@ -430,6 +522,41 @@ TEST(TlsRuntimeRealFixtureAlignment, ForcedRuntimeProfilesFailClosedOnRuAndUnkno
     ASSERT_TRUE(ru_matcher.passes_upstream_rule_legality(ru_parsed.ok()));
     ASSERT_TRUE(unknown_matcher.passes_upstream_rule_legality(unknown_parsed.ok()));
   }
+}
+
+TEST(TlsRuntimeRealFixtureAlignment, Android11OkHttpAdvisoryDoesNotClaimReviewedAndroidChromiumLane) {
+  RuntimeParamsGuard guard;
+
+  auto params = make_forced_profile_params(BrowserProfile::Android11_OkHttp_Advisory);
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
+
+  auto selection_input = find_runtime_selection_input(BrowserProfile::Android11_OkHttp_Advisory,
+                                                      td::Slice("fixture-runtime-android-okhttp.example.com"),
+                                                      20007 * 86400 + 18000, params.platform_hints);
+  ASSERT_TRUE(pick_runtime_profile(selection_input.domain, selection_input.unix_time, params.platform_hints) ==
+              BrowserProfile::Android11_OkHttp_Advisory);
+
+  const auto *baseline = get_baseline(td::Slice("android_chromium"), td::Slice("non_ru_egress"));
+  ASSERT_TRUE(baseline != nullptr);
+
+  NetworkRouteHints non_ru_route;
+  non_ru_route.is_known = true;
+  non_ru_route.is_ru = false;
+
+  MockRng rng(43);
+  auto wire = build_runtime_tls_client_hello(selection_input.domain, "0123456789secret", selection_input.unix_time,
+                                             non_ru_route, rng);
+  auto parsed = parse_tls_client_hello(wire);
+  ASSERT_TRUE(parsed.is_ok());
+
+  ASSERT_TRUE(!baseline->invariants.non_grease_supported_groups.empty());
+  const auto observed_supported_groups = non_grease_supported_groups(parsed.ok());
+  ASSERT_TRUE(std::find(observed_supported_groups.begin(), observed_supported_groups.end(), 0x11ECu) ==
+              observed_supported_groups.end());
+  ASSERT_TRUE(std::find(baseline->invariants.non_grease_supported_groups.begin(),
+                        baseline->invariants.non_grease_supported_groups.end(),
+                        0x11ECu) != baseline->invariants.non_grease_supported_groups.end());
+  ASSERT_TRUE(observed_supported_groups != baseline->invariants.non_grease_supported_groups);
 }
 
 }  // namespace

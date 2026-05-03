@@ -145,22 +145,27 @@ double ChaffScheduler::budget_resume_at(double now) const {
 }
 
 double ChaffScheduler::budget_resume_at_for_target(double now, uint64 target_bytes) const {
+  auto saturating_add = [](uint64 left, uint64 right) {
+    const auto max_uint64 = std::numeric_limits<uint64>::max();
+    if (right >= max_uint64 - left) {
+      return max_uint64;
+    }
+    return left + right;
+  };
+
   uint64 bytes = 0;
   double earliest_resume = 0.0;
-  const auto max_uint64 = std::numeric_limits<uint64>::max();
+  double latest_resume = 0.0;
   const auto byte_limit = static_cast<uint64>(config_.chaff_policy.max_bytes_per_minute);
   for (const auto &sample : budget_window_) {
     if (sample.at + kBudgetWindowSeconds <= now) {
       continue;
     }
-    if (sample.bytes >= max_uint64 - bytes) {
-      bytes = max_uint64;
-    } else {
-      bytes += static_cast<uint64>(sample.bytes);
-    }
+    bytes = saturating_add(bytes, static_cast<uint64>(sample.bytes));
     if (earliest_resume == 0.0) {
       earliest_resume = sample.at + kBudgetWindowSeconds;
     }
+    latest_resume = sample.at + kBudgetWindowSeconds;
   }
   if (target_bytes == 0) {
     return 0.0;
@@ -179,7 +184,21 @@ double ChaffScheduler::budget_resume_at_for_target(double now, uint64 target_byt
   if (bytes <= byte_limit && target_bytes <= byte_limit - bytes) {
     return 0.0;
   }
-  return earliest_resume;
+
+  auto required_release = saturating_add(bytes, target_bytes) - byte_limit;
+  uint64 released = 0;
+  for (const auto &sample : budget_window_) {
+    auto sample_resume_at = sample.at + kBudgetWindowSeconds;
+    if (sample_resume_at <= now) {
+      continue;
+    }
+    released = saturating_add(released, static_cast<uint64>(sample.bytes));
+    if (released >= required_release) {
+      return sample_resume_at;
+    }
+  }
+
+  return latest_resume;
 }
 
 bool ChaffScheduler::budget_allows(double now) const {

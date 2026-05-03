@@ -41,9 +41,9 @@ struct PairingCase final {
 };
 
 constexpr PairingCase kVerifiedProfilePairings[] = {
-    {BrowserProfile::Chrome133, "linux_desktop/chrome146_75_linux_desktop.serverhello.json"},
-    {BrowserProfile::Chrome131, "linux_desktop/chrome146_75_linux_desktop.serverhello.json"},
-    {BrowserProfile::Chrome120, "linux_desktop/chrome146_75_linux_desktop.serverhello.json"},
+    {BrowserProfile::Chrome133, "linux_desktop/chrome144_linux_desktop.serverhello.json"},
+    {BrowserProfile::Chrome131, "linux_desktop/chrome144_linux_desktop.serverhello.json"},
+    {BrowserProfile::Chrome120, "linux_desktop/chrome144_linux_desktop.serverhello.json"},
     {BrowserProfile::Firefox148, "linux_desktop/firefox148_linux_desktop.serverhello.json"},
     {BrowserProfile::Firefox149_MacOS26_3, "macos/firefox149_macos26_3.serverhello.json"},
 };
@@ -85,6 +85,14 @@ TEST(TLS_VerifiedProfileServerHelloPairingAdversarial, PairingTableCoversEveryRe
     ASSERT_TRUE(pairing_table_contains_profile(profile));
   }
   ASSERT_EQ(release_gating_profiles, sizeof(kVerifiedProfilePairings) / sizeof(kVerifiedProfilePairings[0]));
+}
+
+TEST(TLS_VerifiedProfileServerHelloPairingAdversarial, PairingTableMatchesRepresentativeResolver) {
+  for (const auto &entry : kVerifiedProfilePairings) {
+    const auto representative =
+        td::mtproto::test::representative_server_hello_path_for_family(profile_spec(entry.profile).name).str();
+    ASSERT_EQ(td::string(entry.server_hello_relative_path), representative);
+  }
 }
 
 TEST(TLS_VerifiedProfileServerHelloPairingAdversarial, ReviewedServerHelloFixturesResolveToTls13ForReleaseProfiles) {

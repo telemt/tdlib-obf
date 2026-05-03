@@ -110,9 +110,10 @@ TEST(StealthConfigBidirectionalFailClosed, RejectsJitterMaxAboveMicrosecondRange
 
 TEST(StealthConfigBidirectionalFailClosed, DecoratorHandlesMaxRepresentableJitterWithFiniteWakeup) {
   auto config = make_valid_config();
+  const auto max_allowed = std::nextafter(max_representable_delay_ms(), 0.0);
   config.bidirectional_correlation_policy.enabled = true;
-  config.bidirectional_correlation_policy.post_response_delay_jitter_ms_min = max_representable_delay_ms();
-  config.bidirectional_correlation_policy.post_response_delay_jitter_ms_max = max_representable_delay_ms();
+  config.bidirectional_correlation_policy.post_response_delay_jitter_ms_min = max_allowed;
+  config.bidirectional_correlation_policy.post_response_delay_jitter_ms_max = max_allowed;
 
   auto inner = td::make_unique<RecordingTransport>();
   auto *inner_ptr = inner.get();

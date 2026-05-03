@@ -222,7 +222,7 @@ inline Slice representative_server_hello_path_for_family(Slice family_hint) {
   }
   if (lower.find("chrome133") != string::npos || lower.find("chrome131") != string::npos ||
       lower.find("chrome120") != string::npos) {
-    return Slice("android/chrome143_0_7499_192_android15_1_2_bf770816.serverhello.json");
+    return Slice("linux_desktop/chrome144_linux_desktop.serverhello.json");
   }
   if (lower.find("firefox148") != string::npos) {
     return Slice("linux_desktop/firefox148_linux_desktop.serverhello.json");
@@ -231,7 +231,10 @@ inline Slice representative_server_hello_path_for_family(Slice family_hint) {
     return Slice("macos/firefox149_macos26_3.serverhello.json");
   }
   if (lower.find("safari") != string::npos) {
-    return Slice("ios/safari26_3_ios26_3_1_83afd3bc.serverhello.json");
+    return Slice("macos/safari_macos26_4_57318420.serverhello.json");
+  }
+  if (lower.find("chrome147") != string::npos && lower.find("ios") != string::npos) {
+    return Slice("ios/chrome147_0_7727_47_ios26_3.serverhello.json");
   }
   if (lower.find("ios") != string::npos) {
     return Slice("ios/chrome147_0_7727_47_ios26_3.serverhello.json");

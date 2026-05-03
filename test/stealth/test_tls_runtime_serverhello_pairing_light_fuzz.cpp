@@ -24,8 +24,8 @@ using td::mtproto::test::client_hello_advertises_cipher_suite;
 using td::mtproto::test::load_server_hello_fixture_relative;
 using td::mtproto::test::MockRng;
 using td::mtproto::test::non_ru_route;
+using td::mtproto::test::pairing_server_hello_path_for_profile;
 using td::mtproto::test::parse_tls_client_hello;
-using td::mtproto::test::reviewed_server_hello_path_for_profile;
 using td::mtproto::test::RuntimeParamsGuard;
 using td::mtproto::test::single_runtime_profile_params;
 
@@ -36,9 +36,14 @@ struct Scenario final {
   td::uint64 seed_base;
 };
 
-const std::array<Scenario, 6> kScenarios{{
+const std::array<Scenario, 11> kScenarios{{
+    {BrowserProfile::Chrome133, "runtime-fuzz-linux-chrome133", 1712330000, 0x83100000u},
+    {BrowserProfile::Chrome131, "runtime-fuzz-linux-chrome131", 1712340000, 0x83200000u},
+    {BrowserProfile::Chrome120, "runtime-fuzz-linux-chrome120", 1712350000, 0x83300000u},
     {BrowserProfile::Chrome147_Windows, "runtime-fuzz-win-chrome", 1712360000, 0x83000000u},
     {BrowserProfile::Firefox149_Windows, "runtime-fuzz-win-firefox", 1712370000, 0x84000000u},
+    {BrowserProfile::Firefox148, "runtime-fuzz-linux-firefox148", 1712375000, 0x83400000u},
+    {BrowserProfile::Firefox149_MacOS26_3, "runtime-fuzz-macos-firefox149", 1712377500, 0x83500000u},
     {BrowserProfile::Chrome147_IOSChromium, "runtime-fuzz-ios-chromium", 1712380000, 0x85000000u},
     {BrowserProfile::Safari26_3, "runtime-fuzz-safari", 1712390000, 0x86000000u},
     {BrowserProfile::IOS14, "runtime-fuzz-ios-native", 1712400000, 0x87000000u},
@@ -52,7 +57,7 @@ TEST(TlsRuntimeServerHelloPairingLightFuzz, ReviewedServerCipherRemainsAdvertise
     const auto params = single_runtime_profile_params(scenario.profile, TransportConfidence::Strong);
     ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
 
-    const auto relative = reviewed_server_hello_path_for_profile(scenario.profile);
+    const auto relative = pairing_server_hello_path_for_profile(scenario.profile);
     auto sample_result = load_server_hello_fixture_relative(td::CSlice(relative));
     ASSERT_TRUE(sample_result.is_ok());
     const auto sample = sample_result.move_as_ok();

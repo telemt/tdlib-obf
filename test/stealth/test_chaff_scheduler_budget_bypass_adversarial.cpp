@@ -190,6 +190,38 @@ TEST(ChaffSchedulerBudgetBypassAdversarial, YearThreeThousandTimestampDoesNotDis
   ASSERT_TRUE(std::isfinite(wakeup));
 }
 
+TEST(ChaffSchedulerBudgetBypassAdversarial, NonFiniteActivityTimeDisarmsThenFiniteActivityRearms) {
+  MockRng rng(61);
+  auto config = make_chaff_config(4096, 200);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 0.0);
+
+  sched.note_activity(std::numeric_limits<double>::quiet_NaN());
+  ASSERT_EQ(0, sched.current_target_bytes());
+  ASSERT_EQ(0.0, sched.get_wakeup(10.0, false, true));
+  ASSERT_FALSE(sched.should_emit(10.0, false, true));
+
+  sched.note_activity(10.0);
+  ASSERT_TRUE(sched.current_target_bytes() > 0);
+  auto wakeup = sched.get_wakeup(10.0, false, true);
+  ASSERT_TRUE(wakeup == 0.0 || (wakeup > 10.0 && std::isfinite(wakeup)));
+}
+
+TEST(ChaffSchedulerBudgetBypassAdversarial, NonFiniteChaffEmissionTimeDisarmsAndBlocksEmission) {
+  MockRng rng(62);
+  auto config = make_chaff_config(4096, 200);
+  IptController ipt(config.ipt_params, rng);
+  ChaffScheduler sched(config, ipt, rng, 0.0);
+
+  sched.note_activity(1.0);
+  ASSERT_TRUE(sched.current_target_bytes() > 0);
+
+  sched.note_chaff_emitted(std::numeric_limits<double>::infinity(), 200);
+  ASSERT_EQ(0, sched.current_target_bytes());
+  ASSERT_FALSE(sched.should_emit(2.0, false, true));
+  ASSERT_EQ(0.0, sched.get_wakeup(2.0, false, true));
+}
+
 // -----------------------------------------------------------------------
 // note_chaff_emitted with SIZE_MAX bytes then another emission at the same
 // now: accumulated bytes must saturate at UINT64_MAX (not wrap to 0).

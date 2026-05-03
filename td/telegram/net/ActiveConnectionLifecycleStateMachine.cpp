@@ -137,8 +137,15 @@ ActiveConnectionLifecycleDecision ActiveConnectionLifecycleStateMachine::poll(
       decision.route_new_queries_to_successor = true;
       cutover_pending_ = false;
     }
-    const bool overlap_expired =
-        policy.overlap_max_ms > 0 && input.now_ms >= draining_started_at_ms_ + policy.overlap_max_ms;
+    uint64 overlap_deadline_ms = 0;
+    if (policy.overlap_max_ms > 0) {
+      if (draining_started_at_ms_ > std::numeric_limits<uint64>::max() - policy.overlap_max_ms) {
+        overlap_deadline_ms = std::numeric_limits<uint64>::max();
+      } else {
+        overlap_deadline_ms = draining_started_at_ms_ + policy.overlap_max_ms;
+      }
+    }
+    const bool overlap_expired = policy.overlap_max_ms > 0 && input.now_ms >= overlap_deadline_ms;
     if (!input.has_inflight_queries || overlap_expired) {
       state_ = ActiveConnectionLifecycleState::Retired;
       has_successor_ = false;
@@ -158,10 +165,13 @@ bool ActiveConnectionLifecycleStateMachine::is_hard_ceiling_reached(const Active
   if (policy.hard_ceiling_ms == 0) {
     return false;
   }
+  uint64 hard_ceiling_deadline_ms = 0;
   if (opened_at_ms_ > std::numeric_limits<uint64>::max() - policy.hard_ceiling_ms) {
-    return true;
+    hard_ceiling_deadline_ms = std::numeric_limits<uint64>::max();
+  } else {
+    hard_ceiling_deadline_ms = opened_at_ms_ + policy.hard_ceiling_ms;
   }
-  return now_ms >= opened_at_ms_ + policy.hard_ceiling_ms;
+  return now_ms >= hard_ceiling_deadline_ms;
 }
 
 ActiveConnectionRotationExemptionReason ActiveConnectionLifecycleStateMachine::get_suppression_reason(

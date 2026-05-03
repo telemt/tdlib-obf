@@ -63,4 +63,26 @@ TEST(StealthConfigIptOverflowFailClosed, DecoratorFactoryRejectsNonRepresentable
   ASSERT_STREQ("ipt_params.burst_max_ms must fit into uint64 microseconds", result.error().message().c_str());
 }
 
+// kMaxRepresentableDelayMs = static_cast<double>(UINT64_MAX) / 1000.0 evaluates to 2^64/1000.0 due to
+// double rounding (UINT64_MAX rounds up to 2^64).  Multiplying back by 1000.0 gives exactly 2^64 as
+// a double, which is one past UINT64_MAX.  The cast static_cast<uint64>(2^64) is undefined behaviour
+// under C++ [conv.fpint].  The validator must reject this boundary value with >=, not just >.
+TEST(StealthConfigIptOverflowFailClosed, RejectsBurstDelayCapAtExactUint64MsBoundary) {
+  auto config = make_valid_config();
+  config.ipt_params.burst_max_ms = kMaxRepresentableDelayMs;
+
+  auto status = config.validate();
+  ASSERT_TRUE(status.is_error());
+  ASSERT_STREQ("ipt_params.burst_max_ms must fit into uint64 microseconds", status.message().c_str());
+}
+
+TEST(StealthConfigIptOverflowFailClosed, RejectsIdleDelayCapAtExactUint64MsBoundary) {
+  auto config = make_valid_config();
+  config.ipt_params.idle_max_ms = kMaxRepresentableDelayMs;
+
+  auto status = config.validate();
+  ASSERT_TRUE(status.is_error());
+  ASSERT_STREQ("ipt_params.idle_max_ms must fit into uint64 microseconds", status.message().c_str());
+}
+
 }  // namespace

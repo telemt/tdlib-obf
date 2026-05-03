@@ -40,6 +40,13 @@ inline stealth::RuntimePlatformHints windows_platform() {
   return platform;
 }
 
+inline stealth::RuntimePlatformHints linux_platform() {
+  stealth::RuntimePlatformHints platform;
+  platform.device_class = stealth::DeviceClass::Desktop;
+  platform.desktop_os = stealth::DesktopOs::Linux;
+  return platform;
+}
+
 inline stealth::RuntimePlatformHints darwin_platform() {
   stealth::RuntimePlatformHints platform;
   platform.device_class = stealth::DeviceClass::Desktop;
@@ -97,6 +104,18 @@ inline stealth::StealthRuntimeParams single_runtime_profile_params(stealth::Brow
   params.profile_weights = zero_profile_weights();
 
   switch (profile) {
+    case stealth::BrowserProfile::Chrome133:
+      params.platform_hints = linux_platform();
+      params.profile_weights.chrome133 = 100;
+      break;
+    case stealth::BrowserProfile::Chrome131:
+      params.platform_hints = linux_platform();
+      params.profile_weights.chrome131 = 100;
+      break;
+    case stealth::BrowserProfile::Chrome120:
+      params.platform_hints = linux_platform();
+      params.profile_weights.chrome120 = 100;
+      break;
     case stealth::BrowserProfile::Chrome147_Windows:
       params.platform_hints = windows_platform();
       params.profile_weights.chrome147_windows = 100;
@@ -104,6 +123,14 @@ inline stealth::StealthRuntimeParams single_runtime_profile_params(stealth::Brow
     case stealth::BrowserProfile::Firefox149_Windows:
       params.platform_hints = windows_platform();
       params.profile_weights.firefox149_windows = 100;
+      break;
+    case stealth::BrowserProfile::Firefox148:
+      params.platform_hints = linux_platform();
+      params.profile_weights.firefox148 = 100;
+      break;
+    case stealth::BrowserProfile::Firefox149_MacOS26_3:
+      params.platform_hints = darwin_platform();
+      params.profile_weights.firefox148 = 100;
       break;
     case stealth::BrowserProfile::Chrome147_IOSChromium:
       params.platform_hints = ios_platform();
@@ -128,7 +155,7 @@ inline stealth::StealthRuntimeParams single_runtime_profile_params(stealth::Brow
   return params;
 }
 
-inline string reviewed_server_hello_path_for_profile(stealth::BrowserProfile profile) {
+inline string pairing_server_hello_path_for_profile(stealth::BrowserProfile profile) {
   return representative_server_hello_path_for_family(stealth::profile_spec(profile).name).str();
 }
 

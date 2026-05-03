@@ -114,6 +114,32 @@ TEST(IdleChaffTrafficBudgetBoundaries, BudgetResumesExactlyAtOldestSampleExpiry)
   ASSERT_TRUE(harness.inner->written_payloads.back().empty());
 }
 
+TEST(IdleChaffTrafficBudgetBoundaries, WakeupTracksLaterExpiryWhenOldestSampleDoesNotFreeEnoughBudget) {
+  auto config = make_boundary_config();
+  config.chaff_policy.max_bytes_per_minute = 600;
+  config.chaff_policy.record_model = make_exact_record_model(400);
+  auto harness = Harness::create(std::move(config));
+
+  harness.flush_at(harness.next_wakeup());
+  ASSERT_EQ(1, harness.inner->write_calls);
+  const auto first_emit_at = harness.clock->now();
+
+  harness.flush_at(harness.next_wakeup());
+  ASSERT_EQ(2, harness.inner->write_calls);
+  const auto second_emit_at = harness.clock->now();
+
+  const auto blocked_wakeup = harness.next_wakeup();
+  ASSERT_TRUE(blocked_wakeup >= second_emit_at + 60.0 - 1e-6);
+  ASSERT_TRUE(blocked_wakeup > first_emit_at + 60.0 + 1e-6);
+
+  harness.flush_at(blocked_wakeup - 1e-6);
+  ASSERT_EQ(2, harness.inner->write_calls);
+
+  harness.flush_at(blocked_wakeup);
+  ASSERT_EQ(3, harness.inner->write_calls);
+  ASSERT_TRUE(harness.inner->written_payloads.back().empty());
+}
+
 TEST(IdleChaffTrafficBudgetBoundaries, PendingRealWriteSuppressesBudgetReadyChaffUntilDrain) {
   auto harness = Harness::create(make_boundary_config());
 

@@ -9,6 +9,7 @@
 #include "td/utils/format.h"
 #include "td/utils/JsonBuilder.h"
 #include "td/utils/logging.h"
+#include "td/utils/port/path.h"
 #if TD_PORT_POSIX
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -70,6 +71,8 @@ Status validate_secure_parent_directory(const string &path) {
 #if TD_PORT_POSIX
   auto pos = path.rfind('/');
   string parent = pos == string::npos ? string(".") : (pos == 0 ? string("/") : path.substr(0, pos));
+  TRY_RESULT(resolved_parent, td::realpath(parent));
+  parent = std::move(resolved_parent);
 
   auto validate_directory_component = [](Slice directory_path, bool require_owner, bool is_parent) -> Status {
     struct ::stat st;

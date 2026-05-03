@@ -18,10 +18,11 @@
 namespace {
 
 std::string load_tl_simple_source() {
-  // Test is run from the build directory, so repo root is one level up.
+  // Test may run with cwd at build/ or build/test depending on runner.
   const char *const candidates[] = {
       "tdtl/td/tl/tl_simple.h",
       "../tdtl/td/tl/tl_simple.h",
+      "../../tdtl/td/tl/tl_simple.h",
   };
   for (const char *p : candidates) {
     std::ifstream in(p, std::ios::binary);

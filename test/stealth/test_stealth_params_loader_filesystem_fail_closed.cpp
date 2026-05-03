@@ -139,8 +139,7 @@ TEST(StealthParamsLoaderFilesystemFailClosed, StrictLoadRejectsNonRegularUnixSoc
   int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
   ASSERT_TRUE(fd >= 0);
 
-  struct ::sockaddr_un addr {
-  };
+  struct ::sockaddr_un addr {};
   addr.sun_family = AF_UNIX;
   ASSERT_TRUE(path.size() < sizeof(addr.sun_path));
   std::memcpy(addr.sun_path, path.c_str(), path.size() + 1);
@@ -151,6 +150,34 @@ TEST(StealthParamsLoaderFilesystemFailClosed, StrictLoadRejectsNonRegularUnixSoc
 
   ASSERT_EQ(0, ::close(fd));
   ASSERT_EQ(0, ::unlink(path.c_str()));
+}
+
+TEST(StealthParamsLoaderFilesystemFailClosed, StrictLoadRejectsFifoPath) {
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.fifo");
+
+  ASSERT_EQ(0, ::mkfifo(path.c_str(), 0600));
+
+  auto result = StealthParamsLoader::try_load_strict(path);
+  ASSERT_TRUE(result.is_error());
+}
+
+TEST(StealthParamsLoaderFilesystemFailClosed, ReloadKeepsLastGoodSnapshotWhenConfigIsReplacedWithFifo) {
+  RuntimeParamsGuard guard;
+  ScopedTempDir temp_dir;
+  auto path = join_path(temp_dir.path(), "stealth-params.json");
+
+  write_file(path, valid_config_json());
+
+  StealthParamsLoader loader(path);
+  ASSERT_TRUE(loader.try_reload());
+  ASSERT_EQ(static_cast<size_t>(12288), get_runtime_stealth_params_snapshot().bulk_threshold_bytes);
+
+  ASSERT_EQ(0, ::unlink(path.c_str()));
+  ASSERT_EQ(0, ::mkfifo(path.c_str(), 0600));
+
+  ASSERT_FALSE(loader.try_reload());
+  ASSERT_EQ(static_cast<size_t>(12288), get_runtime_stealth_params_snapshot().bulk_threshold_bytes);
 }
 
 TEST(StealthParamsLoaderFilesystemFailClosed, ReloadKeepsLastGoodSnapshotWhenConfigIsReplacedWithSymlink) {

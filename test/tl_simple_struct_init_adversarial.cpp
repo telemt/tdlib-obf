@@ -20,6 +20,7 @@ std::string load_tl_simple_source() {
   const char *const candidates[] = {
       "tdtl/td/tl/tl_simple.h",
       "../tdtl/td/tl/tl_simple.h",
+      "../../tdtl/td/tl/tl_simple.h",
   };
   for (const char *p : candidates) {
     std::ifstream in(p, std::ios::binary);

@@ -143,6 +143,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_proxy_secret_sni_boundary_stress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_circuit_breaker_reload_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ech_cb_ttl_reconcile_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_registry_provenance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_profile_platform_coherence.cpp
@@ -312,6 +313,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_runtime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_security.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_ancestor_security_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_relative_ancestor_security_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_filesystem_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_params_loader_reload_log_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_wakeup_seam.cpp
@@ -427,6 +429,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_config_manager_recovery_policy_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_profile_record_limit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_profile_record_limit_consistency.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_ipt_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_ipt_nonfinite_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_ipt_overflow_fail_closed.cpp
@@ -496,6 +499,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_budget_oversized_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_small_record_budget_integration_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_idle_chaff_payload_overhead_budget_integration_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_chaff_scheduler_cumulative_resume_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_budget_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_time_fail_closed_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_fail_closed.cpp
@@ -513,6 +517,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_statistics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_bypass_state_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_state_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_controller_precision_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_ipt.cpp
@@ -649,6 +654,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_full_handshake_family_pairing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_first_flight_layout_pairing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_verified_profile_serverhello_pairing_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_serverhello_fixture_loader_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_fixture_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_pairing_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_pairing_adversarial.cpp
@@ -711,6 +717,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ech_cb_temporal_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_traffic_classifier_contract_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_ipt_controller_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_ipt_idle_sampler_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_padding_entropy_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_profile_platform_isolation_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_masking_psk_ech_coupling_adversarial.cpp

@@ -65,7 +65,8 @@ double ConnectionDestinationBudgetController::get_wakeup_at(double now, const De
     wakeup_at = std::max(wakeup_at, last_destination_started_at + anti_churn_delay_seconds(policy));
   }
 
-  if (destination_attempts >= static_cast<size_t>(policy.max_connects_per_10s_per_destination) &&
+  if (policy.max_connects_per_10s_per_destination > 0 &&
+      destination_attempts >= static_cast<size_t>(policy.max_connects_per_10s_per_destination) &&
       has_destination_attempt) {
     wakeup_at = std::max(wakeup_at, first_destination_expiry);
   }

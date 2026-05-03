@@ -65,4 +65,23 @@ TEST(ConnectionLifecyclePolicy, RetireDueRequiresPositiveDeadlineAndElapsedTime)
   ASSERT_TRUE(ConnectionLifecyclePolicy::is_active_connection_retire_due(100.0, 100.0));
 }
 
+TEST(ConnectionLifecyclePolicy, InvertedLifetimeRangeClampsSafelyToMinimumDeadline) {
+  // Adversarial: max_conn_lifetime_ms < min_conn_lifetime_ms bypasses the
+  // runtime validator (e.g. if called directly without StealthParamsLoader).
+  // The function must not return a deadline before opened_at + min_lifetime,
+  // nor must it crash or produce a negative lifetime_range.
+  auto params = default_runtime_stealth_params();
+  params.flow_behavior.min_conn_lifetime_ms = 3000;
+  params.flow_behavior.max_conn_lifetime_ms = 1000;  // inverted
+
+  const auto retire_at_zero =
+      ConnectionLifecyclePolicy::sample_active_connection_retire_at(10.0, params.flow_behavior, 0);
+  const auto retire_at_max = ConnectionLifecyclePolicy::sample_active_connection_retire_at(
+      10.0, params.flow_behavior, std::numeric_limits<td::uint32>::max());
+
+  // Both must equal opened_at + min_lifetime because clamped range is zero.
+  assert_double_eq(13.0, retire_at_zero);
+  assert_double_eq(13.0, retire_at_max);
+}
+
 }  // namespace
