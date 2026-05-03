@@ -9,6 +9,7 @@
 
 #include "td/telegram/net/ConnectionLifecyclePolicy.h"
 #include "td/telegram/net/ConnectionPoolPolicy.h"
+#include "td/telegram/net/SessionNewSessionResendScope.h"
 
 #include "td/telegram/DhCache.h"
 #include "td/telegram/Global.h"
@@ -817,6 +818,18 @@ void Session::on_server_time_difference_updated(bool force) {
 }
 
 void Session::on_closed(Status status) {
+  const auto now_ms = to_connection_lifecycle_ms(Time::now());
+  const auto backoff_ms =
+      make_active_connection_lifecycle_policy(mtproto::stealth::get_runtime_stealth_params_snapshot().flow_behavior)
+          .rotation_backoff_ms;
+  if (current_info_ == &main_handover_connection_) {
+    main_connection_.lifecycle_.mark_successor_closed_before_cutover(now_ms, backoff_ms,
+                                                                     ActiveConnectionRotationExemptionReason::None);
+  } else if (current_info_ == &long_poll_handover_connection_) {
+    long_poll_connection_.lifecycle_.mark_successor_closed_before_cutover(
+        now_ms, backoff_ms, ActiveConnectionRotationExemptionReason::None);
+  }
+
   if (!close_flag_ && is_main_) {
     connection_token_.reset();
   }
@@ -930,7 +943,8 @@ void Session::on_new_session_created(uint64 unique_id, mtproto::MessageId first_
   }
   for (auto it = sent_queries_.begin(); it != sent_queries_.end();) {
     Query &query = it->second;
-    if (query.container_message_id_ < first_message_id) {
+    if (detail::should_resend_query_on_new_session_created(current_info_->socket_id_, query.socket_id_,
+                                                           query.container_message_id_, first_message_id)) {
       // container vector leak otherwise
       cleanup_container(it->first, query);
       mark_as_known(it->first, query);

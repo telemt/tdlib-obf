@@ -50,6 +50,24 @@ bool ActiveConnectionLifecycleStateMachine::mark_successor_ready(uint64 now_ms) 
   return true;
 }
 
+bool ActiveConnectionLifecycleStateMachine::mark_successor_closed_before_cutover(
+    uint64 now_ms, uint32 rotation_backoff_ms, ActiveConnectionRotationExemptionReason reason) noexcept {
+  if (!has_successor_ || state_ != ActiveConnectionLifecycleState::Draining || !cutover_pending_) {
+    return false;
+  }
+  state_ = ActiveConnectionLifecycleState::RotationPending;
+  draining_started_at_ms_ = 0;
+  has_successor_ = false;
+  cutover_pending_ = false;
+  rotation_exemption_reason_ = reason;
+  if (now_ms > std::numeric_limits<uint64>::max() - rotation_backoff_ms) {
+    next_rotation_retry_at_ms_ = std::numeric_limits<uint64>::max();
+  } else {
+    next_rotation_retry_at_ms_ = now_ms + rotation_backoff_ms;
+  }
+  return true;
+}
+
 void ActiveConnectionLifecycleStateMachine::mark_successor_failed(
     uint64 now_ms, uint32 rotation_backoff_ms, ActiveConnectionRotationExemptionReason reason) noexcept {
   if (state_ != ActiveConnectionLifecycleState::RotationPending) {
@@ -77,7 +95,8 @@ ActiveConnectionLifecycleDecision ActiveConnectionLifecycleStateMachine::poll(
     return decision;
   }
 
-  if (state_ == ActiveConnectionLifecycleState::Eligible && is_rotation_due(input.now_ms)) {
+  if (state_ == ActiveConnectionLifecycleState::Eligible &&
+      (is_rotation_due(input.now_ms) || is_hard_ceiling_reached(policy, input.now_ms))) {
     state_ = ActiveConnectionLifecycleState::RotationPending;
   }
 
@@ -88,21 +107,27 @@ ActiveConnectionLifecycleDecision ActiveConnectionLifecycleStateMachine::poll(
       return decision;
     }
 
-    const auto suppression_reason = get_suppression_reason(input);
-    if (suppression_reason != ActiveConnectionRotationExemptionReason::None) {
-      rotation_exemption_reason_ = suppression_reason;
-      if (is_hard_ceiling_reached(policy, input.now_ms)) {
-        over_age_degraded_ = true;
-        decision.over_age_degraded = true;
+    if (!has_successor_) {
+      const auto suppression_reason = get_suppression_reason(input);
+      if (suppression_reason != ActiveConnectionRotationExemptionReason::None) {
+        rotation_exemption_reason_ = suppression_reason;
+        if (is_hard_ceiling_reached(policy, input.now_ms)) {
+          over_age_degraded_ = true;
+          decision.over_age_degraded = true;
+        }
+        return decision;
       }
-      return decision;
-    }
 
-    if (!has_successor_ && input.now_ms >= next_rotation_retry_at_ms_) {
-      has_successor_ = true;
-      rotation_attempts_++;
-      rotation_exemption_reason_ = ActiveConnectionRotationExemptionReason::None;
-      decision.prepare_successor = true;
+      if (input.now_ms >= next_rotation_retry_at_ms_) {
+        has_successor_ = true;
+        rotation_attempts_++;
+        rotation_exemption_reason_ = ActiveConnectionRotationExemptionReason::None;
+        decision.prepare_successor = true;
+      }
+    }
+    if (!decision.prepare_successor && is_hard_ceiling_reached(policy, input.now_ms)) {
+      over_age_degraded_ = true;
+      decision.over_age_degraded = true;
     }
     return decision;
   }

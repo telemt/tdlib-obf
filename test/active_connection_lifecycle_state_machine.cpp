@@ -8,7 +8,7 @@
 
 #include "td/utils/tests.h"
 
-namespace {
+namespace active_connection_lifecycle_state_machine_test {
 
 using td::ActiveConnectionLifecycleInput;
 using td::ActiveConnectionLifecyclePolicy;
@@ -200,6 +200,90 @@ TEST(ActiveConnectionLifecycleStateMachine, HardCeilingStillSignalsOverAgeWhenAn
   ASSERT_TRUE(machine.is_over_age_degraded());
 }
 
+TEST(ActiveConnectionLifecycleStateMachine, PendingSuccessorStillSignalsOverAgeAfterHardCeiling) {
+  auto policy = default_policy();
+  ActiveConnectionLifecycleStateMachine machine(ActiveConnectionLifecycleRole::Main, 1000, 2000);
+
+  machine.mark_eligible();
+  auto opening = machine.poll(policy, ActiveConnectionLifecycleInput{2000, false, false, false, false, true, true});
+  ASSERT_TRUE(opening.prepare_successor);
+  ASSERT_TRUE(machine.has_successor());
+
+  auto decision = machine.poll(policy, ActiveConnectionLifecycleInput{6100, true, false, false, false, true, true});
+
+  ASSERT_FALSE(decision.prepare_successor);
+  ASSERT_FALSE(decision.route_new_queries_to_successor);
+  ASSERT_FALSE(decision.retire_current);
+  ASSERT_TRUE(decision.over_age_degraded);
+  assert_state_eq(ActiveConnectionLifecycleState::RotationPending, machine.state());
+  ASSERT_TRUE(machine.has_successor());
+  ASSERT_TRUE(machine.is_over_age_degraded());
+  assert_reason_eq(ActiveConnectionRotationExemptionReason::None, machine.rotation_exemption_reason());
+}
+
+TEST(ActiveConnectionLifecycleStateMachine, RetryBackoffStillSignalsOverAgeAfterHardCeiling) {
+  auto policy = default_policy();
+  policy.rotation_backoff_ms = 5000;
+  ActiveConnectionLifecycleStateMachine machine(ActiveConnectionLifecycleRole::Main, 1000, 2000);
+
+  machine.mark_eligible();
+  ASSERT_TRUE(machine.poll(policy, ActiveConnectionLifecycleInput{2000, false, false, false, false, true, true})
+                  .prepare_successor);
+  machine.mark_successor_failed(2050, policy.rotation_backoff_ms, ActiveConnectionRotationExemptionReason::None);
+
+  auto decision = machine.poll(policy, ActiveConnectionLifecycleInput{6100, true, false, false, false, true, true});
+
+  ASSERT_FALSE(decision.prepare_successor);
+  ASSERT_FALSE(decision.route_new_queries_to_successor);
+  ASSERT_FALSE(decision.retire_current);
+  ASSERT_TRUE(decision.over_age_degraded);
+  assert_state_eq(ActiveConnectionLifecycleState::RotationPending, machine.state());
+  ASSERT_FALSE(machine.has_successor());
+  ASSERT_TRUE(machine.is_over_age_degraded());
+  assert_reason_eq(ActiveConnectionRotationExemptionReason::None, machine.rotation_exemption_reason());
+}
+
+TEST(ActiveConnectionLifecycleStateMachine, PendingSuccessorIgnoresFreshDestinationBudgetSuppression) {
+  auto policy = default_policy();
+  ActiveConnectionLifecycleStateMachine machine(ActiveConnectionLifecycleRole::Main, 1000, 2000);
+
+  machine.mark_eligible();
+  auto opening = machine.poll(policy, ActiveConnectionLifecycleInput{2000, false, false, false, false, true, true});
+  ASSERT_TRUE(opening.prepare_successor);
+  ASSERT_TRUE(machine.has_successor());
+
+  auto decision = machine.poll(policy, ActiveConnectionLifecycleInput{2500, false, false, false, false, false, false});
+
+  ASSERT_FALSE(decision.prepare_successor);
+  ASSERT_FALSE(decision.route_new_queries_to_successor);
+  ASSERT_FALSE(decision.retire_current);
+  ASSERT_FALSE(decision.over_age_degraded);
+  assert_state_eq(ActiveConnectionLifecycleState::RotationPending, machine.state());
+  ASSERT_TRUE(machine.has_successor());
+  assert_reason_eq(ActiveConnectionRotationExemptionReason::None, machine.rotation_exemption_reason());
+}
+
+TEST(ActiveConnectionLifecycleStateMachine, PendingSuccessorOverAgeDoesNotMislabelBudgetOrAntiChurnExemption) {
+  auto policy = default_policy();
+  ActiveConnectionLifecycleStateMachine machine(ActiveConnectionLifecycleRole::Main, 1000, 2000);
+
+  machine.mark_eligible();
+  ASSERT_TRUE(machine.poll(policy, ActiveConnectionLifecycleInput{2000, false, false, false, false, true, true})
+                  .prepare_successor);
+  ASSERT_TRUE(machine.has_successor());
+
+  auto decision = machine.poll(policy, ActiveConnectionLifecycleInput{6100, true, false, false, false, false, false});
+
+  ASSERT_FALSE(decision.prepare_successor);
+  ASSERT_FALSE(decision.route_new_queries_to_successor);
+  ASSERT_FALSE(decision.retire_current);
+  ASSERT_TRUE(decision.over_age_degraded);
+  assert_state_eq(ActiveConnectionLifecycleState::RotationPending, machine.state());
+  ASSERT_TRUE(machine.has_successor());
+  ASSERT_TRUE(machine.is_over_age_degraded());
+  assert_reason_eq(ActiveConnectionRotationExemptionReason::None, machine.rotation_exemption_reason());
+}
+
 TEST(ActiveConnectionLifecycleStateMachine, SuppressedRotationDoesNotSignalOverAgeBeforeHardCeiling) {
   auto policy = default_policy();
   ActiveConnectionLifecycleStateMachine machine(ActiveConnectionLifecycleRole::Main, 1000, 2000);
@@ -321,4 +405,4 @@ TEST(ActiveConnectionLifecycleStateMachine, ShutdownSuppressesSuccessorPreparati
   ASSERT_TRUE(resumed.prepare_successor);
 }
 
-}  // namespace
+}  // namespace active_connection_lifecycle_state_machine_test

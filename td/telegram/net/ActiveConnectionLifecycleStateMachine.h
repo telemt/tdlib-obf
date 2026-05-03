@@ -69,6 +69,8 @@ class ActiveConnectionLifecycleStateMachine final {
   void rearm(ActiveConnectionLifecycleRole role, uint64 opened_at_ms, uint64 rotate_after_at_ms) noexcept;
   void mark_eligible() noexcept;
   bool mark_successor_ready(uint64 now_ms) noexcept;
+  bool mark_successor_closed_before_cutover(uint64 now_ms, uint32 rotation_backoff_ms,
+                                            ActiveConnectionRotationExemptionReason reason) noexcept;
   void mark_successor_failed(uint64 now_ms, uint32 rotation_backoff_ms,
                              ActiveConnectionRotationExemptionReason reason) noexcept;
 

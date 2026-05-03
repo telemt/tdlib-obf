@@ -211,6 +211,15 @@ inline string synthesize_server_hello_wire(const ServerHelloFixtureSample &sampl
 // output to a matching SH.
 inline Slice representative_server_hello_path_for_family(Slice family_hint) {
   string lower = to_lower(family_hint);
+  if (lower.find("ios14") != string::npos || lower.find("apple_ios") != string::npos) {
+    return Slice("ios/safari26_3_ios26_3_1_83afd3bc.serverhello.json");
+  }
+  if (lower.find("chrome147") != string::npos && lower.find("windows") != string::npos) {
+    return Slice("windows/chrome147_0_7727_55_windows10_22h2_19045_7058_b9b21355.serverhello.json");
+  }
+  if (lower.find("firefox149") != string::npos && lower.find("windows") != string::npos) {
+    return Slice("windows/firefox149_0_2_windows10_pro_22h2_19045_6456_e32b3ddb.serverhello.json");
+  }
   if (lower.find("chrome133") != string::npos || lower.find("chrome131") != string::npos ||
       lower.find("chrome120") != string::npos) {
     return Slice("android/chrome143_0_7499_192_android15_1_2_bf770816.serverhello.json");

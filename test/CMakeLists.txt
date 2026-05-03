@@ -16,10 +16,14 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_rotation_gate_snapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_controller_rotation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_runtime_policy_reload_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_flow_destination_budget_joint_gate_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_lifecycle_report.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/connection_lifecycle_report_rotation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/active_connection_lifecycle_state_machine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/active_connection_lifecycle_cutover_failure_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/active_connection_lifecycle_runtime_reload_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/session_new_session_resend_scope.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/db.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sqlite_phase3_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sqlite_phase3_adversarial.cpp
@@ -173,6 +177,8 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_option_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_data_session_mode_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_bootstrap_state_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_handover_cutover_failure_source_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_new_session_resend_scope_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_protocol_envelope_frame_safety.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_policy_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_online_update_adversarial.cpp
@@ -427,6 +433,9 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_record_padding_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_runtime_params.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_runtime_defaults_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_params_flow_behavior_fail_closed.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_profile_policy_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_darwin_profile_stress.cpp
@@ -460,6 +469,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_post_handshake_greeting_backlog_matrix_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_post_handshake_greeting_cap_boundary_matrix_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_post_handshake_greeting_override_cross_matrix_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_greeting_model_overflow_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_greeting_baseline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_size_correlation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_bidirectional_size_correlation_adversarial.cpp
@@ -489,7 +499,9 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_budget_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_scheduler_time_fail_closed_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_fail_closed.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_model_overflow_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_nonfinite_fail_closed.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_config_chaff_overflow_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_record_size_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_decorator_record_padding_budget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_record_padding_budget_interactions.cpp
@@ -543,6 +555,7 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_activation_fail_closed.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_seam.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_transport_integration_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stealth_transport_runtime_threshold_reload_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_drs_wire.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_record_size_sequence_hardening_wire.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_stream_transport_drs_primer_transition_wire.cpp
@@ -636,6 +649,10 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_full_handshake_family_pairing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_first_flight_layout_pairing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_verified_profile_serverhello_pairing_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_fixture_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_pairing_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_pairing_adversarial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_runtime_serverhello_pairing_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_grease_structural_positions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_structural_invariants_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_tls_hmac_replay_adversarial.cpp
@@ -939,7 +956,10 @@ if(NOT CMAKE_CROSSCOMPILING OR EMSCRIPTEN)
       add_test(run_all_tests run_all_tests)
     endif()
   else()
-    message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")
+    message(
+      STATUS
+        "run_all_tests executable is not available during configure; registering umbrella CTest entry"
+    )
     add_test(run_all_tests run_all_tests)
   endif()
 endif()

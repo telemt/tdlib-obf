@@ -121,17 +121,21 @@ struct Harness {
   RecordingTransport *inner{nullptr};
   MockClock *clock{nullptr};
 
-  static Harness create_ipt() {
+  static Harness create_with_config(StealthConfig config) {
     Harness h;
     auto inner = td::make_unique<RecordingTransport>();
     h.inner = inner.get();
     auto clock = td::make_unique<MockClock>();
     h.clock = clock.get();
-    auto dec = StealthTransportDecorator::create(std::move(inner), make_config_with_ipt(), td::make_unique<MockRng>(7),
-                                                 std::move(clock));
+    auto dec =
+        StealthTransportDecorator::create(std::move(inner), config, td::make_unique<MockRng>(7), std::move(clock));
     ASSERT_TRUE(dec.is_ok());
     h.transport = dec.move_as_ok();
     return h;
+  }
+
+  static Harness create_ipt() {
+    return create_with_config(make_config_with_ipt());
   }
 
   void receive_bytes(size_t bytes) {
@@ -233,6 +237,59 @@ TEST(JitterClearNonHead, BothItemsDrainAtKeepaliveDeadline) {
   // - A: head, deadline = flush_time, drains first
   // - B: send_at was cleared to t0+3ms (= A's deadline) ≤ flush_time, drains next
   ASSERT_EQ(2, h.inner->write_calls);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// RISK JitterClearNonHead-4: Wrapped ring iteration must clear tail items too
+// ──────────────────────────────────────────────────────────────────────
+
+TEST(JitterClearNonHead, WrappedRingTailItemsAlsoClearAndDrainAfterLargeResponse) {
+  auto config = make_config_with_ipt();
+  config.chaff_policy.enabled = false;
+  config.ring_capacity = 3;
+  config.high_watermark = 2;
+  config.low_watermark = 1;
+
+  auto h = Harness::create_with_config(config);
+  double t0 = h.clock->now();
+
+  // Prime the queue so Interactive writes receive deterministic IPT delay.
+  h.queue_write(TrafficHint::Keepalive);
+  h.queue_write(TrafficHint::Interactive);  // A @ t0+3ms
+  h.flush_at(t0);                           // drain Keepalive only
+  ASSERT_EQ(1, h.inner->write_calls);
+
+  // Queue two jittered writes behind A.
+  h.receive_bytes(kSmallBytes);
+  h.queue_write(TrafficHint::Interactive);  // B @ t0+23ms
+  h.receive_bytes(kSmallBytes);
+  h.queue_write(TrafficHint::Interactive);  // C @ t0+23ms
+
+  // Drain A only so the ring head moves forward; the next enqueue wraps tail
+  // storage back to index 0 and exercises ShaperRingBuffer::for_each() across
+  // wrapped indices [head..end, 0..tail].
+  h.inner->writes_per_flush_budget_result = 1;
+  h.clock->advance(kIptBurstMs / 1000.0);
+  h.flush_at(h.clock->now());
+  ASSERT_EQ(2, h.inner->write_calls);
+
+  // Queue one more jittered write after wrap-around.
+  h.receive_bytes(kSmallBytes);
+  h.queue_write(TrafficHint::Interactive);  // D @ now+23ms, stored at wrapped tail index
+
+  // Large response clears stale jitter on all queued items, including the
+  // wrapped tail entry. B/C clear to t0+3ms; D clears to now+3ms.
+  h.receive_bytes(kLargeBytes);
+
+  h.inner->writes_per_flush_budget_result = -1;
+  h.clock->advance(kIptBurstMs / 1000.0);
+  h.flush_at(h.clock->now());
+
+  // If wrapped iteration skipped D, it would remain queued until its original
+  // t0+26ms deadline and the final batch would only contain B+C.
+  ASSERT_EQ(3, h.inner->write_calls);
+  ASSERT_EQ("payloadpayloadpayload", h.inner->written_payloads.back());
+  ASSERT_EQ(0.0, h.transport->get_shaping_wakeup());
 }
 
 // ──────────────────────────────────────────────────────────────────────
