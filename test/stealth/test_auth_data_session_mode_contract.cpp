@@ -17,7 +17,7 @@ TEST(AuthDataSessionModeContract, ProductionSetterKeepsKeyedMode) {
   td::net_health::reset_net_monitor_for_tests();
   td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   SCOPE_EXIT {
-    td::mtproto::AuthData::set_legacy_session_mode_for_tests(true);
+    td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   };
 
   td::mtproto::AuthData auth_data;
@@ -32,7 +32,7 @@ TEST(AuthDataSessionModeContract, InternalSetterPreservesKeyedMode) {
   td::net_health::reset_net_monitor_for_tests();
   td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   SCOPE_EXIT {
-    td::mtproto::AuthData::set_legacy_session_mode_for_tests(true);
+    td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   };
 
   td::mtproto::AuthData auth_data;
@@ -47,7 +47,7 @@ TEST(AuthDataSessionModeContract, ExplicitTestOverrideAllowsLegacyMode) {
   td::net_health::reset_net_monitor_for_tests();
   td::mtproto::AuthData::set_legacy_session_mode_for_tests(true);
   SCOPE_EXIT {
-    td::mtproto::AuthData::set_legacy_session_mode_for_tests(true);
+    td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   };
 
   td::mtproto::AuthData auth_data;
@@ -62,7 +62,7 @@ TEST(AuthDataSessionModeContract, PolicyOverrideKeepsLegacyModeWithoutCoerceCoun
   td::net_health::reset_net_monitor_for_tests();
   td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   SCOPE_EXIT {
-    td::mtproto::AuthData::set_legacy_session_mode_for_tests(true);
+    td::mtproto::AuthData::set_legacy_session_mode_for_tests(false);
   };
 
   td::mtproto::AuthData auth_data;

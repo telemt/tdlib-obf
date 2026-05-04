@@ -515,9 +515,9 @@ inline bool make_invalid_curve25519_coordinate(MutableSlice key_data) {
 
   string candidate = key_data.str();
   for (size_t byte_index = 0; byte_index < candidate.size(); byte_index++) {
-    for (uint8 bit = 1; bit != 0; bit <<= 1) {
+    for (uint16 bit = 1; bit <= 0x80; bit <<= 1) {
       auto mutated = candidate;
-      mutated[byte_index] = static_cast<char>(static_cast<uint8>(mutated[byte_index]) ^ bit);
+      mutated[byte_index] = static_cast<char>(static_cast<uint8>(mutated[byte_index]) ^ static_cast<uint8>(bit));
       if (!is_valid_curve25519_public_coordinate(mutated)) {
         key_data.copy_from(mutated);
         return true;

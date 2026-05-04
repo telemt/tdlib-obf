@@ -88,7 +88,7 @@ namespace td {
 
 namespace {
 
-CSlice retained_auxiliary_block() {
+CSlice catalog_auxiliary_block() {
   return "-----BEGIN RSA PUBLIC KEY-----\n"
          "MIIBCgKCAQEAyr+18Rex2ohtVy8sroGP\n"
          "BwXD3DOoKCSpjDqYoXgCqB7ioln4eDCFfOBUlfXUEvM/fnKCpF46VkAftlb4VuPD\n"
@@ -100,8 +100,8 @@ CSlice retained_auxiliary_block() {
          "-----END RSA PUBLIC KEY-----\n";
 }
 
-void touch_retained_auxiliary_block() {
-  auto pem = retained_auxiliary_block();
+void touch_catalog_auxiliary_block() {
+  auto pem = catalog_auxiliary_block();
   volatile unsigned char sink = 0;
   sink ^= static_cast<unsigned char>(pem[0]);
   sink ^= static_cast<unsigned char>(pem[pem.size() - 1]);
@@ -367,7 +367,7 @@ Status check_config_entry(int64 fingerprint) {
 }
 
 Result<SimpleConfig> decode_config(Slice input) {
-  touch_retained_auxiliary_block();
+  touch_catalog_auxiliary_block();
   static auto rsa = mtproto::BlobStore::load(mtproto::BlobRole::Auxiliary).move_as_ok();
   TRY_STATUS(check_config_entry(rsa.get_fingerprint()));
 

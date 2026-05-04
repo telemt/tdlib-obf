@@ -99,9 +99,8 @@ Status validate_platform_hints(const RuntimePlatformHints &platform) {
 }
 
 Status validate_flow_behavior(const RuntimeFlowBehaviorPolicy &flow_behavior) {
-  if (flow_behavior.max_connects_per_10s_per_destination < 1 ||
-      flow_behavior.max_connects_per_10s_per_destination > 30) {
-    return Status::Error("flow_behavior.max_connects_per_10s_per_destination must be within [1, 30]");
+  if (flow_behavior.max_connects_per_10s_per_destination > 30) {
+    return Status::Error("flow_behavior.max_connects_per_10s_per_destination must be within [0, 30]");
   }
   if (!std::isfinite(flow_behavior.min_reuse_ratio) || flow_behavior.min_reuse_ratio < 0.0 ||
       flow_behavior.min_reuse_ratio > 1.0) {

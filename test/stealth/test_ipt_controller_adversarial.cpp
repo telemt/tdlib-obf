@@ -161,4 +161,31 @@ TEST(IptControllerAdversarial, ExtremeNegativeMuWithZeroSigmaMustNotCollapseInte
   ASSERT_TRUE(delay > 0u);
 }
 
+// RISK: to_delay_us overflow UB
+// When burst_max_ms is astronomically large (>> 2^64 / 1000), multiplying by
+// 1000.0 to get microseconds overflows uint64.  The long-double guard added
+// in the last commit must clamp the result to UINT64_MAX instead of invoking
+// UB.  Config validation normally rejects such values, but the guard is
+// defense-in-depth when IptParams are constructed directly (e.g. via an
+// operator error or a future code path that bypasses validation).
+TEST(IptControllerAdversarial, BurstMaxMsExceedingUint64RangeReturnsUint64Max) {
+  IptParams params = make_boundary_params();
+  params.p_idle_to_burst = 1.0;
+  params.p_burst_stay = 1.0;
+  // 2e16 ms >> UINT64_MAX / 1000 ≈ 1.844e13 ms.
+  // With sigma=0: delay_ms = exp(mu) = 2e16, capped at burst_max_ms = 2e16.
+  // to_delay_us(2e16) must not UB-cast to uint64 — it must return UINT64_MAX.
+  params.burst_mu_ms = std::log(2e16);
+  params.burst_sigma = 0.0;
+  params.burst_max_ms = 2e16;
+
+  // One RNG draw for the Idle→Burst transition (any value works with
+  // p_idle_to_burst=1.0); sigma=0 so no further draws needed.
+  SequenceRng rng({0u});
+  IptController controller(params, rng);
+
+  auto delay = controller.next_delay_us(true, TrafficHint::Interactive);
+  ASSERT_EQ(delay, std::numeric_limits<td::uint64>::max());
+}
+
 }  // namespace

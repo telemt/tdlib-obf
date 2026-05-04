@@ -104,7 +104,7 @@ class SessionCallback final : public Session::Callback {
 };
 
 SessionProxy::SessionProxy(unique_ptr<Callback> callback, std::shared_ptr<AuthDataShared> shared_auth_data,
-                           bool is_primary, bool is_main, bool allow_media_only, bool is_media, bool use_pfs,
+                           bool is_primary, bool is_main, bool allow_media_only, bool is_media, bool mode_flag,
                            bool persist_tmp_auth_key, bool is_cdn, bool need_destroy_auth_key)
     : callback_(std::move(callback))
     , auth_data_(std::move(shared_auth_data))
@@ -112,8 +112,8 @@ SessionProxy::SessionProxy(unique_ptr<Callback> callback, std::shared_ptr<AuthDa
     , is_main_(is_main)
     , allow_media_only_(allow_media_only)
     , is_media_(is_media)
-    , use_pfs_(use_pfs)
-    , persist_tmp_auth_key_(use_pfs && persist_tmp_auth_key)
+    , mode_flag_(mode_flag)
+    , persist_tmp_auth_key_(mode_flag && persist_tmp_auth_key)
     , is_cdn_(is_cdn)
     , need_destroy_auth_key_(need_destroy_auth_key) {
 }
@@ -246,7 +246,7 @@ void SessionProxy::open_session(bool force) {
   if (allow_media_only_ && !is_cdn_) {
     int_dc_id = -int_dc_id;
   }
-  if (is_main_ && use_pfs_ && !tmp_auth_key_.empty()) {
+  if (is_main_ && mode_flag_ && !tmp_auth_key_.empty()) {
     send_closure_later(G()->td(), &Td::on_update, telegram_api::make_object<telegram_api::updates>(),
                        tmp_auth_key_.id());
   }
@@ -255,7 +255,7 @@ void SessionProxy::open_session(bool force) {
       name,
       td::make_unique<SessionCallback>(actor_shared(this, session_generation_), dc_id, allow_media_only_, is_media_,
                                        hash, rotation_gate_snapshot),
-      auth_data_, raw_dc_id, int_dc_id, is_primary_, is_main_, use_pfs_, persist_tmp_auth_key_, is_cdn_,
+      auth_data_, raw_dc_id, int_dc_id, is_primary_, is_main_, mode_flag_, persist_tmp_auth_key_, is_cdn_,
       need_destroy_auth_key_, tmp_auth_key_, server_salts_);
 }
 

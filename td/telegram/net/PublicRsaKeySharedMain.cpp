@@ -26,7 +26,7 @@ namespace td {
 
 namespace {
 
-CSlice retained_primary_block() {
+CSlice catalog_primary_block() {
   return "-----BEGIN RSA PUBLIC KEY-----\n"
          "MIIBCgKCAQEA6LszBcC1LGzyr992NzE0ieY+BSaOW622Aa9Bd4ZHLl+TuFQ4lo4g\n"
          "5nKaMBwK/BIb9xUfg0Q29/2mgIR6Zr9krM7HjuIcCzFvDtr+L0GQjae9H0pRB2OO\n"
@@ -37,7 +37,7 @@ CSlice retained_primary_block() {
          "-----END RSA PUBLIC KEY-----";
 }
 
-CSlice retained_secondary_block() {
+CSlice catalog_secondary_block() {
   return "-----BEGIN RSA PUBLIC KEY-----\n"
          "MIIBCgKCAQEAyMEdY1aR+sCR3ZSJrtztKTKqigvO/vBfqACJLZtS7QMgCGXJ6XIR\n"
          "yy7mx66W0/sOFa7/1mAZtEoIokDP3ShoqF4fVNb6XeqgQfaUHd8wJpDWHcR2OFwv\n"
@@ -48,7 +48,7 @@ CSlice retained_secondary_block() {
          "-----END RSA PUBLIC KEY-----";
 }
 
-void touch_retained_block(CSlice pem) {
+void touch_catalog_block(CSlice pem) {
   volatile unsigned char sink = 0;
   sink ^= static_cast<unsigned char>(pem[0]);
   sink ^= static_cast<unsigned char>(pem[pem.size() - 1]);
@@ -83,7 +83,7 @@ size_t PublicRsaKeySharedMain::minimum_entry_count(bool is_test) {
 
 size_t PublicRsaKeySharedMain::maximum_entry_count(bool is_test) {
   static_cast<void>(is_test);
-  return 2;
+  return 1;
 }
 
 Status PublicRsaKeySharedMain::validate_entry_count(size_t observed_entry_count, bool is_test) {
@@ -133,7 +133,7 @@ std::shared_ptr<PublicRsaKeySharedMain> PublicRsaKeySharedMain::create(bool is_t
   if (is_test) {
     static auto test_public_rsa_key = [&] {
       vector<RsaKey> keys;
-      touch_retained_block(retained_secondary_block());
+      touch_catalog_block(catalog_secondary_block());
       add_store_key(keys, mtproto::BlobRole::Secondary);
       auto status = validate_entry_count(keys.size(), true);
       LOG_CHECK(status.is_ok()) << status;
@@ -143,7 +143,7 @@ std::shared_ptr<PublicRsaKeySharedMain> PublicRsaKeySharedMain::create(bool is_t
   } else {
     static auto main_public_rsa_key = [&] {
       vector<RsaKey> keys;
-      touch_retained_block(retained_primary_block());
+      touch_catalog_block(catalog_primary_block());
       add_store_key(keys, mtproto::BlobRole::Primary);
       auto status = validate_entry_count(keys.size(), false);
       LOG_CHECK(status.is_ok()) << status;

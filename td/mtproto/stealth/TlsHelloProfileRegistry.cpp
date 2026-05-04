@@ -149,6 +149,7 @@ constexpr ProfileFixtureMetadata PROFILE_FIXTURES[] = {
 
 constexpr Slice kRuntimeEchStoreKeyPrefix("stealth_ech_cb#");
 constexpr uint32 kRouteFailureKeyBucketSeconds = 86400;
+constexpr size_t kMaxRouteFailureAliasDotsForLookup = 8;
 
 struct RouteFailureCacheEntry final {
   RouteFailureState state;
@@ -255,6 +256,10 @@ string normalized_runtime_destination_key(Slice destination) {
   return key;
 }
 
+bool has_runtime_destination_identity(Slice destination) {
+  return !normalized_runtime_destination_key(destination).empty();
+}
+
 string runtime_destination_key_preserving_case(Slice destination) {
   auto key = destination.substr(0, ProxySecret::MAX_DOMAIN_LENGTH).str();
   while (!key.empty() && key.back() == '.') {
@@ -302,6 +307,7 @@ td::vector<string> route_failure_store_keys_for_lookup(Slice destination, int32 
   auto max_alias_dots = ProxySecret::MAX_DOMAIN_LENGTH > canonical_destination_key.size()
                             ? ProxySecret::MAX_DOMAIN_LENGTH - canonical_destination_key.size()
                             : 0;
+  max_alias_dots = std::min(max_alias_dots, kMaxRouteFailureAliasDotsForLookup);
   td::vector<string> destination_variants;
   destination_variants.reserve(3);
   destination_variants.push_back(canonical_destination_key);
@@ -341,6 +347,7 @@ td::vector<string> legacy_route_failure_store_keys_for_lookup(Slice destination,
   auto max_alias_dots = ProxySecret::MAX_DOMAIN_LENGTH > canonical_destination_key.size()
                             ? ProxySecret::MAX_DOMAIN_LENGTH - canonical_destination_key.size()
                             : 0;
+  max_alias_dots = std::min(max_alias_dots, kMaxRouteFailureAliasDotsForLookup);
 
   td::vector<string> keys;
   td::vector<string> destination_variants;
@@ -593,9 +600,12 @@ bool try_load_casefold_route_failure_cache_entry_locked(Slice destination, int32
     }
 
     if (!parse_route_failure_cache_entry(candidate.value, entry)) {
-      entry = make_fail_closed_route_failure_cache_entry();
-      erase_casefold_store_lookup_candidates_locked(candidates);
-      return true;
+      // Erase only the malformed candidate and keep searching. Erasing all
+      // candidates here would silently truncate a longer-lived active-block
+      // that follows this entry in rank order, replacing it with the short
+      // fail_closed TTL.
+      store->erase(candidate.key);
+      continue;
     }
     if (!entry.disabled_until || entry.disabled_until.is_in_past()) {
       if (saw_expired_blocked_entry != nullptr && entry.state.ech_block_suspected) {
@@ -934,6 +944,9 @@ void note_runtime_ech_decision(const RuntimeEchDecision &decision, bool ech_enab
 }
 
 void note_runtime_ech_failure(Slice destination, int32 unix_time) {
+  if (!tls_hello_profile_registry_internal::has_runtime_destination_identity(destination)) {
+    return;
+  }
   auto runtime_params = get_runtime_stealth_params_snapshot();
   auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
   auto &entry = tls_hello_profile_registry_internal::route_failure_cache()
@@ -954,6 +967,9 @@ void note_runtime_ech_failure(Slice destination, int32 unix_time) {
 }
 
 void note_runtime_ech_success(Slice destination, int32 unix_time) {
+  if (!tls_hello_profile_registry_internal::has_runtime_destination_identity(destination)) {
+    return;
+  }
   auto lock = std::scoped_lock(tls_hello_profile_registry_internal::route_failure_cache_mutex());
   tls_hello_profile_registry_internal::route_failure_cache().erase(
       tls_hello_profile_registry_internal::route_failure_cache_key(destination, unix_time));
@@ -1183,6 +1199,13 @@ RuntimeEchDecision get_runtime_ech_decision(Slice destination, int32 unix_time,
     return decision;
   }
   if (route_policy.ech_mode == EchMode::Disabled) {
+    decision.ech_mode = EchMode::Disabled;
+    decision.disabled_by_route = true;
+    return decision;
+  }
+  if (!tls_hello_profile_registry_internal::has_runtime_destination_identity(destination)) {
+    // Empty/degenerate destinations are invalid for stable per-destination
+    // route-failure accounting; fail closed without touching persistent state.
     decision.ech_mode = EchMode::Disabled;
     decision.disabled_by_route = true;
     return decision;

@@ -276,8 +276,8 @@ class AuthData {
     seq_no_ = 0;
   }
 
-  void set_session_mode(bool use_pfs);
-  void set_session_mode_from_policy(bool use_pfs);
+  void set_session_mode(bool keyed);
+  void set_session_mode_from_policy(bool keyed);
   static void set_legacy_session_mode_for_tests(bool allow);
 
   bool is_keyed_session() const {

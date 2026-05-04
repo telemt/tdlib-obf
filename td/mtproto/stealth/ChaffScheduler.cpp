@@ -10,9 +10,7 @@
 #include <cmath>
 #include <limits>
 
-namespace td {
-namespace mtproto {
-namespace stealth {
+namespace td::mtproto::stealth {
 
 namespace chaff_scheduler_internal {
 
@@ -89,8 +87,7 @@ double ChaffScheduler::get_wakeup_for_target(double now, bool has_pending_data, 
     return 0.0;
   }
   auto wakeup = next_send_at_;
-  auto resume_at = budget_resume_at_for_target(now, static_cast<uint64>(target_bytes));
-  if (resume_at != 0.0) {
+  if (auto resume_at = budget_resume_at_for_target(now, static_cast<uint64>(target_bytes)); resume_at != 0.0) {
     wakeup = max_double(wakeup, resume_at);
   }
   return wakeup;
@@ -146,8 +143,7 @@ double ChaffScheduler::budget_resume_at(double now) const {
 
 double ChaffScheduler::budget_resume_at_for_target(double now, uint64 target_bytes) const {
   auto saturating_add = [](uint64 left, uint64 right) {
-    const auto max_uint64 = std::numeric_limits<uint64>::max();
-    if (right >= max_uint64 - left) {
+    if (const auto max_uint64 = std::numeric_limits<uint64>::max(); right >= max_uint64 - left) {
       return max_uint64;
     }
     return left + right;
@@ -171,15 +167,13 @@ double ChaffScheduler::budget_resume_at_for_target(double now, uint64 target_byt
     return 0.0;
   }
   if (target_bytes > byte_limit) {
-    if (earliest_resume == 0.0) {
-      // Unsatisfiable target on an empty window: fail closed and defer retry.
-      auto deferred_resume = now + kBudgetWindowSeconds;
-      if (!is_finite_time(deferred_resume) || deferred_resume <= now) {
-        deferred_resume = std::numeric_limits<double>::max();
-      }
-      return deferred_resume;
+    // Unsatisfiable target: no amount of budget aging can make it sendable.
+    // Defer from current time instead of chasing sample-expiry boundaries.
+    auto deferred_resume = now + kBudgetWindowSeconds;
+    if (!is_finite_time(deferred_resume) || deferred_resume <= now) {
+      deferred_resume = std::numeric_limits<double>::max();
     }
-    return earliest_resume;
+    return deferred_resume;
   }
   if (bytes <= byte_limit && target_bytes <= byte_limit - bytes) {
     return 0.0;
@@ -221,6 +215,4 @@ double ChaffScheduler::sample_interval_seconds() {
   return std::max(min_interval_seconds, sampled_seconds);
 }
 
-}  // namespace stealth
-}  // namespace mtproto
-}  // namespace td
+}  // namespace td::mtproto::stealth

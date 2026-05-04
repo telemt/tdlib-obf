@@ -33,8 +33,8 @@ class SessionProxy final : public Actor {
   };
 
   SessionProxy(unique_ptr<Callback> callback, std::shared_ptr<AuthDataShared> shared_auth_data, bool is_primary,
-               bool is_main, bool allow_media_only, bool is_media, bool use_pfs, bool persist_tmp_auth_key, bool is_cdn,
-               bool need_destroy_auth_key);
+               bool is_main, bool allow_media_only, bool is_media, bool mode_flag, bool persist_tmp_auth_key,
+               bool is_cdn, bool need_destroy_auth_key);
 
   void send(NetQueryPtr query);
 
@@ -50,7 +50,7 @@ class SessionProxy final : public Actor {
   bool is_main_;
   bool allow_media_only_;
   bool is_media_;
-  bool use_pfs_;
+  bool mode_flag_;
   bool persist_tmp_auth_key_;
   mtproto::AuthKey tmp_auth_key_;
   std::vector<mtproto::ServerSalt> server_salts_;

@@ -13,19 +13,19 @@
 namespace {
 
 TEST(DispatcherTransportAdversarial, ZeroSessionCountStillKeepsProtectedMode) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, 0));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, 0));
 }
 
 TEST(DispatcherTransportAdversarial, NegativeSessionCountStillKeepsProtectedMode) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, -1));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, -1));
 }
 
 TEST(DispatcherTransportAdversarial, MinimumIntSessionCountStillKeepsProtectedMode) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, std::numeric_limits<td::int32>::min()));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, std::numeric_limits<td::int32>::min()));
 }
 
 TEST(DispatcherTransportAdversarial, MaximumIntSessionCountStillKeepsProtectedMode) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, std::numeric_limits<td::int32>::max()));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, std::numeric_limits<td::int32>::max()));
 }
 
 }  // namespace

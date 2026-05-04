@@ -1533,6 +1533,10 @@ add_library(tdmtproto STATIC ${TD_MTPROTO_SOURCE})
 target_include_directories(
   tdmtproto PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
                    $<BUILD_INTERFACE:${TL_TD_AUTO_INCLUDE_DIR}>)
+if(BUILD_TESTING)
+  target_compile_definitions(tdmtproto
+                             PRIVATE TD_ALLOW_LEGACY_SESSION_MODE_FOR_TESTS=1)
+endif()
 target_include_directories(tdmtproto SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(
   tdmtproto

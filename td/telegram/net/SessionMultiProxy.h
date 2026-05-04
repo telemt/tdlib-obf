@@ -8,6 +8,7 @@
 
 #include "td/telegram/net/AuthDataShared.h"
 #include "td/telegram/net/NetQuery.h"
+#include "td/telegram/net/SessionKeyScheduleMode.h"
 
 #include "td/actor/actor.h"
 
@@ -20,7 +21,7 @@ class SessionProxy;
 class SessionMultiProxy final : public Actor {
  public:
   SessionMultiProxy(int32 session_count, std::shared_ptr<AuthDataShared> shared_auth_data, bool is_primary,
-                    bool is_main, bool use_pfs, bool allow_media_only, bool is_media, bool is_cdn);
+                    bool is_main, bool mode_flag, bool allow_media_only, bool is_media, bool is_cdn);
   SessionMultiProxy(const SessionMultiProxy &) = delete;
   SessionMultiProxy &operator=(const SessionMultiProxy &) = delete;
   ~SessionMultiProxy() final;
@@ -29,8 +30,8 @@ class SessionMultiProxy final : public Actor {
   void update_main_flag(bool is_main);
 
   void update_session_count(int32 session_count);
-  void update_use_pfs(bool use_pfs);
-  void update_options(int32 session_count, bool use_pfs, bool need_destroy_auth_key);
+  void update_mode_flag(bool mode_flag);
+  void update_options(int32 session_count, bool mode_flag, bool need_destroy_auth_key);
   void update_mtproto_header();
 
   void destroy_auth_key();
@@ -40,7 +41,7 @@ class SessionMultiProxy final : public Actor {
   std::shared_ptr<AuthDataShared> auth_data_;
   const bool is_primary_;
   bool is_main_ = false;
-  bool use_pfs_ = false;
+  bool mode_flag_ = false;
   bool allow_media_only_ = false;
   bool is_media_ = false;
   bool is_cdn_ = false;
@@ -55,7 +56,8 @@ class SessionMultiProxy final : public Actor {
   void start_up() final;
   void init();
 
-  bool get_pfs_flag() const;
+  bool get_mode_flag() const;
+  SessionKeyScheduleMode get_session_key_schedule_mode(int32 session_index) const;
 
   void on_query_finished(uint32 generation, int session_id);
 };

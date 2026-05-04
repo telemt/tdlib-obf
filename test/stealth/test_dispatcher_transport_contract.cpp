@@ -11,15 +11,15 @@
 namespace {
 
 TEST(DispatcherTransportContract, ProtectedModeIgnoresRelaxationRequestForSingleSession) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, 1));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, 1));
 }
 
 TEST(DispatcherTransportContract, ProtectedModeStaysEnabledWhenExplicitlyRequested) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(true, 1));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(true, 1));
 }
 
 TEST(DispatcherTransportContract, ProtectedModePersistsAcrossParallelSessions) {
-  ASSERT_TRUE(td::NetQueryDispatcher::resolve_use_pfs_policy(false, 4));
+  ASSERT_TRUE(td::NetQueryDispatcher::resolve_mode_flag_policy(false, 4));
 }
 
 }  // namespace

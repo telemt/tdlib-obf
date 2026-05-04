@@ -48,7 +48,7 @@ class NetQueryDispatcher {
   void update_session_count();
   void destroy_auth_keys(Promise<> promise, net_health::AuthKeyDestroyReason reason =
                                                 net_health::AuthKeyDestroyReason::ProgrammaticApiCall);
-  void update_use_pfs();
+  void update_mode_flag();
   void update_mtproto_header();
 
   DcId get_main_dc_id() const {
@@ -60,7 +60,7 @@ class NetQueryDispatcher {
 
   void set_verification_token(int64 verification_id, string &&token, Promise<Unit> &&promise);
 
-  static bool resolve_use_pfs_policy(bool option_use_pfs, int32 session_count);
+  static bool resolve_mode_flag_policy(bool option_mode_flag, int32 session_count);
   static Status check_shared_entry(int64 fingerprint, bool is_test);
   static bool is_known_main_dc_id(int32 raw_dc_id, bool is_test);
   static bool is_persistable_main_dc_id(int32 raw_dc_id, bool is_test);
@@ -101,7 +101,7 @@ class NetQueryDispatcher {
   bool is_dc_inited(int32 raw_dc_id);
 
   static int32 get_session_count();
-  static bool get_use_pfs();
+  static bool get_mode_flag();
   static Proxy get_active_proxy();
   static StealthConnectionCountPlan get_connection_count_plan(int32 raw_dc_id);
   void update_connection_count_policy_locked(bool notify_sessions_about_mtproto_header);

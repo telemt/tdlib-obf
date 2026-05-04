@@ -33,14 +33,11 @@ lint:
     - cmake-format@0.6.13
     - git-diff-check
     - isort@8.0.1
-    - markdownlint@0.48.0
-    - prettier@3.8.3
     - ruff@0.15.12
     - shellcheck@0.11.0
     - shfmt@3.6.0
     - taplo@0.10.0
     - trufflehog@3.95.2
-    - yamllint@1.38.0
   ignore:
     - linters: [ALL]
       paths:

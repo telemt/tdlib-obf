@@ -20,13 +20,13 @@ namespace td {
 SessionMultiProxy::~SessionMultiProxy() = default;
 
 SessionMultiProxy::SessionMultiProxy(int32 session_count, std::shared_ptr<AuthDataShared> shared_auth_data,
-                                     bool is_primary, bool is_main, bool use_pfs, bool allow_media_only, bool is_media,
-                                     bool is_cdn)
+                                     bool is_primary, bool is_main, bool mode_flag, bool allow_media_only,
+                                     bool is_media, bool is_cdn)
     : session_count_(session_count)
     , auth_data_(std::move(shared_auth_data))
     , is_primary_(is_primary)
     , is_main_(is_main)
-    , use_pfs_(use_pfs)
+    , mode_flag_(mode_flag)
     , allow_media_only_(allow_media_only)
     , is_media_(is_media)
     , is_cdn_(is_cdn) {
@@ -77,14 +77,14 @@ void SessionMultiProxy::destroy_auth_key() {
 }
 
 void SessionMultiProxy::update_session_count(int32 session_count) {
-  update_options(session_count, use_pfs_, need_destroy_auth_key_);
+  update_options(session_count, mode_flag_, need_destroy_auth_key_);
 }
 
-void SessionMultiProxy::update_use_pfs(bool use_pfs) {
-  update_options(session_count_, use_pfs, need_destroy_auth_key_);
+void SessionMultiProxy::update_mode_flag(bool mode_flag) {
+  update_options(session_count_, mode_flag, need_destroy_auth_key_);
 }
 
-void SessionMultiProxy::update_options(int32 session_count, bool use_pfs, bool need_destroy_auth_key) {
+void SessionMultiProxy::update_options(int32 session_count, bool mode_flag, bool need_destroy_auth_key) {
   if (need_destroy_auth_key_) {
     LOG(INFO) << "Ignore session option changes while destroying auth key";
     return;
@@ -99,13 +99,11 @@ void SessionMultiProxy::update_options(int32 session_count, bool use_pfs, bool n
     is_changed = true;
   }
 
-  if (use_pfs != use_pfs_) {
-    bool old_pfs_flag = get_pfs_flag();
-    use_pfs_ = use_pfs;
-    if (old_pfs_flag != get_pfs_flag()) {
-      LOG(INFO) << "Update use_pfs to " << use_pfs_;
-      is_changed = true;
-    }
+  if (mode_flag != mode_flag_) {
+    mode_flag_ = mode_flag;
+    // Compatibility signal only: keyed-mode policy is derived from explicit
+    // session path markers, not from compatibility flag flips.
+    LOG(INFO) << "Update compatibility mode flag to " << mode_flag_;
   }
 
   if (need_destroy_auth_key) {
@@ -129,8 +127,26 @@ void SessionMultiProxy::start_up() {
   init();
 }
 
-bool SessionMultiProxy::get_pfs_flag() const {
-  return use_pfs_ && !is_cdn_;
+bool SessionMultiProxy::get_mode_flag() const {
+  return mode_flag_ && !is_cdn_;
+}
+
+SessionKeyScheduleMode SessionMultiProxy::get_session_key_schedule_mode(int32 session_index) const {
+  // CDN sessions never use PFS — by protocol, not by option.
+  if (is_cdn_) {
+    return SessionKeyScheduleMode::CdnPath;
+  }
+  // The first session in a destroy cycle is the sole carrier for the destroy
+  // path.  All other sessions (if session_count_ somehow > 1 at that point)
+  // continue as Normal so they do not silently lose their keyed mode.
+  if (need_destroy_auth_key_ && session_index == 0) {
+    return SessionKeyScheduleMode::DestroyPath;
+  }
+  // Fail-closed: even if mode_flag_ were somehow coerced to false for a
+  // non-CDN, non-destroy session, we still return Normal so that
+  // session_key_schedule_requires_mode_flag() returns true and the session
+  // layer demands a temporary key.
+  return SessionKeyScheduleMode::Normal;
 }
 
 void SessionMultiProxy::init() {
@@ -142,6 +158,9 @@ void SessionMultiProxy::init() {
   for (int32 i = 0; i < session_count_; i++) {
     string name = PSTRING() << "Session" << get_name().substr(Slice("SessionMulti").size())
                             << format::cond(session_count_ > 1, format::concat("#", i));
+
+    auto session_mode = get_session_key_schedule_mode(i);
+    bool session_mode_flag = session_key_schedule_to_mode_flag(session_mode);
 
     SessionInfo info;
     class Callback final : public SessionProxy::Callback {
@@ -160,7 +179,7 @@ void SessionMultiProxy::init() {
     };
     info.proxy =
         create_actor<SessionProxy>(name, make_unique<Callback>(actor_id(this), sessions_generation_, i), auth_data_,
-                                   is_primary_, is_main_, allow_media_only_, is_media_, get_pfs_flag(),
+                                   is_primary_, is_main_, allow_media_only_, is_media_, session_mode_flag,
                                    session_count_ > 1 && is_primary_, is_cdn_, need_destroy_auth_key_ && i == 0);
     sessions_.push_back(std::move(info));
   }

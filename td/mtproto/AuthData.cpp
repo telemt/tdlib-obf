@@ -16,6 +16,10 @@
 #include <algorithm>
 #include <atomic>
 
+#ifndef TD_ALLOW_LEGACY_SESSION_MODE_FOR_TESTS
+#define TD_ALLOW_LEGACY_SESSION_MODE_FOR_TESTS 0
+#endif
+
 namespace td {
 namespace mtproto {
 namespace {
@@ -63,8 +67,13 @@ AuthData::AuthData() : duplicate_checker_{}, updates_duplicate_checker_{}, updat
 }
 
 void AuthData::set_legacy_session_mode_for_tests(bool allow) {
+#if TD_ALLOW_LEGACY_SESSION_MODE_FOR_TESTS
   // Test-only: relax the runtime enforcement so fixture code can build non-keyed sessions.
   legacy_mode_flag().store(allow, std::memory_order_relaxed);
+#else
+  static_cast<void>(allow);
+  legacy_mode_flag().store(false, std::memory_order::seq_cst);
+#endif
 }
 
 void AuthData::set_session_mode(bool keyed) {

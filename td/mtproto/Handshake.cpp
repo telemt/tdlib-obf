@@ -74,6 +74,16 @@ static Result<typename T::ReturnType> fetch_result(Slice message, Slice phase, b
   return std::move(result);
 }
 
+size_t count_distinct_entries(const vector<int64> &fingerprints) {
+  if (fingerprints.empty()) {
+    return 0;
+  }
+
+  auto distinct = fingerprints;
+  std::sort(distinct.begin(), distinct.end());
+  return static_cast<size_t>(std::unique(distinct.begin(), distinct.end()) - distinct.begin());
+}
+
 AuthKeyHandshake::AuthKeyHandshake(int32 dc_id, int32 expires_in)
     : mode_(expires_in == 0 ? Mode::Main : Mode::Temp)
     , dc_id_(dc_id)
@@ -157,7 +167,7 @@ Status AuthKeyHandshake::on_res_pq(Slice message, Callback *connection, PublicRs
   }
 
   server_nonce_ = res_pq->server_nonce_;
-  auto server_fingerprint_count = res_pq->server_public_key_fingerprints_.size();
+  auto server_fingerprint_count = count_distinct_entries(res_pq->server_public_key_fingerprints_);
   if (should_warn_on_server_entry_count(server_fingerprint_count)) {
     net_health::note_low_server_fingerprint_count(server_fingerprint_count);
     return Status::Error(PSLICE() << "Too few server entries: " << server_fingerprint_count << ", expected at least "

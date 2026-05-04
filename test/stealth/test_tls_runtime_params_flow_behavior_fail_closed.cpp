@@ -38,16 +38,19 @@ void assert_invalid(const StealthRuntimeParams &params, td::Slice expected_messa
   ASSERT_STREQ(expected_message.str().c_str(), status.message().c_str());
 }
 
-TEST(TlsRuntimeParamsFlowBehaviorFailClosed, RejectsConnectRateOutsideAllowedRange) {
+TEST(TlsRuntimeParamsFlowBehaviorFailClosed, AllowsZeroConnectRateAndRejectsValuesAboveRange) {
   RuntimeParamsGuard guard;
 
-  auto low = make_default_params();
-  low.flow_behavior.max_connects_per_10s_per_destination = 0;
-  assert_invalid(low, "flow_behavior.max_connects_per_10s_per_destination must be within [1, 30]");
+  auto zero = make_default_params();
+  zero.flow_behavior.max_connects_per_10s_per_destination = 0;
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(zero).is_ok());
+
+  auto snapshot = get_runtime_stealth_params_snapshot();
+  ASSERT_EQ(0, snapshot.flow_behavior.max_connects_per_10s_per_destination);
 
   auto high = make_default_params();
   high.flow_behavior.max_connects_per_10s_per_destination = 31;
-  assert_invalid(high, "flow_behavior.max_connects_per_10s_per_destination must be within [1, 30]");
+  assert_invalid(high, "flow_behavior.max_connects_per_10s_per_destination must be within [0, 30]");
 }
 
 TEST(TlsRuntimeParamsFlowBehaviorFailClosed, RejectsReuseRatioOutsideClosedUnitInterval) {

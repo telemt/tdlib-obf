@@ -12,6 +12,11 @@
 #include "tddb/td/db/KeyValueSyncInterface.h"
 
 #include "td/utils/tests.h"
+#include "td/utils/Time.h"
+
+#include "td/utils/port/Clocks.h"
+
+#include <cerrno>
 
 namespace {
 
@@ -334,6 +339,130 @@ TEST(EchRouteFailureCaseAliasAdversarial, LegacyBucketedUppercaseKeyReloadsForUp
 
   ASSERT_TRUE(store->get(legacy_bucketed_key).empty());
   ASSERT_FALSE(store->get("stealth_ech_cb#mixed.case.example.com").empty());
+}
+
+TEST(EchRouteFailureCaseAliasAdversarial, CasefoldLookupKeepsSearchingWhenEarlierAliasIsExpiredButLaterAliasIsActive) {
+  RuntimeCaseAliasGuard guard;
+  configure_threshold_one();
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  const td::int32 unix_time = 1712345678;
+  // Neither key is direct canonical/query-preserved/uppercase for lowercase lookup,
+  // so resolution goes through casefold fallback candidate iteration.
+  const td::string expired_alias_key = "stealth_ech_cb#MiXeD.Case.Example.com";
+  const td::string active_alias_key = "stealth_ech_cb#mIxEd.cAse.eXample.com";
+
+  store->set(expired_alias_key, "3|1|0|9223372036854770000");
+  store->set(active_alias_key, "3|1|300000|9223372036854770000");
+
+  auto decision = get_runtime_ech_decision("mixed.case.example.com", unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode == EchMode::Disabled);
+  ASSERT_TRUE(decision.disabled_by_circuit_breaker);
+
+  ASSERT_TRUE(store->get(expired_alias_key).empty());
+  ASSERT_TRUE(store->get(active_alias_key).empty());
+  ASSERT_FALSE(store->get("stealth_ech_cb#mixed.case.example.com").empty());
+}
+
+// RISK: CasefoldParsefail-AloneForcesFalseFailClosed
+// A malformed casefold alias with no valid block elsewhere should NOT cause
+// a fail_closed ECH-disable: the malformed entry is a secondary alias with no
+// authority to force a block on its own. Erasing and continuing is correct.
+//
+// RISK: CasefoldParsefail-BlockDurationInflation
+// A malformed non-legacy (rank 0) casefold alias followed by a valid short-
+// lived legacy (rank 1) casefold alias must not inflate the block duration.
+// The old code returned fail_closed (ech_disable_ttl_seconds) instead of
+// propagating the original shorter block, causing block-duration inflation
+// when ech_disable_ttl > remaining_ms of the valid entry.
+
+namespace {
+
+td::string serialize_valid_block(td::int64 remaining_ms) {
+  const td::int64 system_ms = static_cast<td::int64>(td::Clocks::system() * 1000.0);
+  return "1|1|" + std::to_string(remaining_ms) + "|" + std::to_string(system_ms);
+}
+
+td::int64 parse_persisted_remaining_ms(const td::string &value) {
+  auto first = value.find('|');
+  if (first == td::string::npos) {
+    return -1;
+  }
+  auto second = value.find('|', first + 1);
+  if (second == td::string::npos) {
+    return -1;
+  }
+  auto third = value.find('|', second + 1);
+  if (third == td::string::npos) {
+    return -1;
+  }
+  auto remaining_str = value.substr(second + 1, third - second - 1);
+  char *end = nullptr;
+  errno = 0;
+  td::int64 result = std::strtoll(remaining_str.c_str(), &end, 10);
+  if (end == nullptr || *end != '\0' || errno == ERANGE) {
+    return -1;
+  }
+  return result;
+}
+
+}  // namespace
+
+TEST(EchCasefoldParsefailAmplificationAdversarial, MalformedCasefoldAliasAloneDoesNotForceFailClosed) {
+  RuntimeCaseAliasGuard guard;
+  configure_threshold_one();
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  const td::int32 unix_time = 1712345678;
+  // Inject only a garbage non-legacy casefold alias. There is no valid active
+  // block anywhere in the store for this destination.
+  store->set("stealth_ech_cb#Mixed.Case.Example.Com", "GARBAGE");
+
+  // A malformed secondary alias alone must NOT cause ECH to be disabled.
+  // It should be discarded, and the lookup must fall through to "no block found".
+  auto decision = get_runtime_ech_decision("mixed.case.example.com", unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode != EchMode::Disabled);
+  ASSERT_FALSE(decision.disabled_by_circuit_breaker);
+}
+
+TEST(EchCasefoldParsefailAmplificationAdversarial,
+     MalformedRankZeroCasefoldDoesNotInflateValidRankOneLegacyBlockDuration) {
+  RuntimeCaseAliasGuard guard;
+  // Use a longer TTL (1 hour) so the valid 10-minute block fits well below it.
+  auto params = default_runtime_stealth_params();
+  params.platform_hints = make_linux_platform();
+  params.route_failure.ech_failure_threshold = 1;
+  params.route_failure.ech_disable_ttl_seconds = 3600.0;
+  ASSERT_TRUE(set_runtime_stealth_params_for_tests(params).is_ok());
+
+  auto store = std::make_shared<MemoryKeyValue>();
+  set_runtime_ech_failure_store(store);
+
+  // bucket for unix_time 1712345678 = 1712345678 / 86400 = 19818
+  const td::int32 unix_time = 1712345678;
+  const td::uint32 bucket = static_cast<td::uint32>(static_cast<td::int64>(unix_time) / 86400);
+
+  // Non-legacy rank-0 casefold alias with garbage payload → parse fails.
+  store->set("stealth_ech_cb#Mixed.Case.Example.Com", "GARBAGE");
+
+  // Legacy current-bucket rank-1 casefold alias with a 10-minute active block
+  // (remaining_ms = 600000). This is well below the 1-hour ech_disable_ttl.
+  store->set("stealth_ech_cb#mixed.CASE.example.com|" + std::to_string(bucket), serialize_valid_block(600000));
+
+  auto decision = get_runtime_ech_decision("mixed.case.example.com", unix_time, known_non_ru_route());
+  ASSERT_TRUE(decision.ech_mode == EchMode::Disabled);
+
+  // The canonical key must carry the original 10-minute block, NOT the
+  // inflated 1-hour fail_closed block the old code would have written.
+  // remaining_ms must be below 1 000 000 ms (~17 min), well under 3 600 000 (1h).
+  const td::string canonical_key = "stealth_ech_cb#mixed.case.example.com";
+  td::int64 persisted_remaining_ms = parse_persisted_remaining_ms(store->get(canonical_key));
+  ASSERT_TRUE(persisted_remaining_ms >= 0);
+  ASSERT_TRUE(persisted_remaining_ms < 1000000);
 }
 
 }  // namespace

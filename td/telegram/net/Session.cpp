@@ -51,6 +51,7 @@
 #include "td/utils/VectorQueue.h"
 
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -62,6 +63,14 @@ namespace {
 constexpr int32 MAX_BIND_KEY_RETRIES = 5;
 constexpr double BIND_KEY_RETRY_WINDOW = 10 * 60.0;
 constexpr double MAIN_KEY_CHECK_RETRY_DELAY = 60.0;
+constexpr int32 MAIN_KEY_CHECK_DROP_THRESHOLD = 2;
+
+double sanitize_retry_time(double timestamp) {
+  if (!std::isfinite(timestamp) || timestamp < 0.0) {
+    return 0.0;
+  }
+  return timestamp;
+}
 
 uint64 to_connection_lifecycle_ms(double timestamp) {
   if (timestamp <= 0.0) {
@@ -308,21 +317,22 @@ bool Session::PendingQueries::empty() const {
 }
 
 Session::Session(unique_ptr<Callback> callback, std::shared_ptr<AuthDataShared> shared_auth_data, int32 raw_dc_id,
-                 int32 dc_id, bool is_primary, bool is_main, bool use_pfs, bool persist_tmp_auth_key, bool is_cdn,
+                 int32 dc_id, bool is_primary, bool is_main, bool mode_flag, bool persist_tmp_auth_key, bool is_cdn,
                  bool need_destroy_auth_key, const mtproto::AuthKey &tmp_auth_key,
                  const vector<mtproto::ServerSalt> &server_salts)
     : raw_dc_id_(raw_dc_id)
     , dc_id_(dc_id)
     , is_primary_(is_primary)
     , is_main_(is_main)
-    , persist_tmp_auth_key_(use_pfs && persist_tmp_auth_key)
+    , persist_tmp_auth_key_(!is_cdn && !need_destroy_auth_key && persist_tmp_auth_key)
     , is_cdn_(is_cdn)
     , need_destroy_auth_key_(need_destroy_auth_key) {
   VLOG(dc) << "Start connection " << tag("need_destroy_auth_key", need_destroy_auth_key_);
-  // Revocation-path sessions use a simplified key schedule; suppress the keyed path.
-  bool session_keyed = use_pfs;
+  // Compatibility boolean is accepted for API stability but ignored for live policy.
+  // Only explicit path markers select non-keyed mode.
+  static_cast<void>(mode_flag);
+  bool session_keyed = !is_cdn && !need_destroy_auth_key_;
   if (need_destroy_auth_key_) {
-    session_keyed = false;
     CHECK(!is_cdn);
   }
 
@@ -345,7 +355,7 @@ Session::Session(unique_ptr<Callback> callback, std::shared_ptr<AuthDataShared> 
     session_id = Random::secure_uint64();
   } while (session_id == 0);
   auth_data_.set_session_id(session_id);
-  use_pfs_ = session_keyed;
+  mode_flag_ = session_keyed;
   LOG(WARNING) << "Generate new session_id " << session_id << " for " << (session_keyed ? "temp " : "")
                << (is_cdn ? "CDN " : "") << "auth key " << auth_data_.get_auth_key().id() << " for "
                << (is_main_ ? "main " : "") << "DC" << dc_id;
@@ -386,28 +396,47 @@ Session::EncryptedMessageInvalidAction Session::resolve_encrypted_message_invali
   return EncryptedMessageInvalidAction::DropMainAuthKey;
 }
 
-bool Session::resolve_need_send_bind_key(bool use_pfs, bool bind_flag, uint64 tmp_auth_key_id,
+bool Session::resolve_need_send_bind_key(bool mode_flag, bool bind_flag, uint64 tmp_auth_key_id,
                                          uint64 being_binded_tmp_auth_key_id, const BindKeyFailureState &failure_state,
                                          double now) {
-  if (!use_pfs || bind_flag || tmp_auth_key_id == 0 || tmp_auth_key_id == being_binded_tmp_auth_key_id) {
+  if (!mode_flag || bind_flag || tmp_auth_key_id == 0 || tmp_auth_key_id == being_binded_tmp_auth_key_id) {
     return false;
   }
   if (failure_state.tmp_auth_key_id != tmp_auth_key_id) {
     return true;
   }
-  return now >= failure_state.retry_at;
+  if (failure_state.retry_at == 0.0) {
+    return true;
+  }
+
+  auto safe_retry_at = sanitize_retry_time(failure_state.retry_at);
+  // Fail-closed on poisoned retry markers: only an explicit 0.0 bypasses retry gate.
+  if (safe_retry_at == 0.0) {
+    return false;
+  }
+  return sanitize_retry_time(now) >= safe_retry_at;
 }
 
 Session::BindKeyFailureDecision Session::note_bind_key_failure(BindKeyFailureState failure_state,
                                                                uint64 tmp_auth_key_id, double now) {
   BindKeyFailureDecision decision;
-  if (failure_state.tmp_auth_key_id != tmp_auth_key_id || tmp_auth_key_id == 0 ||
-      failure_state.window_started_at == 0.0 || now - failure_state.window_started_at >= BIND_KEY_RETRY_WINDOW) {
+  auto safe_now = sanitize_retry_time(now);
+  auto window_started_at = sanitize_retry_time(failure_state.window_started_at);
+  if (auto missing_window_start = (window_started_at == 0.0 && safe_now != 0.0);
+      failure_state.tmp_auth_key_id != tmp_auth_key_id || tmp_auth_key_id == 0 || missing_window_start ||
+      safe_now - window_started_at >= BIND_KEY_RETRY_WINDOW) {
     failure_state = {};
     failure_state.tmp_auth_key_id = tmp_auth_key_id;
-    failure_state.window_started_at = now;
+    failure_state.window_started_at = safe_now;
+  } else if (safe_now < window_started_at) {
+    // Fail-closed on rollback: keep the active retry window and budget anchored.
+    safe_now = window_started_at;
   }
 
+  if (failure_state.retry_count < 0 || failure_state.retry_count >= MAX_BIND_KEY_RETRIES) {
+    // Corrupted counters are clamped to force a terminal decision without UB.
+    failure_state.retry_count = MAX_BIND_KEY_RETRIES - 1;
+  }
   failure_state.retry_count++;
   if (failure_state.retry_count >= MAX_BIND_KEY_RETRIES) {
     decision.drop_tmp_auth_key = true;
@@ -415,7 +444,8 @@ Session::BindKeyFailureDecision Session::note_bind_key_failure(BindKeyFailureSta
     return decision;
   }
 
-  failure_state.retry_at = now + static_cast<double>(1 << (failure_state.retry_count - 1));
+  auto retry_shift = static_cast<uint32>(failure_state.retry_count - 1);
+  failure_state.retry_at = safe_now + static_cast<double>(static_cast<uint32>(1) << retry_shift);
   decision.state = failure_state;
   return decision;
 }
@@ -426,23 +456,34 @@ bool Session::resolve_need_send_check_main_key(bool need_check_main_key, uint64 
   if (!need_check_main_key || main_auth_key_id == 0 || main_auth_key_id == being_checked_main_auth_key_id) {
     return false;
   }
-  return now >= failure_state.next_retry_at;
+  return sanitize_retry_time(now) >= sanitize_retry_time(failure_state.next_retry_at);
 }
 
 Session::MainKeyCheckFailureState Session::note_main_key_check_failure(MainKeyCheckFailureState failure_state,
                                                                        double now) {
-  failure_state.failure_count++;
-  failure_state.next_retry_at = now + MAIN_KEY_CHECK_RETRY_DELAY;
+  auto safe_now = sanitize_retry_time(now);
+  auto previous_retry_at = sanitize_retry_time(failure_state.next_retry_at);
+
+  if (failure_state.failure_count < 0) {
+    failure_state.failure_count = 0;
+  }
+  if (failure_state.failure_count < MAIN_KEY_CHECK_DROP_THRESHOLD) {
+    failure_state.failure_count++;
+  }
+
+  auto candidate_retry_at = safe_now + MAIN_KEY_CHECK_RETRY_DELAY;
+  failure_state.next_retry_at = td::max(previous_retry_at, candidate_retry_at);
   return failure_state;
 }
 
 bool Session::should_drop_main_auth_key_after_check_failure(const MainKeyCheckFailureState &failure_state) {
-  return failure_state.failure_count >= 2;
+  return failure_state.failure_count >= MAIN_KEY_CHECK_DROP_THRESHOLD;
 }
 
 bool Session::resolve_need_create_main_auth_key(bool can_destroy_auth_key, bool need_main_auth_key, double now,
                                                 double reauth_not_before) {
-  return !can_destroy_auth_key && need_main_auth_key && now >= reauth_not_before;
+  return !can_destroy_auth_key && need_main_auth_key &&
+         sanitize_retry_time(now) >= sanitize_retry_time(reauth_not_before);
 }
 
 Session::ConnectionOnlineUpdateDecision Session::resolve_connection_online_update_decision(
@@ -572,18 +613,19 @@ void Session::on_bind_result(NetQueryPtr query) {
       auto auth_key_creation_date = auth_data_.get_main_auth_key().created_at();
       auto auth_key_age = server_time - auth_key_creation_date;
       auto is_server_time_reliable = G()->is_server_time_reliable();
-      auto last_success_time = use_pfs_ ? last_bind_success_timestamp_ : last_success_timestamp_;
+      auto last_success_time = mode_flag_ ? last_bind_success_timestamp_ : last_success_timestamp_;
       auto now = Time::now();
       bool has_immunity =
           !is_server_time_reliable || auth_key_age < 60 || (auth_key_age > 86400 && last_success_time > now - 86400);
       net_health::note_bind_encrypted_message_invalid(raw_dc_id_, has_immunity, auth_key_age);
       auto debug = PSTRING() << ". Server time is " << server_time << ", auth key created at " << auth_key_creation_date
-                             << ", is_server_time_reliable = " << is_server_time_reliable << ", use_pfs = " << use_pfs_
-                             << ", last_success_time = " << last_success_time << ", now = " << now;
-      switch (resolve_encrypted_message_invalid_action(use_pfs_, has_immunity)) {
+                             << ", is_server_time_reliable = " << is_server_time_reliable
+                             << ", mode_flag = " << mode_flag_ << ", last_success_time = " << last_success_time
+                             << ", now = " << now;
+      switch (resolve_encrypted_message_invalid_action(mode_flag_, has_immunity)) {
         case EncryptedMessageInvalidAction::Ignore:
-          LOG(WARNING) << (use_pfs_ ? "Do not validate main key, because it was created too recently"
-                                    : "Do not drop main key, because it was created too recently")
+          LOG(WARNING) << (mode_flag_ ? "Do not validate main key, because it was created too recently"
+                                      : "Do not drop main key, because it was created too recently")
                        << debug;
           break;
         case EncryptedMessageInvalidAction::DropMainAuthKey:
@@ -596,7 +638,7 @@ void Session::on_bind_result(NetQueryPtr query) {
           need_check_main_key_ = true;
           main_key_check_failure_state_ = {};
           main_key_check_failure_state_.next_retry_at = now;
-          LOG(WARNING) << "Receive ENCRYPTED_MESSAGE_INVALID error, validate main key while keeping PFS enabled"
+          LOG(WARNING) << "Receive ENCRYPTED_MESSAGE_INVALID error, validate main key while keeping keyed mode enabled"
                        << debug;
           break;
       }
@@ -870,7 +912,7 @@ void Session::on_closed(Status status) {
       on_auth_key_updated();
     } else {
       // log out if has error and or 1 minute is passed from start, or 1 minute has passed since auth_key creation
-      if (!use_pfs_) {
+      if (!mode_flag_) {
         LOG(WARNING) << "Use PFS to check main key";
         auth_data_.set_session_mode(true);
       } else {
@@ -924,7 +966,7 @@ void Session::on_closed(Status status) {
 
 void Session::on_new_session_created(uint64 unique_id, mtproto::MessageId first_message_id) {
   LOG(INFO) << "New session " << unique_id << " created with first " << first_message_id;
-  if (!use_pfs_ && !auth_data_.is_keyed_session()) {
+  if (!mode_flag_ && !auth_data_.is_keyed_session()) {
     last_success_timestamp_ = Time::now();
   }
   if (is_main_) {
@@ -1085,7 +1127,7 @@ Status Session::on_update(BufferSlice packet) {
     return Status::Error("Receive an update from a CDN connection");
   }
 
-  if (!use_pfs_ && !auth_data_.is_keyed_session()) {
+  if (!mode_flag_ && !auth_data_.is_keyed_session()) {
     last_success_timestamp_ = Time::now();
   }
   last_activity_timestamp_ = Time::now();

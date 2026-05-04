@@ -20,16 +20,20 @@ TEST(EntryCountContract, SecondarySetExpectsExactlyOneEntry) {
   ASSERT_TRUE(td::PublicRsaKeySharedMain::validate_entry_count(1, true).is_ok());
 }
 
-TEST(EntryCountContract, ReviewedWindowAllowsControlledDualEntryRollover) {
+// The old dual-entry rollover contract predated the current live cap. The
+// reviewed static main/test keysets now intentionally load exactly one slot
+// per DC type; handshake-side plurality is enforced separately via the
+// server-advertised fingerprint-count gate.
+TEST(EntryCountContract, ReviewedWindowRejectsSecondLoadedPrimaryEntry) {
   ASSERT_EQ(1u, td::PublicRsaKeySharedMain::minimum_entry_count(false));
-  ASSERT_EQ(2u, td::PublicRsaKeySharedMain::maximum_entry_count(false));
-  ASSERT_TRUE(td::PublicRsaKeySharedMain::validate_entry_count(2, false).is_ok());
+  ASSERT_EQ(1u, td::PublicRsaKeySharedMain::maximum_entry_count(false));
+  ASSERT_TRUE(td::PublicRsaKeySharedMain::validate_entry_count(2, false).is_error());
 }
 
-TEST(EntryCountContract, ReviewedWindowBoundsMatchTestCatalog) {
+TEST(EntryCountContract, ReviewedWindowRejectsSecondLoadedTestEntry) {
   ASSERT_EQ(1u, td::PublicRsaKeySharedMain::minimum_entry_count(true));
-  ASSERT_EQ(2u, td::PublicRsaKeySharedMain::maximum_entry_count(true));
-  ASSERT_TRUE(td::PublicRsaKeySharedMain::validate_entry_count(2, true).is_ok());
+  ASSERT_EQ(1u, td::PublicRsaKeySharedMain::maximum_entry_count(true));
+  ASSERT_TRUE(td::PublicRsaKeySharedMain::validate_entry_count(2, true).is_error());
 }
 
 }  // namespace

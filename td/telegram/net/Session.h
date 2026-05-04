@@ -70,7 +70,7 @@ class Session final
   };
 
   Session(unique_ptr<Callback> callback, std::shared_ptr<AuthDataShared> shared_auth_data, int32 raw_dc_id, int32 dc_id,
-          bool is_primary, bool is_main, bool use_pfs, bool persist_tmp_auth_key, bool is_cdn,
+          bool is_primary, bool is_main, bool mode_flag, bool persist_tmp_auth_key, bool is_cdn,
           bool need_destroy_auth_key, const mtproto::AuthKey &tmp_auth_key,
           const vector<mtproto::ServerSalt> &server_salts);
 
@@ -106,7 +106,7 @@ class Session final
 
   static EncryptedMessageInvalidAction resolve_encrypted_message_invalid_action(bool session_uses_pfs,
                                                                                 bool has_immunity);
-  static bool resolve_need_send_bind_key(bool use_pfs, bool bind_flag, uint64 tmp_auth_key_id,
+  static bool resolve_need_send_bind_key(bool mode_flag, bool bind_flag, uint64 tmp_auth_key_id,
                                          uint64 being_binded_tmp_auth_key_id, const BindKeyFailureState &failure_state,
                                          double now);
   static BindKeyFailureDecision note_bind_key_failure(BindKeyFailureState failure_state, uint64 tmp_auth_key_id,
@@ -221,7 +221,7 @@ class Session final
   unique_ptr<mtproto::RawConnection> cached_connection_;
 
   std::shared_ptr<Callback> callback_;
-  bool use_pfs_{false};
+  bool mode_flag_{false};
   bool need_check_main_key_{false};
   BindKeyFailureState bind_key_failure_state_;
   MainKeyCheckFailureState main_key_check_failure_state_;

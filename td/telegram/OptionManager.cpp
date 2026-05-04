@@ -60,12 +60,70 @@ OptionManager::OptionManager(Td *td)
   send_unix_time_update();
 
   auto &options = options_->inner();
+  vector<string> erased_loaded_option_names;
+  vector<std::pair<string, string>> normalized_loaded_options;
 
   option_pmc_->for_each([&](Slice name, Slice value) {
     if (name == "utc_time_offset") {
       return;
     }
     CHECK(!name.empty());
+
+    string normalized_value;
+    bool has_normalized_value = false;
+    auto set_normalized_value = [&](string new_value) {
+      normalized_value = std::move(new_value);
+      value = normalized_value;
+      has_normalized_value = true;
+    };
+
+    if (name == "use_pfs" && value != Slice("Btrue")) {
+      net_health::note_session_param_coerce_attempt();
+      value = Slice("Btrue");
+      set_normalized_value(value.str());
+    }
+
+    if (value.size() > 1 && value[0] == 'I') {
+      auto int_value = to_integer<int32>(value.substr(1));
+      if (name == "call_receive_timeout_ms" || name == "call_ring_timeout_ms" || name == "call_connect_timeout_ms" ||
+          name == "call_packet_timeout_ms") {
+        auto clamped = clamp_reviewed_call_window_ms(name, int_value);
+        if (clamped != int_value) {
+          net_health::note_config_call_window_clamp();
+          int_value = clamped;
+          set_normalized_value((PSLICE() << 'I' << int_value).str());
+        }
+      } else if (name == "session_count") {
+        auto clamped = clamp_reviewed_session_count(int_value);
+        if (clamped != int_value) {
+          net_health::note_session_window_oob();
+          int_value = clamped;
+          set_normalized_value((PSLICE() << 'I' << int_value).str());
+        }
+      } else if (name == "webfile_dc_id") {
+        if (!is_reviewed_aux_route_id(int_value, G()->is_test_dc())) {
+          net_health::note_aux_route_id_oob();
+          erased_loaded_option_names.push_back(name.str());
+          return;
+        }
+      }
+    }
+
+    if (name == "dc_txt_domain_name" && value.empty()) {
+      net_health::note_config_domain_reject();
+      erased_loaded_option_names.push_back(name.str());
+      return;
+    }
+    if (name == "dc_txt_domain_name" && !is_reviewed_domain_option_value(value)) {
+      net_health::note_config_domain_reject();
+      erased_loaded_option_names.push_back(name.str());
+      return;
+    }
+
+    if (has_normalized_value) {
+      normalized_loaded_options.emplace_back(name.str(), normalized_value);
+    }
+
     options.set(name, value);
     if (!is_internal_option(name)) {
       send_closure(G()->td(), &Td::send_update,
@@ -77,6 +135,13 @@ OptionManager::OptionManager(Td *td)
       }
     }
   });
+
+  for (const auto &name : erased_loaded_option_names) {
+    option_pmc_->erase(name);
+  }
+  for (const auto &entry : normalized_loaded_options) {
+    option_pmc_->set(entry.first, entry.second);
+  }
 
   auto utc_time_offset = PSTRING() << 'I' << Clocks::tz_offset();
   options.set("utc_time_offset", utc_time_offset);
@@ -404,6 +469,7 @@ void OptionManager::set_option(Slice name, Slice value) {
     return;
   }
   if (name == "use_pfs" && value == Slice("Bfalse")) {
+    net_health::note_session_param_coerce_attempt();
     value = Slice("Btrue");
   }
 
@@ -788,7 +854,7 @@ void OptionManager::on_option_updated(Slice name) {
       break;
     case 'u':
       if (name == "use_pfs") {
-        G()->net_query_dispatcher().update_use_pfs();
+        G()->net_query_dispatcher().update_mode_flag();
       }
       if (name == "use_storage_optimizer") {
         send_closure(td_->storage_manager_, &StorageManager::update_use_storage_optimizer);
