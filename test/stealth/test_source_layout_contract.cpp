@@ -123,9 +123,9 @@ TEST(SourceLayoutContract, BundledPrimaryAndSecondaryBlocksMatchSlots) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
 
   auto main_fingerprint =
-      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice retained_primary_block()"));
+      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice catalog_primary_block()"));
   auto test_fingerprint =
-      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice retained_secondary_block()"));
+      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice catalog_secondary_block()"));
 
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Primary), main_fingerprint);
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Secondary), test_fingerprint);
@@ -134,7 +134,7 @@ TEST(SourceLayoutContract, BundledPrimaryAndSecondaryBlocksMatchSlots) {
 TEST(SourceLayoutContract, BundledAuxiliaryBlockMatchesSlot) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
   auto recovery_fingerprint =
-      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice retained_auxiliary_block()"));
+      compute_legacy_rsa_public_key_fingerprint(extract_pem_literal(source, "CSlice catalog_auxiliary_block()"));
 
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Auxiliary), recovery_fingerprint);
 }

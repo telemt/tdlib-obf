@@ -122,21 +122,21 @@ td::int64 bundle_rsa_public_key_sha1_fingerprint(td::Slice pem) {
 TEST(BundleSourceContract, PrimaryBlockFingerprintMatchesReferenceSlot) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
   auto fingerprint =
-      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_primary_block()"));
+      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice catalog_primary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Primary), fingerprint);
 }
 
 TEST(BundleSourceContract, SecondaryBlockFingerprintMatchesReferenceSlot) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/PublicRsaKeySharedMain.cpp");
   auto fingerprint =
-      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_secondary_block()"));
+      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice catalog_secondary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Secondary), fingerprint);
 }
 
 TEST(BundleSourceContract, AuxiliaryBlockFingerprintMatchesReferenceSlot) {
   auto source = td::mtproto::test::read_repo_text_file("td/telegram/ConfigManager.cpp");
   auto fingerprint =
-      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice retained_auxiliary_block()"));
+      bundle_rsa_public_key_sha1_fingerprint(bundle_extract_pem_literal(source, "CSlice catalog_auxiliary_block()"));
   ASSERT_EQ(td::ReferenceTable::slot_value(td::mtproto::BlobRole::Auxiliary), fingerprint);
 }
 

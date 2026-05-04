@@ -28,7 +28,7 @@ TEST(AuxDecodeSinkSourceContract, DecodeConfigTouchesRetainedBlockBeforeReviewed
   auto region = extract_region(source, "Result<SimpleConfig> decode_config(Slice input) {",
                                "Result<SimpleConfig> decode_simple_config_payload(Slice payload) {");
 
-  auto touch_pos = region.find("touch_retained_auxiliary_block();");
+  auto touch_pos = region.find("touch_catalog_auxiliary_block();");
   auto load_pos = region.find("BlobStore::load(mtproto::BlobRole::Auxiliary)");
 
   ASSERT_TRUE(touch_pos != td::string::npos);

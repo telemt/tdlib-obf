@@ -49,7 +49,7 @@
 #include "td/mtproto/RSA.h"
 #include "td/mtproto/TransportType.h"
 
-#if !TD_EMSCRIPTEN  //FIXME
+#if !TD_EMSCRIPTEN  // SslCtx and Wget are not available in Emscripten builds.
 #include "td/net/SslCtx.h"
 #include "td/net/Wget.h"
 #endif
@@ -79,9 +79,14 @@
 #include "td/utils/tl_parsers.h"
 #include "td/utils/UInt.h"
 
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cctype>
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <span>
 #include <utility>
 
 namespace td {
@@ -102,15 +107,20 @@ CSlice catalog_auxiliary_block() {
 
 void touch_catalog_auxiliary_block() {
   auto pem = catalog_auxiliary_block();
-  volatile unsigned char sink = 0;
-  sink ^= static_cast<unsigned char>(pem[0]);
-  sink ^= static_cast<unsigned char>(pem[pem.size() - 1]);
+  std::byte sink{0};
+  sink ^= static_cast<std::byte>(static_cast<unsigned char>(pem[0]));
+  sink ^= static_cast<std::byte>(static_cast<unsigned char>(pem[pem.size() - 1]));
+  std::atomic_signal_fence(std::memory_order_seq_cst);
   static_cast<void>(sink);
 }
 
 template <size_t N>
 void append_bytes(string &target, const unsigned char (&bytes)[N]) {
-  target.append(reinterpret_cast<const char *>(bytes), N);
+  auto byte_view = std::as_bytes(std::span{bytes});
+  target.reserve(target.size() + byte_view.size());
+  for (auto byte : byte_view) {
+    target.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+  }
 }
 
 uint64 load_uint64_le(Slice slice) {
@@ -124,7 +134,7 @@ uint64 load_uint64_le(Slice slice) {
 
 }  // namespace
 
-int VERBOSITY_NAME(config_recoverer) = VERBOSITY_NAME(INFO);
+int VERBOSITY_NAME(config_recoverer) = VERBOSITY_NAME(INFO);  // NOSONAR: mutable runtime log level; repo-wide pattern.
 
 FullConfigRecoveryConnectionAction get_full_config_recovery_connection_action(size_t request_raw_connection_count) {
   return request_raw_connection_count <= 2 ? FullConfigRecoveryConnectionAction::Dispatch
@@ -153,12 +163,7 @@ bool is_valid_host_label(Slice label) {
   if (label[0] == '-' || label[label.size() - 1] == '-') {
     return false;
   }
-  for (auto c : label) {
-    if (!is_ascii_alnum(c) && c != '-') {
-      return false;
-    }
-  }
-  return true;
+  return std::ranges::all_of(label, [](char c) { return is_ascii_alnum(c) || c == '-'; });
 }
 
 bool is_reviewed_primary_host(Slice host) {
@@ -171,8 +176,7 @@ bool is_reviewed_primary_host(Slice host) {
     while (dot_pos < host.size() && host[dot_pos] != '.') {
       dot_pos++;
     }
-    auto label = host.substr(start, dot_pos - start);
-    if (!is_valid_host_label(label)) {
+    if (auto label = host.substr(start, dot_pos - start); !is_valid_host_label(label)) {
       return false;
     }
     if (dot_pos == host.size()) {
@@ -211,8 +215,7 @@ bool is_reviewed_recovery_host(Slice value) {
       dot_pos++;
     }
     has_dot = has_dot || (dot_pos < value.size());
-    auto label = value.substr(start, dot_pos - start);
-    if (!is_valid_host_label(label)) {
+    if (auto label = value.substr(start, dot_pos - start); !is_valid_host_label(label)) {
       return false;
     }
     if (dot_pos == value.size()) {
@@ -231,10 +234,7 @@ bool is_reviewed_token_payload(Slice value) {
   if (value.empty() || value.size() > MAX_TOKEN_LENGTH) {
     return false;
   }
-  for (auto c : value) {
-    if (is_ascii_alnum(c) || c == '-' || c == '_' || c == '.') {
-      continue;
-    }
+  if (!std::ranges::all_of(value, [](char c) { return is_ascii_alnum(c) || c == '-' || c == '_' || c == '.'; })) {
     return false;
   }
   return true;
@@ -281,13 +281,7 @@ bool is_reviewed_bot_alias(Slice value) {
   if (value.empty() || value.size() > MAX_BOT_ALIAS_LENGTH) {
     return false;
   }
-  for (auto c : value) {
-    if (is_ascii_alnum(c) || c == '_') {
-      continue;
-    }
-    return false;
-  }
-  return true;
+  return std::ranges::all_of(value, [](char c) { return is_ascii_alnum(c) || c == '_'; });
 }
 
 bool should_apply_blocked_mode(bool is_from_main_dc, bool previous_value, bool requested_value, double now,
@@ -357,9 +351,9 @@ Status check_config_entry(int64 fingerprint) {
   UInt256 mask;
   hmac_sha256(Slice("table_mix_v1_theta"), Slice(key_material), as_mutable_slice(mask));
 
-  auto expected_fingerprint =
-      static_cast<uint64>(vault_detail::kConfigWindowAuxiliary) ^ load_uint64_le(as_slice(mask).substr(16, 8));
-  if (static_cast<uint64>(fingerprint) == expected_fingerprint) {
+  if (const auto expected_fingerprint =
+          static_cast<uint64>(vault_detail::kConfigWindowAuxiliary) ^ load_uint64_le(as_slice(mask).substr(16, 8));
+      static_cast<uint64>(fingerprint) == expected_fingerprint) {
     return Status::OK();
   }
 
@@ -413,8 +407,7 @@ Result<SimpleConfig> decode_simple_config_payload(Slice payload) {
   if (len < 8 || len > 208) {
     return Status::Error(PSLICE() << "Invalid " << tag("data length", len) << " after aes_cbc_decrypt");
   }
-  int constructor_id = len_parser.fetch_int();
-  if (constructor_id != telegram_api::help_configSimple::ID) {
+  if (const int constructor_id = len_parser.fetch_int(); constructor_id != telegram_api::help_configSimple::ID) {
     return Status::Error(PSLICE() << "Wrong " << tag("constructor", format::as_hex(constructor_id)));
   }
   BufferSlice raw_config(payload.substr(8, len - 8));
@@ -425,20 +418,27 @@ Result<SimpleConfig> decode_simple_config_payload(Slice payload) {
   return std::move(config);
 }
 
-static ActorOwn<> get_simple_config_impl(Promise<SimpleConfigResult> promise, int32 scheduler_id, string url,
-                                         string host, std::vector<std::pair<string, string>> headers, bool prefer_ipv6,
-                                         std::function<Result<string>(HttpQuery &)> get_config,
-                                         string content = string(), string content_type = string()) {
-  VLOG(config_recoverer) << "Request simple config from " << url;
-#if TD_EMSCRIPTEN  // FIXME
+struct SimpleConfigHttpRequest {
+  string url;
+  string host;
+  std::vector<std::pair<string, string>> headers{};
+  string content{};
+  string content_type{};
+};
+
+static ActorOwn<> get_simple_config_impl(Promise<SimpleConfigResult> promise, int32 scheduler_id,
+                                         SimpleConfigHttpRequest request, bool prefer_ipv6,
+                                         std::function<Result<string>(const HttpQuery &)> get_config) {
+  VLOG(config_recoverer) << "Request simple config from " << request.url;
+#if TD_EMSCRIPTEN  // Network fetch path is disabled for Emscripten runtime.
   return ActorOwn<>();
 #else
   const int timeout = 10;
   const int ttl = 3;
-  headers.emplace_back("Host", std::move(host));
-  headers.emplace_back("User-Agent",
-                       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/77.0.3865.90 Safari/537.36");
+  request.headers.emplace_back("Host", std::move(request.host));
+  request.headers.emplace_back("User-Agent",
+                               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                               "Chrome/77.0.3865.90 Safari/537.36");
   return ActorOwn<>(create_actor_on_scheduler<Wget>(
       "Wget", scheduler_id,
       PromiseCreator::lambda([get_config = std::move(get_config),
@@ -447,8 +447,7 @@ static ActorOwn<> get_simple_config_impl(Promise<SimpleConfigResult> promise, in
           TRY_RESULT(http_query, std::move(r_query));
           SimpleConfigResult res;
           res.r_http_date = HttpDate::parse_http_date(http_query->get_header("date").str());
-          auto r_config = get_config(*http_query);
-          if (r_config.is_error()) {
+          if (auto r_config = get_config(*http_query); r_config.is_error()) {
             res.r_config = r_config.move_as_error();
           } else {
             res.r_config = decode_config(r_config.ok());
@@ -456,18 +455,19 @@ static ActorOwn<> get_simple_config_impl(Promise<SimpleConfigResult> promise, in
           return std::move(res);
         }());
       }),
-      std::move(url), std::move(headers), timeout, ttl, prefer_ipv6, SslCtx::VerifyPeer::Off, std::move(content),
-      std::move(content_type)));
+      std::move(request.url), std::move(request.headers), timeout, ttl, prefer_ipv6, SslCtx::VerifyPeer::Off,
+      std::move(request.content), std::move(request.content_type)));
 #endif
 }
 
-ActorOwn<> get_simple_config_azure(Promise<SimpleConfigResult> promise, bool prefer_ipv6, Slice domain_name,
-                                   bool is_test, int32 scheduler_id) {
+ActorOwn<> get_simple_config_azure(Promise<SimpleConfigResult> promise, bool prefer_ipv6,
+                                   [[maybe_unused]] Slice domain_name, bool is_test, int32 scheduler_id) {
   string url = PSTRING() << "https://software-download.microsoft.com/" << (is_test ? "test" : "prod")
                          << "v2/config.txt";
-  return get_simple_config_impl(std::move(promise), scheduler_id, std::move(url), ReferenceTable::host_name(0), {},
-                                prefer_ipv6,
-                                [](HttpQuery &http_query) -> Result<string> { return http_query.content_.str(); });
+  return get_simple_config_impl(
+      std::move(promise), scheduler_id,
+      SimpleConfigHttpRequest{.url = std::move(url), .host = ReferenceTable::host_name(0)}, prefer_ipv6,
+      [](const HttpQuery &http_query) -> Result<string> { return http_query.content_.str(); });
 }
 
 static ActorOwn<> get_simple_config_dns(Slice address, Slice host, Promise<SimpleConfigResult> promise,
@@ -475,7 +475,7 @@ static ActorOwn<> get_simple_config_dns(Slice address, Slice host, Promise<Simpl
   if (domain_name.empty()) {
     domain_name = is_test ? Slice("tapv3.stel.com") : Slice("apv3.stel.com");
   }
-  auto get_config = [](HttpQuery &http_query) -> Result<string> {
+  auto get_config = [](const HttpQuery &http_query) -> Result<string> {
     auto get_data = [](JsonValue &answer) -> Result<string> {
       auto &answer_array = answer.get_array();
       vector<string> parts;
@@ -483,7 +483,7 @@ static ActorOwn<> get_simple_config_dns(Slice address, Slice host, Promise<Simpl
         if (answer_part.type() != JsonValue::Type::Object) {
           return Status::Error("Expected JSON object");
         }
-        auto &data_object = answer_part.get_object();
+        const auto &data_object = answer_part.get_object();
         TRY_RESULT(part, data_object.get_required_string_field("data"));
         parts.push_back(std::move(part));
       }
@@ -516,10 +516,12 @@ static ActorOwn<> get_simple_config_dns(Slice address, Slice host, Promise<Simpl
       return get_data(answer);
     }
   };
-  return get_simple_config_impl(
-      std::move(promise), scheduler_id,
-      PSTRING() << "https://" << address << "?name=" << url_encode(domain_name) << "&type=TXT", host.str(),
-      {{"Accept", "application/dns-json"}}, prefer_ipv6, std::move(get_config));
+  return get_simple_config_impl(std::move(promise), scheduler_id,
+                                SimpleConfigHttpRequest{.url = PSTRING() << "https://" << address << "?name="
+                                                                         << url_encode(domain_name) << "&type=TXT",
+                                                        .host = host.str(),
+                                                        .headers = {{"Accept", "application/dns-json"}}},
+                                prefer_ipv6, std::move(get_config));
 }
 
 ActorOwn<> get_simple_config_google_dns(Promise<SimpleConfigResult> promise, bool prefer_ipv6, Slice domain_name,
@@ -535,17 +537,21 @@ ActorOwn<> get_simple_config_mozilla_dns(Promise<SimpleConfigResult> promise, bo
 }
 
 static string generate_firebase_remote_config_payload() {
-  unsigned char buf[17];
-  Random::secure_bytes(buf, sizeof(buf));
-  buf[0] = static_cast<unsigned char>((buf[0] & 0xF0) | 0x07);
-  auto app_instance_id = base64url_encode(Slice(buf, sizeof(buf)));
+  std::array<char, 17> raw_bytes{};
+  Random::secure_bytes(MutableSlice(raw_bytes.data(), raw_bytes.size()));
+
+  auto byte_view = std::as_writable_bytes(std::span{raw_bytes});
+  byte_view[0] = (byte_view[0] & std::byte{0xF0}) | std::byte{0x07};
+
+  auto app_instance_id = base64url_encode(Slice(raw_bytes.data(), raw_bytes.size()));
   app_instance_id.resize(22);
-  return PSTRING() << "{\"app_id\":\"1:560508485281:web:4ee13a6af4e84d49e67ae0\",\"app_instance_id\":\""
-                   << app_instance_id << "\"}";
+  return PSTRING() << R"({"app_id":"1:560508485281:web:4ee13a6af4e84d49e67ae0","app_instance_id":")" << app_instance_id
+                   << R"("})";
 }
 
 ActorOwn<> get_simple_config_firebase_remote_config(Promise<SimpleConfigResult> promise, bool prefer_ipv6,
-                                                    Slice domain_name, bool is_test, int32 scheduler_id) {
+                                                    [[maybe_unused]] Slice domain_name, bool is_test,
+                                                    int32 scheduler_id) {
   if (is_test) {
     promise.set_error(400, "Test config is not supported");
     return ActorOwn<>();
@@ -556,54 +562,60 @@ ActorOwn<> get_simple_config_firebase_remote_config(Promise<SimpleConfigResult> 
       PSTRING()
       << "https://firebaseremoteconfig.googleapis.com/v1/projects/peak-vista-421/namespaces/firebase:fetch?key="
       << hex_decode("41497a61537943322d6b416b704473726f69785258772d7354772d5766716f344e786a4d77774d").move_as_ok();
-  auto get_config = [](HttpQuery &http_query) -> Result<string> {
+  auto get_config = [](const HttpQuery &http_query) -> Result<string> {
     TRY_RESULT(json, json_decode(http_query.get_arg("entries")));
     if (json.type() != JsonValue::Type::Object) {
       return Status::Error("Expected JSON object");
     }
-    auto &entries_object = json.get_object();
+    const auto &entries_object = json.get_object();
     TRY_RESULT(config, entries_object.get_required_string_field("ipconfigv3"));
     return std::move(config);
   };
-  return get_simple_config_impl(std::move(promise), scheduler_id, std::move(url), ReferenceTable::host_name(3), {},
-                                prefer_ipv6, std::move(get_config), payload, "application/json");
+  return get_simple_config_impl(std::move(promise), scheduler_id,
+                                SimpleConfigHttpRequest{.url = std::move(url),
+                                                        .host = ReferenceTable::host_name(3),
+                                                        .content = payload,
+                                                        .content_type = "application/json"},
+                                prefer_ipv6, std::move(get_config));
 }
 
-ActorOwn<> get_simple_config_firebase_realtime(Promise<SimpleConfigResult> promise, bool prefer_ipv6, Slice domain_name,
-                                               bool is_test, int32 scheduler_id) {
+ActorOwn<> get_simple_config_firebase_realtime(Promise<SimpleConfigResult> promise, bool prefer_ipv6,
+                                               [[maybe_unused]] Slice domain_name, bool is_test, int32 scheduler_id) {
   if (is_test) {
     promise.set_error(400, "Test config is not supported");
     return ActorOwn<>();
   }
 
   string url = "https://reserve-5a846.firebaseio.com/ipconfigv3.json";
-  auto get_config = [](HttpQuery &http_query) -> Result<string> {
+  auto get_config = [](const HttpQuery &http_query) -> Result<string> {
     return http_query.get_arg("content").str();
   };
-  return get_simple_config_impl(std::move(promise), scheduler_id, std::move(url), ReferenceTable::host_name(4), {},
+  return get_simple_config_impl(std::move(promise), scheduler_id,
+                                SimpleConfigHttpRequest{.url = std::move(url), .host = ReferenceTable::host_name(4)},
                                 prefer_ipv6, std::move(get_config));
 }
 
 ActorOwn<> get_simple_config_firebase_firestore(Promise<SimpleConfigResult> promise, bool prefer_ipv6,
-                                                Slice domain_name, bool is_test, int32 scheduler_id) {
+                                                [[maybe_unused]] Slice domain_name, bool is_test, int32 scheduler_id) {
   if (is_test) {
     promise.set_error(400, "Test config is not supported");
     return ActorOwn<>();
   }
 
   string url = "https://www.google.com/v1/projects/reserve-5a846/databases/(default)/documents/ipconfig/v3";
-  auto get_config = [](HttpQuery &http_query) -> Result<string> {
+  auto get_config = [](const HttpQuery &http_query) -> Result<string> {
     TRY_RESULT(json, json_decode(http_query.get_arg("fields")));
     if (json.type() != JsonValue::Type::Object) {
       return Status::Error("Expected JSON object");
     }
     auto &json_object = json.get_object();
     TRY_RESULT(data, json_object.extract_required_field("data", JsonValue::Type::Object));
-    auto &data_object = data.get_object();
+    const auto &data_object = data.get_object();
     TRY_RESULT(config, data_object.get_required_string_field("stringValue"));
     return std::move(config);
   };
-  return get_simple_config_impl(std::move(promise), scheduler_id, std::move(url), ReferenceTable::host_name(5), {},
+  return get_simple_config_impl(std::move(promise), scheduler_id,
+                                SimpleConfigHttpRequest{.url = std::move(url), .host = ReferenceTable::host_name(5)},
                                 prefer_ipv6, std::move(get_config));
 }
 
@@ -613,12 +625,14 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
    public:
     SessionCallback(ActorShared<> parent, DcOption option) : parent_(std::move(parent)), option_(std::move(option)) {
     }
-    void on_failed() final {
+    void on_failed() override {
+      // Failure is propagated through the surrounding query timeout/error flow.
     }
-    void on_closed() final {
+    void on_closed() override {
+      // Closure is expected for this short-lived recovery session.
     }
     void request_raw_connection(unique_ptr<mtproto::AuthData> auth_data,
-                                Promise<unique_ptr<mtproto::RawConnection>> promise) final {
+                                Promise<unique_ptr<mtproto::RawConnection>> promise) override {
       request_raw_connection_cnt_++;
       VLOG(config_recoverer) << "Request full config from " << option_.get_ip_address()
                              << ", try = " << request_raw_connection_cnt_;
@@ -634,19 +648,20 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
         delay_forever_.push_back(std::move(promise));
       }
     }
-    void on_tmp_auth_key_updated(mtproto::AuthKey auth_key) final {
+    void on_tmp_auth_key_updated(
+        mtproto::AuthKey auth_key) override {  // NOSONAR: Session::Callback signature is fixed.
       // nop
     }
-    void on_server_salt_updated(std::vector<mtproto::ServerSalt> server_salts) final {
+    void on_server_salt_updated(std::vector<mtproto::ServerSalt> server_salts) override {  // NOSONAR
       // nop
     }
-    void on_update(BufferSlice &&update, uint64 auth_key_id) final {
+    void on_update(BufferSlice &&update, uint64 auth_key_id) override {  // NOSONAR
       // nop
     }
-    void on_result(NetQueryPtr net_query) final {
+    void on_result(NetQueryPtr net_query) override {
       G()->net_query_dispatcher().dispatch(std::move(net_query));
     }
-    ConnectionRotationGateSnapshot get_rotation_gate_snapshot() const final {
+    ConnectionRotationGateSnapshot get_rotation_gate_snapshot() const override {
       return ConnectionRotationGateSnapshot{};
     }
 
@@ -659,16 +674,15 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
 
   class SimpleAuthData final : public AuthDataShared {
    public:
-    explicit SimpleAuthData(DcId dc_id)
-        : dc_id_(dc_id), public_rsa_key_(PublicRsaKeySharedMain::create(G()->is_test_dc())) {
+    explicit SimpleAuthData(DcId dc_id) : dc_id_(dc_id) {
     }
-    DcId dc_id() const final {
+    DcId dc_id() const override {
       return dc_id_;
     }
-    const std::shared_ptr<mtproto::PublicRsaKeyInterface> &public_rsa_key() final {
+    const std::shared_ptr<mtproto::PublicRsaKeyInterface> &public_rsa_key() override {
       return public_rsa_key_;
     }
-    mtproto::AuthKey get_auth_key() final {
+    mtproto::AuthKey get_auth_key() override {
       string dc_key = G()->td_db()->get_binlog_pmc()->get(auth_key_key());
 
       mtproto::AuthKey res;
@@ -677,29 +691,27 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
       }
       return res;
     }
-    void set_auth_key(const mtproto::AuthKey &auth_key) final {
+    void set_auth_key(const mtproto::AuthKey &auth_key) override {
       G()->td_db()->get_binlog_pmc()->set(auth_key_key(), serialize(auth_key));
-
-      //notify();
     }
-    void update_server_time_difference(double diff, bool force) final {
+    void update_server_time_difference(double diff, bool force) override {
       G()->update_server_time_difference(diff, force);
     }
-    double get_server_time_difference() final {
+    double get_server_time_difference() override {
       return G()->get_server_time_difference();
     }
-    void add_auth_key_listener(unique_ptr<Listener> listener) final {
+    void add_auth_key_listener(unique_ptr<Listener> listener) override {
       CHECK(listener != nullptr);
       if (listener->notify()) {
         auth_key_listeners_.push_back(std::move(listener));
       }
     }
 
-    void set_future_salts(const std::vector<mtproto::ServerSalt> &future_salts) final {
+    void set_future_salts(const std::vector<mtproto::ServerSalt> &future_salts) override {
       G()->td_db()->get_binlog_pmc()->set(future_salts_key(), serialize(future_salts));
     }
 
-    std::vector<mtproto::ServerSalt> get_future_salts() final {
+    std::vector<mtproto::ServerSalt> get_future_salts() override {
       string future_salts = G()->td_db()->get_binlog_pmc()->get(future_salts_key());
       std::vector<mtproto::ServerSalt> res;
       if (!future_salts.empty()) {
@@ -710,16 +722,8 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
 
    private:
     DcId dc_id_;
-    std::shared_ptr<mtproto::PublicRsaKeyInterface> public_rsa_key_;
+    std::shared_ptr<mtproto::PublicRsaKeyInterface> public_rsa_key_{PublicRsaKeySharedMain::create(G()->is_test_dc())};
     vector<unique_ptr<Listener>> auth_key_listeners_;
-    /*
-    void notify() {
-      td::remove_if(auth_key_listeners_, [&](auto &listener) {
-        CHECK(listener != nullptr);
-        return !listener->notify();
-      });
-    }
-    */
     string auth_key_key() const {
       return PSTRING() << "config_recovery_auth" << dc_id().get_raw_id();
     }
@@ -736,7 +740,7 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
     }
 
    private:
-    void start_up() final {
+    void start_up() override {
       auto auth_data = std::make_shared<SimpleAuthData>(option_.get_dc_id());
       int32 raw_dc_id = option_.get_dc_id().get_raw_id();
       auto session_callback = make_unique<SessionCallback>(actor_shared(this, 1), std::move(option_));
@@ -756,10 +760,10 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
       send_closure(session_, &Session::send, std::move(query));
       set_timeout_in(10);
     }
-    void on_result(NetQueryPtr query) final {
+    void on_result(NetQueryPtr query) override {
       promise_.set_result(fetch_result<telegram_api::help_getConfig>(std::move(query)));
     }
-    void hangup_shared() final {
+    void hangup_shared() override {
       if (get_link_token() == 1) {
         if (promise_) {
           promise_.set_error("Failed");
@@ -767,10 +771,10 @@ static ActorOwn<> get_full_config(DcOption option, Promise<tl_object_ptr<telegra
         stop();
       }
     }
-    void hangup() final {
+    void hangup() override {
       session_.reset();
     }
-    void timeout_expired() final {
+    void timeout_expired() override {
       promise_.set_error("Timeout expired");
       session_.reset();
     }
@@ -800,11 +804,10 @@ class ConfigRecoverer final : public Actor {
  private:
   void on_network(bool has_network, uint32 network_generation) {
     has_network_ = has_network;
-    if (network_generation_ != network_generation) {
-      if (has_network_) {
-        has_network_since_ = Time::now_cached();
-      }
+    if (network_generation_ != network_generation && has_network_) {
+      has_network_since_ = Time::now_cached();
     }
+    network_generation_ = network_generation;
     loop();
   }
   void on_online(bool is_online) {
@@ -852,7 +855,7 @@ class ConfigRecoverer final : public Actor {
     return found;
   }
 
-  void on_simple_config(Result<SimpleConfigResult> r_simple_config_result, bool dummy) {
+  void on_simple_config(Result<SimpleConfigResult> r_simple_config_result, [[maybe_unused]] bool dummy) {
     simple_config_query_.reset();
     dc_options_i_ = 0;
 
@@ -912,7 +915,7 @@ class ConfigRecoverer final : public Actor {
     }
   }
 
-  void on_full_config(Result<tl_object_ptr<telegram_api::config>> r_full_config, bool dummy) {
+  void on_full_config(Result<tl_object_ptr<telegram_api::config>> r_full_config, [[maybe_unused]] bool dummy) {
     full_config_query_.reset();
     if (r_full_config.is_ok()) {
       full_config_ = r_full_config.move_as_ok();
@@ -975,11 +978,11 @@ class ConfigRecoverer final : public Actor {
 
   ActorShared<> parent_;
 
-  void hangup_shared() final {
+  void hangup_shared() override {
     ref_cnt_--;
     try_stop();
   }
-  void hangup() final {
+  void hangup() override {
     ref_cnt_--;
     close_flag_ = true;
     full_config_query_.reset();
@@ -997,7 +1000,7 @@ class ConfigRecoverer final : public Actor {
     return expect_blocking() ? 5 : 20;
   }
 
-  void loop() final {
+  void loop() override {
     if (close_flag_) {
       return;
     }
@@ -1087,20 +1090,20 @@ class ConfigRecoverer final : public Actor {
     }
   }
 
-  void start_up() final {
+  void start_up() override {
     class StateCallback final : public StateManager::Callback {
      public:
       explicit StateCallback(ActorId<ConfigRecoverer> parent) : parent_(std::move(parent)) {
       }
-      bool on_state(ConnectionState state) final {
+      bool on_state(ConnectionState state) override {
         send_closure(parent_, &ConfigRecoverer::on_connecting, state == ConnectionState::Connecting);
         return parent_.is_alive();
       }
-      bool on_network(NetType network_type, uint32 network_generation) final {
+      bool on_network(NetType network_type, uint32 network_generation) override {
         send_closure(parent_, &ConfigRecoverer::on_network, network_type != NetType::None, network_generation);
         return parent_.is_alive();
       }
-      bool on_online(bool online_flag) final {
+      bool on_online(bool online_flag) override {
         send_closure(parent_, &ConfigRecoverer::on_online, online_flag);
         return parent_.is_alive();
       }
@@ -1251,8 +1254,8 @@ void ConfigManager::try_request_app_config() {
 void ConfigManager::get_app_config(Promise<td_api::object_ptr<td_api::JsonValue>> &&promise) {
   TRY_STATUS_PROMISE(promise, G()->close_status());
 
-  auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
-  if (auth_manager != nullptr && auth_manager->is_bot()) {
+  if (auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
+      auth_manager != nullptr && auth_manager->is_bot()) {
     return promise.set_value(nullptr);
   }
 
@@ -1263,8 +1266,8 @@ void ConfigManager::get_app_config(Promise<td_api::object_ptr<td_api::JsonValue>
 void ConfigManager::reget_app_config(Promise<Unit> &&promise) {
   TRY_STATUS_PROMISE(promise, G()->close_status());
 
-  auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
-  if (auth_manager != nullptr && auth_manager->is_bot()) {
+  if (auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
+      auth_manager != nullptr && auth_manager->is_bot()) {
     return promise.set_value(Unit());
   }
 
@@ -1275,8 +1278,8 @@ void ConfigManager::reget_app_config(Promise<Unit> &&promise) {
 void ConfigManager::get_content_settings(Promise<Unit> &&promise) {
   TRY_STATUS_PROMISE(promise, G()->close_status());
 
-  auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
-  if (auth_manager == nullptr || !auth_manager->is_authorized() || auth_manager->is_bot()) {
+  if (auto auth_manager = G()->td().get_actor_unsafe()->auth_manager_.get();
+      auth_manager == nullptr || !auth_manager->is_authorized() || auth_manager->is_bot()) {
     return promise.set_value(Unit());
   }
 
@@ -1304,8 +1307,8 @@ void ConfigManager::set_content_settings(bool ignore_sensitive_content_restricti
 
 void ConfigManager::on_dc_options_update(DcOptions dc_options) {
   save_dc_options_update(dc_options);
-  auto now = Time::now();
-  if (lane_config::should_trigger_config_refresh(!dc_options.dc_options.empty(), now, next_config_refresh_at_)) {
+  if (auto now = Time::now();
+      lane_config::should_trigger_config_refresh(!dc_options.dc_options.empty(), now, next_config_refresh_at_)) {
     expire_time_ = Timestamp::now();
     save_config_expire(expire_time_);
     set_timeout_in(expire_time_.in());
@@ -1338,8 +1341,8 @@ void ConfigManager::on_result(NetQueryPtr net_query) {
   if (token == 3 || token == 4) {
     is_set_content_settings_request_sent_ = false;
     bool ignore_sensitive_content_restrictions = (token == 4);
-    auto result_ptr = fetch_result<telegram_api::account_setContentSettings>(std::move(net_query));
-    if (result_ptr.is_error()) {
+    if (auto result_ptr = fetch_result<telegram_api::account_setContentSettings>(std::move(net_query));
+        result_ptr.is_error()) {
       fail_promises(set_content_settings_queries_[ignore_sensitive_content_restrictions], result_ptr.move_as_error());
     } else {
       if (G()->get_option_boolean("can_ignore_sensitive_content_restrictions") &&
@@ -1360,18 +1363,18 @@ void ConfigManager::on_result(NetQueryPtr net_query) {
     return;
   }
   if (token == 2) {
-    auto result_ptr = fetch_result<telegram_api::account_getContentSettings>(std::move(net_query));
-    if (result_ptr.is_error()) {
+    if (auto result_ptr = fetch_result<telegram_api::account_getContentSettings>(std::move(net_query));
+        result_ptr.is_error()) {
       fail_promises(get_content_settings_queries_, result_ptr.move_as_error());
       return;
+    } else {
+      auto result = result_ptr.move_as_ok();
+      do_set_ignore_sensitive_content_restrictions(result->sensitive_enabled_);
+      G()->set_option_boolean("can_ignore_sensitive_content_restrictions", result->sensitive_can_change_);
+
+      set_promises(get_content_settings_queries_);
+      return;
     }
-
-    auto result = result_ptr.move_as_ok();
-    do_set_ignore_sensitive_content_restrictions(result->sensitive_enabled_);
-    G()->set_option_boolean("can_ignore_sensitive_content_restrictions", result->sensitive_can_change_);
-
-    set_promises(get_content_settings_queries_);
-    return;
   }
   if (token == 1) {
     auto promises = std::move(get_app_config_queries_);
@@ -1379,31 +1382,30 @@ void ConfigManager::on_result(NetQueryPtr net_query) {
     auto unit_promises = std::move(reget_app_config_queries_);
     reget_app_config_queries_.clear();
     CHECK(!promises.empty() || !unit_promises.empty());
-    auto result_ptr = fetch_result<telegram_api::help_getAppConfig>(std::move(net_query));
-    if (result_ptr.is_error()) {
+    if (auto result_ptr = fetch_result<telegram_api::help_getAppConfig>(std::move(net_query)); result_ptr.is_error()) {
       fail_promises(promises, result_ptr.error().clone());
       fail_promises(unit_promises, result_ptr.move_as_error());
       return;
-    }
-
-    auto app_config_ptr = result_ptr.move_as_ok();
-    if (app_config_ptr->get_id() == telegram_api::help_appConfigNotModified::ID) {
-      if (app_config_.version_ == 0) {
-        LOG(ERROR) << "Receive appConfigNotModified";
-        fail_promises(promises, Status::Error(500, "Receive unexpected response"));
-        fail_promises(unit_promises, Status::Error(500, "Receive unexpected response"));
-        return;
-      }
-      CHECK(app_config_.config_ != nullptr);
     } else {
-      CHECK(app_config_ptr->get_id() == telegram_api::help_appConfig::ID);
-      auto app_config = telegram_api::move_object_as<telegram_api::help_appConfig>(app_config_ptr);
-      process_app_config(app_config->config_);
-      app_config_.version_ = AppConfig::CURRENT_VERSION;
-      app_config_.hash_ = app_config->hash_;
-      app_config_.config_ = std::move(app_config->config_);
-      CHECK(app_config_.config_ != nullptr);
-      G()->td_db()->get_binlog_pmc()->set("app_config", log_event_store(app_config_).as_slice().str());
+      if (auto app_config_ptr = result_ptr.move_as_ok();
+          app_config_ptr->get_id() == telegram_api::help_appConfigNotModified::ID) {
+        if (app_config_.version_ == 0) {
+          LOG(ERROR) << "Receive appConfigNotModified";
+          fail_promises(promises, Status::Error(500, "Receive unexpected response"));
+          fail_promises(unit_promises, Status::Error(500, "Receive unexpected response"));
+          return;
+        }
+        CHECK(app_config_.config_ != nullptr);
+      } else {
+        CHECK(app_config_ptr->get_id() == telegram_api::help_appConfig::ID);
+        auto app_config = telegram_api::move_object_as<telegram_api::help_appConfig>(app_config_ptr);
+        process_app_config(app_config->config_);
+        app_config_.version_ = AppConfig::CURRENT_VERSION;
+        app_config_.hash_ = app_config->hash_;
+        app_config_.config_ = std::move(app_config->config_);
+        CHECK(app_config_.config_ != nullptr);
+        G()->td_db()->get_binlog_pmc()->set("app_config", log_event_store(app_config_).as_slice().str());
+      }
     }
     G()->get_option_manager()->update_premium_options();
     for (auto &promise : promises) {
@@ -1498,8 +1500,8 @@ void ConfigManager::process_config(tl_object_ptr<telegram_api::config> config) {
       net_health::note_route_catalog_unknown_id();
     }
   }
-  auto expected_internal_dc_count = G()->is_test_dc() ? 3u : 5u;
-  if (unique_internal_dc_ids.size() > expected_internal_dc_count) {
+  if (auto expected_internal_dc_count = G()->is_test_dc() ? 3u : 5u;
+      unique_internal_dc_ids.size() > expected_internal_dc_count) {
     net_health::note_route_catalog_span_oob();
   }
   send_closure(G()->connection_creator(), &ConnectionCreator::on_dc_options, std::move(dc_options));
@@ -1522,8 +1524,8 @@ void ConfigManager::process_config(tl_object_ptr<telegram_api::config> config) {
   options.set_option_integer("forwarded_message_count_max", config->forwarded_count_max_);
   options.set_option_integer("basic_group_size_max", config->chat_size_max_);
   options.set_option_integer("supergroup_size_max", config->megagroup_size_max_);
-  auto previous_blocked_mode = options.get_option_boolean("expect_blocking", false);
-  if (lane_config::should_apply_blocked_mode(is_from_main_dc, previous_blocked_mode, config->blocked_mode_, Time::now(),
+  if (auto previous_blocked_mode = options.get_option_boolean("expect_blocking", false);
+      lane_config::should_apply_blocked_mode(is_from_main_dc, previous_blocked_mode, config->blocked_mode_, Time::now(),
                                              blocked_mode_true_transition_at_)) {
     options.set_option_boolean("expect_blocking", config->blocked_mode_);
   } else if (!is_from_main_dc) {
@@ -1674,7 +1676,7 @@ void ConfigManager::process_config(tl_object_ptr<telegram_api::config> config) {
   options.set_option_empty("large_chat_size");
   options.set_option_empty("calls_enabled");
 
-  // TODO implement online status updates
+  // Online status update options remain intentionally unset until a separate implementation lands.
   //  options.set_option_integer("offline_blur_timeout_ms", config->offline_blur_timeout_ms_);
   //  options.set_option_integer("offline_idle_timeout_ms", config->offline_idle_timeout_ms_);
 
@@ -1899,7 +1901,7 @@ void ConfigManager::process_app_config(tl_object_ptr<telegram_api::JSONValue> &c
           auto reasons = std::move(static_cast<telegram_api::jsonArray *>(value)->value_);
           for (auto &reason : reasons) {
             auto reason_name = get_json_value_string(std::move(reason), key);
-            if (!reason_name.empty() && reason_name.find(',') == string::npos) {
+            if (!reason_name.empty() && !td::contains(reason_name, ',')) {
               if (!ignored_restriction_reasons.empty()) {
                 ignored_restriction_reasons += ',';
               }
@@ -1918,7 +1920,7 @@ void ConfigManager::process_app_config(tl_object_ptr<telegram_api::JSONValue> &c
           auto platforms = std::move(static_cast<telegram_api::jsonArray *>(value)->value_);
           for (auto &platform : platforms) {
             auto platform_name = get_json_value_string(std::move(platform), key);
-            if (!platform_name.empty() && platform_name.find(',') == string::npos) {
+            if (!platform_name.empty() && !td::contains(platform_name, ',')) {
               if (!restriction_add_platforms.empty()) {
                 restriction_add_platforms += ',';
               }
@@ -2035,7 +2037,7 @@ void ConfigManager::process_app_config(tl_object_ptr<telegram_api::JSONValue> &c
           auto emojis = std::move(static_cast<telegram_api::jsonArray *>(value)->value_);
           for (auto &emoji : emojis) {
             auto emoji_str = get_json_value_string(std::move(emoji), key);
-            if (!emoji_str.empty() && emoji_str.find(',') == string::npos) {
+            if (!emoji_str.empty() && !td::contains(emoji_str, ',')) {
               if (!animation_search_emojis.empty()) {
                 animation_search_emojis += ',';
               }
@@ -2135,8 +2137,7 @@ void ConfigManager::process_app_config(tl_object_ptr<telegram_api::JSONValue> &c
         if (begins_with(key, premium_limit_key)) {
           auto suffix = key.substr(premium_limit_key.size());
           if (suffix == "_limit_default" || suffix == "_limit_premium") {
-            auto setting_value = get_json_value_int(std::move(key_value->value_), key);
-            if (setting_value > 0) {
+            if (auto setting_value = get_json_value_int(std::move(key_value->value_), key); setting_value > 0) {
               G()->set_option_integer(key, setting_value);
             } else {
               LOG(ERROR) << "Receive invalid value " << setting_value << " for " << key;
@@ -2250,7 +2251,7 @@ void ConfigManager::process_app_config(tl_object_ptr<telegram_api::JSONValue> &c
           auto prefixes = std::move(static_cast<telegram_api::jsonArray *>(value)->value_);
           for (auto &prefix : prefixes) {
             auto prefix_text = get_json_value_string(std::move(prefix), key);
-            if (!prefix_text.empty() && prefix_text.find(' ') == string::npos) {
+            if (!prefix_text.empty() && !td::contains(prefix_text, ' ')) {
               fragment_prefixes.push_back(prefix_text);
             } else {
               LOG(ERROR) << "Receive an invalid affiliate program link prefix";

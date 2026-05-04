@@ -190,24 +190,24 @@ class SqliteCMakeToolsContractTest(unittest.TestCase):
     ) -> None:
         test_cmake = TEST_CMAKE_PATH.read_text(encoding="utf-8")
 
-        self.assertIn(
-            'COMMAND "${TD_RUN_ALL_TESTS_EXECUTABLE}" --list',
+        self.assertRegex(
             test_cmake,
+            r'COMMAND\s+"\$\{TD_RUN_ALL_TESTS_EXECUTABLE\}"\s+--list',
             msg="test CMake must discover exact run_all_tests cases from the built binary during configure",
         )
-        self.assertIn(
-            'add_test(NAME "${TD_RUN_ALL_TEST_NAME}"',
+        self.assertRegex(
             test_cmake,
+            r'add_test\s*\(\s*NAME\s+"\$\{TD_RUN_ALL_TEST_NAME\}"',
             msg="test CMake must register exact discovered run_all_tests cases instead of only an umbrella entry",
         )
-        self.assertIn(
-            'COMMAND run_all_tests --exact "${TD_RUN_ALL_TEST_NAME}"',
+        self.assertRegex(
             test_cmake,
+            r'COMMAND\s+run_all_tests\s+--exact\s+"\$\{TD_RUN_ALL_TEST_NAME\}"',
             msg="discovered run_all_tests cases must remain targetable through the exact-filter entrypoint",
         )
-        self.assertIn(
-            'message(STATUS "run_all_tests executable is not available during configure; registering umbrella CTest entry")',
+        self.assertRegex(
             test_cmake,
+            r'message\s*\(\s*STATUS\s+"run_all_tests executable is not available during configure; registering umbrella CTest entry"\s*\)',
             msg="clean-tree configure must degrade to an umbrella CTest entry instead of assuming generated CTest files already exist",
         )
 
