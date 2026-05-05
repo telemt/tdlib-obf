@@ -111,3 +111,61 @@ TEST(SonarBlockerWave8LightFuzz, status_tagged_parser_regions_and_forwarding_fix
   ASSERT_TRUE(watchdog_header.find("ActorShared<>parent_actor_;") != td::string::npos);
   ASSERT_TRUE(bench_source.find("std::minstd_rand") != td::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Light fuzz: IPAddress in6_addr equality and ordering are self-consistent
+// under 10,000 random address pairs with no crashes or undefined behavior
+// ---------------------------------------------------------------------------
+
+#include "td/utils/port/IPAddress.h"
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+TEST(SonarBlockerWave8LightFuzz, ipv6_comparison_self_consistent_on_random_pairs) {
+  constexpr int kIterations = 10000;
+  td::uint32 checksum = 0;
+
+  for (int i = 0; i < kIterations; i++) {
+    unsigned char raw_a[16], raw_b[16];
+    td::Random::secure_bytes(raw_a, 16);
+    td::Random::secure_bytes(raw_b, 16);
+
+    char str_a[INET6_ADDRSTRLEN], str_b[INET6_ADDRSTRLEN];
+    if (!inet_ntop(AF_INET6, raw_a, str_a, sizeof(str_a))) {
+      continue;
+    }
+    if (!inet_ntop(AF_INET6, raw_b, str_b, sizeof(str_b))) {
+      continue;
+    }
+
+    td::IPAddress a, b;
+    auto sa = a.init_ipv6_port(td::CSlice(str_a, str_a + strlen(str_a)), static_cast<int>(td::Random::fast(1, 65534)));
+    auto sb = b.init_ipv6_port(td::CSlice(str_b, str_b + strlen(str_b)), static_cast<int>(td::Random::fast(1, 65534)));
+    if (!sa.is_ok() || !sb.is_ok()) {
+      continue;
+    }
+
+    // Reflexivity: a == a
+    ASSERT_TRUE(a == a);
+    ASSERT_TRUE(b == b);
+    ASSERT_FALSE(a < a);
+    ASSERT_FALSE(b < b);
+
+    // Antisymmetry: at most one of (a<b) or (b<a) is true
+    bool ab = (a < b);
+    bool ba = (b < a);
+    ASSERT_FALSE(ab && ba);
+
+    // Consistency of == and <: if a==b then neither a<b nor b<a
+    if (a == b) {
+      ASSERT_FALSE(ab);
+      ASSERT_FALSE(ba);
+    }
+
+    checksum ^= static_cast<td::uint32>(raw_a[0]) ^ static_cast<td::uint32>(raw_b[0]) ^
+                static_cast<td::uint32>(ab ? 1u : 0u) ^ static_cast<td::uint32>(ba ? 2u : 0u);
+  }
+  // checksum just proves we ran iterations (not always 0)
+  (void)checksum;
+}

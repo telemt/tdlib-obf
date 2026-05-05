@@ -816,6 +816,10 @@ struct tree *parse_args2(void) {
     tree_add_child(T, S);
     EXPECT(":");
   } else {
+    if (S) {
+      tree_delete(S);
+      S = NULL;
+    }
     load_parse(save);
   }
   struct parse so = save_parse();
@@ -1760,6 +1764,7 @@ struct tl_combinator_tree *tl_union(struct tl_combinator_tree *L, struct tl_comb
     case type_num:
       if (R->type != type_num_value) {
         TL_ERROR("Union: type mistmatch\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       tfree(v, sizeof(*v));
@@ -1768,6 +1773,7 @@ struct tl_combinator_tree *tl_union(struct tl_combinator_tree *L, struct tl_comb
     case type_num_value:
       if (R->type != type_num_value && R->type != type_num) {
         TL_ERROR("Union: type mistmatch\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       tfree(v, sizeof(*v));
@@ -1777,6 +1783,7 @@ struct tl_combinator_tree *tl_union(struct tl_combinator_tree *L, struct tl_comb
     case type_list:
       if (R->type != type_list_item) {
         TL_ERROR("Union: type mistmatch\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       v->type = type_list;
@@ -1785,23 +1792,28 @@ struct tl_combinator_tree *tl_union(struct tl_combinator_tree *L, struct tl_comb
     case type_type:
       if (L->type_len == 0) {
         TL_ERROR("Arguments number exceeds type arity\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       if (R->type != type_num && R->type != type_type && R->type != type_num_value) {
         TL_ERROR("Union: type mistmatch\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       if (R->type_len < 0) {
         if (!tl_finish_subtree(R)) {
+          tfree(v, sizeof(*v));
           return 0;
         }
       }
       if (R->type_len > 0) {
         TL_ERROR("Argument type must have full number of arguments\n");
+        tfree(v, sizeof(*v));
         return 0;
       }
       if (L->type_len > 0 && ((L->type_flags & 1) != (R->type == type_num || R->type == type_num_value))) {
         TL_ERROR("Argument types mistmatch: L->type_flags = %lld, R->type = %s\n", L->flags, TL_TYPE(R->type));
+        tfree(v, sizeof(*v));
         return 0;
       }
       v->type = type_type;
@@ -1810,6 +1822,7 @@ struct tl_combinator_tree *tl_union(struct tl_combinator_tree *L, struct tl_comb
       v->type_flags = L->type_flags >> 1;
       return v;
     default:
+      tfree(v, sizeof(*v));
       assert(0);
       return 0;
   }
@@ -2075,6 +2088,7 @@ struct tl_combinator_tree *tl_parse_args2(struct tree *T) {
     field_name = mystrdup(T->c[x]->text, T->c[x]->len);
     if (!tl_add_field(field_name)) {
       TL_ERROR("Duplicate field name %s\n", field_name);
+      tfree(field_name, 0);
       TL_FAIL;
     }
     x++;
@@ -2083,6 +2097,7 @@ struct tl_combinator_tree *tl_parse_args2(struct tree *T) {
   if (T->c[x]->type == type_multiplicity) {
     L = tl_parse_multiplicity(T->c[x]);
     if (!L) {
+      tfree(field_name, 0);
       TL_FAIL;
     }
     x++;
@@ -2090,6 +2105,7 @@ struct tl_combinator_tree *tl_parse_args2(struct tree *T) {
     struct tl_var *v = tl_get_last_num_var();
     if (!v) {
       TL_ERROR("Expected multiplicity or nat var\n");
+      tfree(field_name, 0);
       TL_FAIL;
     }
     L = alloc_ctree_node();

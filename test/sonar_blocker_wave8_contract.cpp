@@ -124,3 +124,143 @@ TEST(SonarBlockerWave8Contract, star_manager_leaf_transaction_direction_handlers
   ASSERT_TRUE(ton_send.find("consttd_api::object_ptr<td_api::TransactionDirection>&direction") != td::string::npos);
   ASSERT_EQ(td::string::npos, ton_send.find("td_api::object_ptr<td_api::TransactionDirection>&&direction"));
 }
+
+// ---------------------------------------------------------------------------
+// MessageContent.cpp: lambdas with auto&& params must use std::forward<decltype(x)>(x)
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, message_content_paid_media_lambda_uses_forward_not_move) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("td/telegram/MessageContent.cpp"));
+  ASSERT_TRUE(src.find("std::forward<decltype(extended_media)>(extended_media)") != td::string::npos);
+  ASSERT_EQ(td::string::npos, src.find("MessageExtendedMedia(td,std::move(extended_media),owner_dialog_id)"));
+}
+
+TEST(SonarBlockerWave8Contract, message_content_todo_completion_lambda_uses_forward_not_move) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("td/telegram/MessageContent.cpp"));
+  ASSERT_TRUE(src.find("ToDoCompletion(std::forward<decltype(completion)>(completion))") != td::string::npos);
+  ASSERT_EQ(td::string::npos, src.find("ToDoCompletion(std::move(completion))"));
+}
+
+TEST(SonarBlockerWave8Contract, message_content_todo_append_tasks_lambda_uses_forward_not_move) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("td/telegram/MessageContent.cpp"));
+  ASSERT_TRUE(src.find("ToDoItem(user_manager,std::forward<decltype(item)>(item))") != td::string::npos);
+  ASSERT_EQ(td::string::npos, src.find("ToDoItem(user_manager,std::move(item))"));
+}
+
+// ---------------------------------------------------------------------------
+// SqliteKeyValue.h: get_by_range_impl must use std::forward not std::move for callback
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, sqlite_key_value_get_by_range_uses_forward_not_move) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tddb/td/db/SqliteKeyValue.h"));
+  ASSERT_TRUE(src.find("std::forward<CallbackT>(callback)") != td::string::npos);
+  ASSERT_EQ(td::string::npos, src.find("std::move(callback)"));
+}
+
+// ---------------------------------------------------------------------------
+// NetQuery.h: movable_atomic ctor must use std::move not std::forward
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, net_query_movable_atomic_ctor_uses_move_not_forward) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("td/telegram/net/NetQuery.h"));
+  // movable_atomic(T &&x) ctor: T is class template param, not deduced → must use std::move
+  ASSERT_TRUE(src.find("movable_atomic(T&&x):std::atomic<T>(std::move(x))") != td::string::npos);
+  ASSERT_EQ(td::string::npos, src.find("movable_atomic(T&&x):std::atomic<T>(std::forward<T>(x))"));
+}
+
+// ---------------------------------------------------------------------------
+// Closure.h: ImmediateClosure/DelayedClosure constructors use static_cast not std::forward
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, closure_h_constructors_avoid_std_forward_on_class_template_params) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tdutils/td/utils/Closure.h"));
+  // std::forward<ArgsT> in a non-deduced context is flagged; replace with static_cast<ArgsT&&>
+  // Both ImmediateClosure and DelayedClosure constructors are covered.
+  ASSERT_EQ(td::string::npos, src.find("std::forward<ArgsT>(args)..."));
+}
+
+// ---------------------------------------------------------------------------
+// JsonBuilder.h: JsonObjectImpl / JsonArrayImpl ctors use static_cast not std::forward
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, json_builder_object_array_ctors_avoid_std_forward_on_class_template_param) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tdutils/td/utils/JsonBuilder.h"));
+  // JsonObjectImpl(F &&f) and JsonArrayImpl(F &&f): F is class template param, use static_cast<F&&>
+  ASSERT_EQ(td::string::npos, src.find("JsonObjectImpl(F&&f):f_(std::forward<F>(f))"));
+  ASSERT_EQ(td::string::npos, src.find("JsonArrayImpl(F&&f):f_(std::forward<F>(f))"));
+}
+
+// ---------------------------------------------------------------------------
+// Promise.h: JoinPromise ctor uses static_cast not std::forward on class template params
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, promise_join_promise_ctor_avoids_std_forward_on_class_template_params) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tdutils/td/utils/Promise.h"));
+  // JoinPromise(ArgsT &&...arg): ArgsT is class template param, not deduced → static_cast
+  ASSERT_EQ(td::string::npos, src.find("promises_(std::forward<ArgsT>(arg)...)"));
+}
+
+// ---------------------------------------------------------------------------
+// MpmcWaiter.h: condition_variable_.wait must have a spurious-wakeup predicate
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, mpmc_waiter_condition_variable_wait_has_predicate) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tdutils/td/utils/MpmcWaiter.h"));
+  // Bare condition_variable_.wait(lock) without predicate is a spurious-wakeup vulnerability
+  ASSERT_EQ(td::string::npos, src.find("condition_variable_.wait(lock);"));
+  // A predicate lambda must be present
+  ASSERT_TRUE(src.find("condition_variable_.wait(lock,") != td::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// IPAddress.cpp: in6_addr comparison must use s6_addr byte array, not raw struct memcmp
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, ip_address_ipv6_comparison_uses_s6_addr_not_raw_sin6_addr) {
+  const auto src = normalize_no_space(td::mtproto::test::read_repo_text_file("tdutils/td/utils/port/IPAddress.cpp"));
+  // memcmp on in6_addr struct is UB on types with padding; must use .s6_addr byte array
+  ASSERT_EQ(td::string::npos, src.find("std::memcmp(&a.ipv6_addr_.sin6_addr,&b.ipv6_addr_.sin6_addr,"));
+  ASSERT_TRUE(src.find("s6_addr") != td::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// tl-parser.c: parse_args2 must free S before load_parse when S is non-null and ':' is absent
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, tl_parser_parse_args2_frees_S_before_load_parse_on_no_colon) {
+  const auto src = td::mtproto::test::read_repo_text_file("td/generate/tl-parser/tl-parser.c");
+  const auto fn = extract_region(src, "struct tree *parse_args2(void)", "struct tree *parse_args1(void)");
+  const auto fn_norm = normalize_no_space(fn);
+  // free S before load_parse when S!=NULL and ':' is absent
+  ASSERT_TRUE(fn_norm.find("if(S){tree_delete(S);") != td::string::npos);
+  // The S-leak path must not exist: bare load_parse(save) in else branch without freeing S
+  ASSERT_EQ(td::string::npos, fn_norm.find("}else{load_parse(save);}structparseso=save_parse();"));
+}
+
+// ---------------------------------------------------------------------------
+// tl-parser.c: tl_union must free v-wrapper before returning 0 on all error paths
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, tl_parser_tl_union_frees_v_on_error_paths) {
+  const auto src = td::mtproto::test::read_repo_text_file("td/generate/tl-parser/tl-parser.c");
+  const auto fn =
+      extract_region(src, "struct tl_combinator_tree *tl_union(", "struct tl_combinator_tree *alloc_ctree_node(");
+  const auto fn_norm = normalize_no_space(fn);
+  // After v = alloc_ctree_node(), every return 0 must be preceded by tfree(v,…)
+  ASSERT_TRUE(fn_norm.find("tfree(v,sizeof(*v));return0;") != td::string::npos);
+  // Old bare return 0 after TL_ERROR must not exist inside tl_union
+  ASSERT_EQ(td::string::npos, fn_norm.find("TL_ERROR(\"Union:typemistmatch\\n\");return0;"));
+}
+
+// ---------------------------------------------------------------------------
+// tl-parser.c: tl_parse_args2 must free field_name before TL_FAIL on all paths
+// ---------------------------------------------------------------------------
+
+TEST(SonarBlockerWave8Contract, tl_parser_parse_args2_frees_field_name_before_TL_FAIL) {
+  const auto src = td::mtproto::test::read_repo_text_file("td/generate/tl-parser/tl-parser.c");
+  const auto fn =
+      extract_region(src, "struct tl_combinator_tree *tl_parse_args2(", "struct tl_combinator_tree *tl_parse_args134(");
+  const auto fn_norm = normalize_no_space(fn);
+  // field_name freed before TL_FAIL (TL_FAIL expands to 'return 0;')
+  ASSERT_TRUE(fn_norm.find("tfree(field_name,0)") != td::string::npos);
+}

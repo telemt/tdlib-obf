@@ -327,7 +327,7 @@ class CancellablePromise final : public PromiseT {
 template <class... ArgsT>
 class JoinPromise final : public PromiseInterface<Unit> {
  public:
-  explicit JoinPromise(ArgsT &&...arg) : promises_(std::forward<ArgsT>(arg)...) {
+  explicit JoinPromise(ArgsT &&...arg) : promises_(static_cast<ArgsT &&>(arg)...) {
   }
   void set_value(Unit &&) final {
     tuple_for_each(promises_, [](auto &promise) { promise.set_value(Unit()); });

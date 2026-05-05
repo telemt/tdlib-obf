@@ -653,7 +653,7 @@ bool operator==(const IPAddress &a, const IPAddress &b) {
            std::memcmp(&a.ipv4_addr_.sin_addr, &b.ipv4_addr_.sin_addr, sizeof(a.ipv4_addr_.sin_addr)) == 0;
   } else if (a.get_address_family() == AF_INET6) {
     return a.ipv6_addr_.sin6_port == b.ipv6_addr_.sin6_port &&
-           std::memcmp(&a.ipv6_addr_.sin6_addr, &b.ipv6_addr_.sin6_addr, sizeof(a.ipv6_addr_.sin6_addr)) == 0;
+           std::memcmp(a.ipv6_addr_.sin6_addr.s6_addr, b.ipv6_addr_.sin6_addr.s6_addr, 16) == 0;
   }
 
   UNREACHABLE();
@@ -677,7 +677,7 @@ bool operator<(const IPAddress &a, const IPAddress &b) {
     if (a.ipv6_addr_.sin6_port != b.ipv6_addr_.sin6_port) {
       return a.ipv6_addr_.sin6_port < b.ipv6_addr_.sin6_port;
     }
-    return std::memcmp(&a.ipv6_addr_.sin6_addr, &b.ipv6_addr_.sin6_addr, sizeof(a.ipv6_addr_.sin6_addr)) < 0;
+    return std::memcmp(a.ipv6_addr_.sin6_addr.s6_addr, b.ipv6_addr_.sin6_addr.s6_addr, 16) < 0;
   }
 
   UNREACHABLE();

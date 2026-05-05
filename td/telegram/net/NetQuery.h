@@ -283,7 +283,7 @@ class NetQuery final : public TsListNode<NetQueryDebug> {
   template <class T>
   struct movable_atomic final : public std::atomic<T> {
     movable_atomic() = default;
-    movable_atomic(T &&x) : std::atomic<T>(std::forward<T>(x)) {
+    movable_atomic(T &&x) : std::atomic<T>(std::move(x)) {
     }
     movable_atomic(movable_atomic &&other) noexcept {
       this->store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);

@@ -91,3 +91,55 @@ TEST(SonarBlockerWave8Integration, star_manager_leaf_transaction_direction_handl
           "send(conststring&offset,int32limit,consttd_api::object_ptr<td_api::TransactionDirection>&direction)") !=
       td::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Integration: IPAddress in6_addr equality uses s6_addr, semantics verified
+// ---------------------------------------------------------------------------
+
+#include "td/utils/port/IPAddress.h"
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+TEST(SonarBlockerWave8Integration, ipv6_equality_identical_addresses_are_equal) {
+  td::IPAddress a, b;
+  ASSERT_TRUE(a.init_ipv6_port("::1", 443).is_ok());
+  ASSERT_TRUE(b.init_ipv6_port("::1", 443).is_ok());
+  ASSERT_TRUE(a == b);
+  ASSERT_FALSE(a != b);
+  ASSERT_FALSE(a < b);
+  ASSERT_FALSE(b < a);
+}
+
+TEST(SonarBlockerWave8Integration, ipv6_equality_different_addresses_are_not_equal) {
+  td::IPAddress a, b;
+  ASSERT_TRUE(a.init_ipv6_port("::1", 443).is_ok());
+  ASSERT_TRUE(b.init_ipv6_port("::2", 443).is_ok());
+  ASSERT_FALSE(a == b);
+  ASSERT_TRUE(a != b);
+}
+
+TEST(SonarBlockerWave8Integration, ipv6_equality_different_ports_differ) {
+  td::IPAddress a, b;
+  ASSERT_TRUE(a.init_ipv6_port("::1", 443).is_ok());
+  ASSERT_TRUE(b.init_ipv6_port("::1", 80).is_ok());
+  ASSERT_FALSE(a == b);
+  ASSERT_TRUE(a != b);
+}
+
+TEST(SonarBlockerWave8Integration, ipv6_ordering_is_consistent) {
+  td::IPAddress a, b;
+  ASSERT_TRUE(a.init_ipv6_port("2001:db8::1", 443).is_ok());
+  ASSERT_TRUE(b.init_ipv6_port("2001:db8::2", 443).is_ok());
+  // Exactly one of (a<b) or (b<a) must be true; neither both nor neither
+  bool ab = (a < b);
+  bool ba = (b < a);
+  ASSERT_TRUE(ab != ba);
+}
+
+TEST(SonarBlockerWave8Integration, ipv6_all_zeros_equals_itself) {
+  td::IPAddress a, b;
+  ASSERT_TRUE(a.init_ipv6_port("::", 1).is_ok());
+  ASSERT_TRUE(b.init_ipv6_port("::", 1).is_ok());
+  ASSERT_TRUE(a == b);
+}

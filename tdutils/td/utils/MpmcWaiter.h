@@ -62,7 +62,7 @@ class MpmcEagerWaiter {
       if (State::still_sleepy(state, slot.worker_id)) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (state_.compare_exchange_strong(state, State::asleep(), std::memory_order_acq_rel)) {
-          condition_variable_.wait(lock);
+          condition_variable_.wait(lock, [this] { return !State::is_asleep(state_.load(std::memory_order_relaxed)); });
         }
       }
       slot.yields = 0;

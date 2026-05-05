@@ -9373,15 +9373,16 @@ unique_ptr<MessageContent> get_message_content(Td *td, FormattedText message,
     case telegram_api::messageMediaPaidMedia::ID: {
       auto media = telegram_api::move_object_as<telegram_api::messageMediaPaidMedia>(media_ptr);
       auto extended_media = transform(std::move(media->extended_media_), [&](auto &&extended_media) {
-        return MessageExtendedMedia(td, std::move(extended_media), owner_dialog_id);
+        return MessageExtendedMedia(td, std::forward<decltype(extended_media)>(extended_media), owner_dialog_id);
       });
       return td::make_unique<MessagePaidMedia>(std::move(extended_media), std::move(message),
                                                StarManager::get_star_count(media->stars_amount_), string());
     }
     case telegram_api::messageMediaToDo::ID: {
       auto media = telegram_api::move_object_as<telegram_api::messageMediaToDo>(media_ptr);
-      auto completions = transform(std::move(media->completions_),
-                                   [](auto &&completion) { return ToDoCompletion(std::move(completion)); });
+      auto completions = transform(std::move(media->completions_), [](auto &&completion) {
+        return ToDoCompletion(std::forward<decltype(completion)>(completion));
+      });
       td::remove_if(completions, [](const auto &completion) { return !completion.is_valid(); });
       return td::make_unique<MessageToDoList>(ToDoList(td->user_manager_.get(), std::move(media->todo_)),
                                               std::move(completions));
@@ -10390,7 +10391,7 @@ unique_ptr<MessageContent> get_action_message_content(Td *td, tl_object_ptr<tele
         reply_to_message_id = MessageId();
       }
       auto items = transform(std::move(action->list_), [user_manager = td->user_manager_.get()](auto &&item) {
-        return ToDoItem(user_manager, std::move(item));
+        return ToDoItem(user_manager, std::forward<decltype(item)>(item));
       });
       return td::make_unique<MessageTodoAppendTasks>(reply_to_message_id, std::move(items));
     }

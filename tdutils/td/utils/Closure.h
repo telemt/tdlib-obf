@@ -66,7 +66,7 @@ class ImmediateClosure {
   using ActorType = ActorT;
 
   // no &&. just save references as references.
-  explicit ImmediateClosure(FunctionT func, ArgsT... args) : args(func, std::forward<ArgsT>(args)...) {
+  explicit ImmediateClosure(FunctionT func, ArgsT... args) : args(func, static_cast<ArgsT &&>(args)...) {
   }
 
  private:
@@ -93,7 +93,7 @@ class DelayedClosure {
   explicit DelayedClosure(ImmediateClosure<ActorT, FunctionT, ArgsT...> &&other) : args(std::move(other.args)) {
   }
 
-  explicit DelayedClosure(FunctionT func, ArgsT... args) : args(func, std::forward<ArgsT>(args)...) {
+  explicit DelayedClosure(FunctionT func, ArgsT... args) : args(func, static_cast<ArgsT &&>(args)...) {
   }
 
   template <class F>

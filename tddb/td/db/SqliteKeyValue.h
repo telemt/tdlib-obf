@@ -84,7 +84,7 @@ class SqliteKeyValue {
 
   template <class CallbackT>
   void get_by_range(Slice from, Slice till, CallbackT &&callback) {
-    get_by_range_impl(from, till, false, std::move(callback));
+    get_by_range_impl(from, till, false, std::forward<CallbackT>(callback));
   }
 
  private:
