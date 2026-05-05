@@ -54,9 +54,18 @@ int total_functions_num;
 }*/
 
 #define talloc(a) malloc(a)
-#define tfree(a, b) free(a)
 #define talloc0(a) calloc(a, 1)
 #define tstrdup(a) strdup(a)
+
+static void tl_parser_free(void *ptr) {
+  if (!ptr) {
+    return;
+  }
+  assert(ptr != (void *)-1l && ptr != (void *)-2l);
+  free(ptr);
+}
+
+#define tfree(a, b) tl_parser_free(a)
 
 typedef char error_int_must_be_4_byte[(sizeof(int) == 4) ? 1 : -1];
 typedef char error_long_long_must_be_8_byte[(sizeof(long long) == 8) ? 1 : -1];
@@ -1463,12 +1472,56 @@ static struct tl_combinator_tree *tl_collapse_to_left_and_free_wrapper(struct tl
 }
 
 static struct tl_combinator_tree *tl_collapse_to_replacement_and_free_wrapper(struct tl_combinator_tree *node,
-                                                                               struct tl_combinator_tree *replacement) {
+                                                                              struct tl_combinator_tree *replacement) {
   tl_free_combinator_tree(node->left);
   node->left = 0;
   node->right = 0;
   tfree(node, sizeof(*node));
   return replacement;
+}
+
+enum tl_tree_change_status {
+  tl_tree_change_error,
+  tl_tree_change_unchanged,
+  tl_tree_change_found,
+  tl_tree_change_updated
+};
+
+struct tl_tree_change_result {
+  struct tl_combinator_tree *node;
+  enum tl_tree_change_status status;
+};
+
+static struct tl_tree_change_result tl_tree_change_make_error(void) {
+  struct tl_tree_change_result result;
+  result.node = 0;
+  result.status = tl_tree_change_error;
+  return result;
+}
+
+static struct tl_tree_change_result tl_tree_change_make_unchanged(void) {
+  struct tl_tree_change_result result;
+  result.node = 0;
+  result.status = tl_tree_change_unchanged;
+  return result;
+}
+
+static struct tl_tree_change_result tl_tree_change_make_found(void) {
+  struct tl_tree_change_result result;
+  result.node = 0;
+  result.status = tl_tree_change_found;
+  return result;
+}
+
+static struct tl_tree_change_result tl_tree_change_make_updated(struct tl_combinator_tree *node) {
+  struct tl_tree_change_result result;
+  result.node = node;
+  result.status = tl_tree_change_updated;
+  return result;
+}
+
+static int tl_tree_change_is_error(struct tl_tree_change_result result) {
+  return result.status == tl_tree_change_error;
 }
 
 struct tl_type *tl_tree_get_type(struct tl_combinator_tree *T) {
@@ -2337,29 +2390,29 @@ void change_var_ptrs(struct tl_combinator_tree *O, struct tl_combinator_tree *D,
   change_var_ptrs(O->right, D->right, V);
 }
 
-struct tl_combinator_tree *change_first_var(struct tl_combinator_tree *O, struct tl_combinator_tree **X,
-                                            struct tl_combinator_tree *Y) {
+struct tl_tree_change_result change_first_var(struct tl_combinator_tree *O, struct tl_combinator_tree **X,
+                                              struct tl_combinator_tree *Y) {
   if (!O) {
-    return (void *)-2l;
-  };
+    return tl_tree_change_make_unchanged();
+  }
   if (O->act == act_field && !*X) {
     struct tl_type *t = tl_tree_get_type(O->left);
     if (t && !strcmp(t->id, "#")) {
       if (Y->type != type_num && Y->type != type_num_value) {
         TL_ERROR("change_var: Type mistmatch\n");
-        return 0;
+        return tl_tree_change_make_error();
       } else {
         *X = O;
-        return (void *)-1l;
+        return tl_tree_change_make_found();
       }
     }
     if (t && !strcmp(t->id, "Type")) {
       if (Y->type != type_type || Y->type_len != 0) {
         TL_ERROR("change_var: Type mistmatch\n");
-        return 0;
+        return tl_tree_change_make_error();
       } else {
         *X = O;
-        return (void *)-1l;
+        return tl_tree_change_make_found();
       }
     }
   }
@@ -2369,41 +2422,43 @@ struct tl_combinator_tree *change_first_var(struct tl_combinator_tree *O, struct
       if (O->type == type_num || O->type == type_num_value) {
         R->type_flags += O->type_flags;
       }
-      return R;
+      return tl_tree_change_make_updated(R);
     }
   }
-  struct tl_combinator_tree *t;
-  t = change_first_var(O->left, X, Y);
-  if (!t) {
-    return 0;
+  int is_updated = 0;
+  struct tl_tree_change_result t = change_first_var(O->left, X, Y);
+  if (tl_tree_change_is_error(t)) {
+    return tl_tree_change_make_error();
   }
-  if (t == (void *)-1l) {
+  if (t.status == tl_tree_change_found) {
     t = change_first_var(O->right, X, Y);
-    if (!t) {
-      return 0;
+    if (tl_tree_change_is_error(t)) {
+      return tl_tree_change_make_error();
     }
-    if (t == (void *)-1l) {
-      return (void *)-1l;
+    if (t.status == tl_tree_change_found) {
+      return tl_tree_change_make_found();
     }
-    if (t != (void *)-2l) {
-      return tl_collapse_to_replacement_and_free_wrapper(O, t);
+    if (t.status == tl_tree_change_updated) {
+      return tl_tree_change_make_updated(tl_collapse_to_replacement_and_free_wrapper(O, t.node));
     }
-    return (void *)-1l;
+    return tl_tree_change_make_found();
   }
-  if (t != (void *)-2l) {
-    O->left = t;
+  if (t.status == tl_tree_change_updated) {
+    O->left = t.node;
+    is_updated = 1;
   }
   t = change_first_var(O->right, X, Y);
-  if (!t) {
-    return 0;
+  if (tl_tree_change_is_error(t)) {
+    return tl_tree_change_make_error();
   }
-  if (t == (void *)-1l) {
-    return tl_collapse_to_left_and_free_wrapper(O);
+  if (t.status == tl_tree_change_found) {
+    return tl_tree_change_make_updated(tl_collapse_to_left_and_free_wrapper(O));
   }
-  if (t != (void *)-2l) {
-    O->right = t;
+  if (t.status == tl_tree_change_updated) {
+    O->right = t.node;
+    is_updated = 1;
   }
-  return O;
+  return is_updated ? tl_tree_change_make_updated(O) : tl_tree_change_make_unchanged();
 }
 
 int uniformize(struct tl_combinator_tree *L, struct tl_combinator_tree *R, struct tree_var_value **T);
@@ -2463,10 +2518,11 @@ struct tl_combinator_tree *reduce_type(struct tl_combinator_tree *A, struct tl_t
   return A;
 }
 
-struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct tree_var_value **X) {
+struct tl_tree_change_result change_value_var(struct tl_combinator_tree *O, struct tree_var_value **X) {
   if (!O) {
-    return (void *)-2l;
-  };
+    return tl_tree_change_make_unchanged();
+  }
+  int is_updated = 0;
   while (O->act == act_var) {
     assert(O->data);
     if (!tl_get_var_value(X, O->data)) {
@@ -2476,6 +2532,7 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
       struct tl_combinator_tree *next = tl_tree_dup(tl_get_var_value(X, O->data));
       tfree(O, sizeof(*O));
       O = next;
+      is_updated = 1;
     } else {
       long long n = tl_get_var_value_num(X, O->data);
       struct tl_combinator_tree *T = tl_get_var_value(X, O->data);
@@ -2483,67 +2540,69 @@ struct tl_combinator_tree *change_value_var(struct tl_combinator_tree *O, struct
       O->type = T->type;
       O->act = T->act;
       O->type_flags = O->type_flags + n + T->type_flags;
+      is_updated = 1;
     }
   }
   if (O->act == act_field) {
     if (tl_get_var_value(X, O)) {
-      return (void *)-1l;
+      return tl_tree_change_make_found();
     }
   }
-  struct tl_combinator_tree *t;
-  t = change_value_var(O->left, X);
-  if (!t) {
+  struct tl_tree_change_result t = change_value_var(O->left, X);
+  if (tl_tree_change_is_error(t)) {
     O->left = 0;
     O->right = 0;
     tfree(O, sizeof(*O));
-    return 0;
+    return tl_tree_change_make_error();
   }
-  if (t == (void *)-1l) {
+  if (t.status == tl_tree_change_found) {
     t = change_value_var(O->right, X);
-    if (!t) {
+    if (tl_tree_change_is_error(t)) {
       O->left = 0;
       O->right = 0;
       tfree(O, sizeof(*O));
-      return 0;
+      return tl_tree_change_make_error();
     }
-    if (t == (void *)-1l) {
+    if (t.status == tl_tree_change_found) {
       O->left = 0;
       O->right = 0;
       tfree(O, sizeof(*O));
-      return (void *)-1l;
+      return tl_tree_change_make_found();
     }
-    if (t != (void *)-2l) {
+    if (t.status == tl_tree_change_updated) {
       O->left = 0;
       O->right = 0;
       tfree(O, sizeof(*O));
-      return t;
+      return tl_tree_change_make_updated(t.node);
     }
     O->left = 0;
     O->right = 0;
     tfree(O, sizeof(*O));
-    return (void *)-1l;
+    return tl_tree_change_make_found();
   }
-  if (t != (void *)-2l) {
-    O->left = t;
+  if (t.status == tl_tree_change_updated) {
+    O->left = t.node;
+    is_updated = 1;
   }
   t = change_value_var(O->right, X);
-  if (!t) {
+  if (tl_tree_change_is_error(t)) {
     O->left = 0;
     O->right = 0;
     tfree(O, sizeof(*O));
-    return 0;
+    return tl_tree_change_make_error();
   }
-  if (t == (void *)-1l) {
+  if (t.status == tl_tree_change_found) {
     struct tl_combinator_tree *left = O->left;
     O->left = 0;
     O->right = 0;
     tfree(O, sizeof(*O));
-    return left;
+    return tl_tree_change_make_updated(left);
   }
-  if (t != (void *)-2l) {
-    O->right = t;
+  if (t.status == tl_tree_change_updated) {
+    O->right = t.node;
+    is_updated = 1;
   }
-  return O;
+  return is_updated ? tl_tree_change_make_updated(O) : tl_tree_change_make_unchanged();
 }
 
 int tl_parse_partial_type_app_decl(struct tree *T) {
@@ -2605,12 +2664,27 @@ int tl_parse_partial_type_app_decl(struct tree *T) {
       continue;
     }
     B = reduce_type(B, nt);
-    A = change_value_var(A, &V);
-    if (A == (void *)-1l) {
+    struct tl_tree_change_result a_change = change_value_var(A, &V);
+    if (a_change.status == tl_tree_change_error) {
       A = 0;
+      tl_free_combinator_tree(B);
+      continue;
     }
-    B = change_value_var(B, &V);
-    assert(B != (void *)-1l);
+    if (a_change.status == tl_tree_change_found) {
+      A = 0;
+    } else if (a_change.status == tl_tree_change_updated) {
+      A = a_change.node;
+    }
+    struct tl_tree_change_result b_change = change_value_var(B, &V);
+    if (b_change.status == tl_tree_change_error) {
+      tl_free_combinator_tree(A);
+      B = 0;
+      continue;
+    }
+    assert(b_change.status != tl_tree_change_found);
+    if (b_change.status == tl_tree_change_updated) {
+      B = b_change.node;
+    }
     snprintf(_buf, 100000, "%s%.*s", c->id, buf_pos, buf);
 
     struct tl_constructor *r = tl_add_constructor(nt, _buf, strlen(_buf), 1);
@@ -2658,18 +2732,25 @@ int tl_parse_partial_comb_app_decl(struct tree *T, int fun) {
     TL_INIT(Z);
     X = tl_parse_any_term(T->c[i], 0);
     struct tl_combinator_tree *K = 0;
-    if (!(Z = change_first_var(L, &K, X))) {
+    struct tl_tree_change_result z_change = change_first_var(L, &K, X);
+    if (tl_tree_change_is_error(z_change)) {
       TL_FAIL;
     }
-    L = Z;
+    if (z_change.status == tl_tree_change_updated) {
+      L = z_change.node;
+    }
     if (!K) {
       TL_ERROR("Partial app: not enougth variables (i = %d)\n", i);
       TL_FAIL;
     }
-    if (!(Z = change_first_var(R, &K, X))) {
+    struct tl_tree_change_result zr_change = change_first_var(R, &K, X);
+    if (tl_tree_change_is_error(zr_change)) {
       TL_FAIL;
     }
-    assert(Z == R);
+    if (zr_change.status == tl_tree_change_updated) {
+      R = zr_change.node;
+    }
+    assert(zr_change.status != tl_tree_change_found);
     tl_buf_add_tree(X, 1);
   }
 

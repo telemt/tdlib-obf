@@ -41,7 +41,7 @@ bool persist_route_entry_metadata(int32 dc_id, int64 fingerprint, int64 now) {
 
 }  // namespace
 
-PublicRsaKeyWatchdog::PublicRsaKeyWatchdog(ActorShared<> parent) : parent_(std::move(parent)) {
+PublicRsaKeyWatchdog::PublicRsaKeyWatchdog(ActorShared<> parent) : parent_actor_(std::move(parent)) {
 }
 
 size_t PublicRsaKeyWatchdog::maximum_route_count() {

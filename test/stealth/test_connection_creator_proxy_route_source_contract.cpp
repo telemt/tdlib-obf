@@ -69,4 +69,21 @@ TEST(ConnectionCreatorProxyRouteSourceContract, PingProxyResolvesEffectiveProxyB
   ASSERT_TRUE(resolve_pos < direct_branch_pos);
 }
 
+TEST(ConnectionCreatorProxyRouteSourceContract, PingProxyBufferedSocketLogsDoNotUseMovedFromTransportType) {
+  auto source = td::mtproto::test::read_repo_text_file("td/telegram/net/ConnectionCreator.cpp");
+  auto ping_proxy_buffered = extract_source_region(source, "void ConnectionCreator::ping_proxy_buffered_socket_fd(",
+                                                   "void ConnectionCreator::set_active_proxy_id(");
+  auto normalized = normalize_for_contract(ping_proxy_buffered);
+
+  ASSERT_TRUE(normalized.find("autotransport_type_for_log=transport_type;") != td::string::npos);
+  ASSERT_TRUE(
+      normalized.find(
+          "RawConnection::create(ip_address,std::move(buffered_socket_fd),std::move(transport_type),nullptr)") !=
+      td::string::npos);
+  ASSERT_TRUE(normalized.find("transport_type_for_log") != td::string::npos);
+  ASSERT_TRUE(normalized.find("raw_ip_transport_name(transport_type)") == td::string::npos);
+  ASSERT_TRUE(normalized.find("transport_type.dc_id") == td::string::npos);
+  ASSERT_TRUE(normalized.find("transport_type.secret.emulate_tls()") == td::string::npos);
+}
+
 }  // namespace

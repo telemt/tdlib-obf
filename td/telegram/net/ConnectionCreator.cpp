@@ -506,10 +506,11 @@ void ConnectionCreator::add_proxy(int32 old_proxy_id, td_api::object_ptr<td_api:
                                   Promise<td_api::object_ptr<td_api::addedProxy>> promise) {
   TRY_RESULT_PROMISE(promise, new_proxy, Proxy::create_proxy(proxy.get()));
   if (old_proxy_id >= 0) {
-    if (proxies_.count(old_proxy_id) == 0) {
+    auto old_proxy_it = proxies_.find(old_proxy_id);
+    if (old_proxy_it == proxies_.end()) {
       return promise.set_error(400, "Proxy not found");
     }
-    auto &old_proxy = proxies_[old_proxy_id];
+    const auto &old_proxy = old_proxy_it->second;
     if (old_proxy == new_proxy) {
       if (enable) {
         enable_proxy_impl(old_proxy_id);
@@ -532,9 +533,9 @@ void ConnectionCreator::add_proxy(int32 old_proxy_id, td_api::object_ptr<td_api:
   }
 
   auto proxy_id = [&] {
-    for (auto &proxy : proxies_) {
-      if (proxy.second == new_proxy) {
-        return proxy.first;
+    for (const auto &[existing_proxy_id, existing_proxy] : proxies_) {
+      if (existing_proxy == new_proxy) {
+        return existing_proxy_id;
       }
     }
 
@@ -544,7 +545,7 @@ void ConnectionCreator::add_proxy(int32 old_proxy_id, td_api::object_ptr<td_api:
       proxy_id = max_proxy_id_++;
       G()->td_db()->get_binlog_pmc()->set("proxy_max_id", to_string(max_proxy_id_));
     }
-    bool is_inserted = proxies_.emplace(proxy_id, std::move(new_proxy)).second;
+    bool is_inserted = proxies_.try_emplace(proxy_id, std::move(new_proxy)).second;
     CHECK(is_inserted);
     G()->td_db()->get_binlog_pmc()->set(get_proxy_database_key(proxy_id),
                                         log_event_store(proxies_[proxy_id]).as_slice().str());
@@ -557,7 +558,7 @@ void ConnectionCreator::add_proxy(int32 old_proxy_id, td_api::object_ptr<td_api:
 }
 
 void ConnectionCreator::enable_proxy(int32 proxy_id, Promise<Unit> promise) {
-  if (proxies_.count(proxy_id) == 0) {
+  if (!proxies_.contains(proxy_id)) {
     return promise.set_error(400, "Unknown proxy identifier");
   }
 
@@ -572,7 +573,7 @@ void ConnectionCreator::disable_proxy(Promise<Unit> promise) {
 }
 
 void ConnectionCreator::remove_proxy(int32 proxy_id, Promise<Unit> promise) {
-  if (proxies_.count(proxy_id) == 0) {
+  if (!proxies_.contains(proxy_id)) {
     return promise.set_error(400, "Unknown proxy identifier");
   }
 
@@ -805,30 +806,32 @@ void ConnectionCreator::ping_proxy_buffered_socket_fd(IPAddress ip_address, Buff
                                                       mtproto::TransportType transport_type, string debug_str,
                                                       Proxy proxy_context, Promise<double> promise) {
   auto token = next_token();
+  auto transport_type_for_log = transport_type;
   auto raw_connection =
       mtproto::RawConnection::create(ip_address, std::move(buffered_socket_fd), std::move(transport_type), nullptr);
   children_[token] = {
       false,
       create_ping_actor(
           debug_str, std::move(raw_connection), nullptr,
-          PromiseCreator::lambda([promise = std::move(promise), ip_address, transport_type,
-                                  debug_str = std::move(debug_str), proxy_context = std::move(proxy_context)](
-                                     Result<unique_ptr<mtproto::RawConnection>> result) mutable {
-            if (result.is_error()) {
-              auto error = result.move_as_error();
-              auto classification = classify_connection_failure(true, proxy_context, error);
-              LOG(WARNING) << "Ping probe handshake failed" << tag("proxy_mode", proxy_mode_name(proxy_context))
-                           << tag("transport", raw_ip_transport_name(transport_type))
-                           << tag("transport_dc_id", transport_type.dc_id)
-                           << tag("tls_emulation", transport_type.secret.emulate_tls()) << tag("target_ip", ip_address)
-                           << tag("debug_route", debug_str) << tag("status_code", error.code())
-                           << tag("status_message", sanitize_connection_failure_status_message_for_log(error))
-                           << tag("failure_summary", summarize_connection_failure_for_log(classification, error));
-              return promise.set_error(400, error.public_message());
-            }
-            auto ping_time = result.ok()->extra().rtt;
-            promise.set_value(std::move(ping_time));
-          }),
+          PromiseCreator::lambda(
+              [promise = std::move(promise), ip_address, transport_type_for_log, debug_str = std::move(debug_str),
+               proxy_context = std::move(proxy_context)](Result<unique_ptr<mtproto::RawConnection>> result) mutable {
+                if (result.is_error()) {
+                  auto error = result.move_as_error();
+                  auto classification = classify_connection_failure(true, proxy_context, error);
+                  LOG(WARNING) << "Ping probe handshake failed" << tag("proxy_mode", proxy_mode_name(proxy_context))
+                               << tag("transport", raw_ip_transport_name(transport_type_for_log))
+                               << tag("transport_dc_id", transport_type_for_log.dc_id)
+                               << tag("tls_emulation", transport_type_for_log.secret.emulate_tls())
+                               << tag("target_ip", ip_address) << tag("debug_route", debug_str)
+                               << tag("status_code", error.code())
+                               << tag("status_message", sanitize_connection_failure_status_message_for_log(error))
+                               << tag("failure_summary", summarize_connection_failure_for_log(classification, error));
+                  return promise.set_error(400, error.public_message());
+                }
+                auto ping_time = result.ok()->extra().rtt;
+                promise.set_value(std::move(ping_time));
+              }),
           create_reference(token))};
 }
 

@@ -30,5 +30,5 @@
     "connectionId": "telemt",
     "projectKey": "telemt_tdlib-obf"
   },
-  "sonarlint.pathToCompileCommands": "${workspaceFolder}/build-ninja/compile_commands.json"
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}/compile_commands.json"
 }

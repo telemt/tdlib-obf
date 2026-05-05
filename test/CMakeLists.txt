@@ -177,6 +177,8 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_dispatcher_policy_sink_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_security_option_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_transport_option_source_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_manager_result_source_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_manager_stale_result_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_session_mux_policy_sink_source_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_data_session_mode_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stealth/test_auth_data_legacy_mode_gate_adversarial.cpp

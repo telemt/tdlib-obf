@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <tuple>
+#include <utility>
 
 namespace td {
 
@@ -82,8 +83,9 @@ bool operator!=(const PremiumGiftOption &lhs, const PremiumGiftOption &rhs) {
 
 vector<PremiumGiftOption> get_premium_gift_options(
     vector<telegram_api::object_ptr<telegram_api::premiumSubscriptionOption>> &&options) {
-  auto premium_gift_options = transform(
-      std::move(options), [](auto &&premium_gift_option) { return PremiumGiftOption(std::move(premium_gift_option)); });
+  auto premium_gift_options = transform(std::move(options), [](auto &&premium_gift_option) {
+    return PremiumGiftOption(std::forward<decltype(premium_gift_option)>(premium_gift_option));
+  });
   td::remove_if(premium_gift_options, [](const auto &premium_gift_option) { return !premium_gift_option.is_valid(); });
   return premium_gift_options;
 }

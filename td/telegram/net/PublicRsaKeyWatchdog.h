@@ -30,7 +30,7 @@ class PublicRsaKeyWatchdog final : public NetActor {
   void add_public_rsa_key(std::shared_ptr<PublicRsaKeySharedCdn> key);
 
  private:
-  ActorShared<> parent_;
+  ActorShared<> parent_actor_;
   vector<std::shared_ptr<PublicRsaKeySharedCdn>> keys_;
   tl_object_ptr<telegram_api::cdnConfig> cdn_config_;
   FloodControlStrict flood_control_;

@@ -181,7 +181,7 @@ class AuthManager final : public NetActor {
   bool load_state();
   void save_state();
 
-  ActorShared<> parent_;
+  ActorShared<> parent_actor_;
 
   // STATE
   // from constructor
@@ -253,6 +253,13 @@ class AuthManager final : public NetActor {
   void on_current_query_error(Status status);
   void on_current_query_ok();
   void start_net_query(NetQueryType net_query_type, NetQueryPtr net_query);
+  void reset_wait_phone_number_query_state();
+  static bool should_request_password_on_error(NetQueryType type, const Status &error);
+  void start_get_password_query(NetQueryType type, NetQueryPtr &net_query);
+  static bool should_ignore_background_error(NetQueryType type);
+  bool should_accept_background_authorization_result(const NetQueryPtr &net_query) const;
+  bool handle_expected_query_error(NetQueryType &type, NetQueryPtr &net_query);
+  void dispatch_result(NetQueryType type, NetQueryPtr &&net_query);
 
   static void on_update_login_token_static(void *td);
   void send_export_login_token_query();

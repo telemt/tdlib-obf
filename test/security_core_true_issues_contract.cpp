@@ -55,7 +55,11 @@ TEST(SecurityCoreTrueIssuesContract, tl_parser_change_value_var_frees_collapsed_
   auto normalized = normalize_no_space(source);
 
   ASSERT_TRUE(normalized.find("tfree(O,sizeof(*O));") != td::string::npos);
-  ASSERT_TRUE(normalized.find("if(t==(void*)-1l){structtl_combinator_tree*left=O->left;") != td::string::npos);
+  ASSERT_TRUE(normalized.find("structtl_tree_change_resultchange_value_var(") != td::string::npos);
+  ASSERT_TRUE(normalized.find("if(t.status==tl_tree_change_found){structtl_combinator_tree*left=O->left;") !=
+              td::string::npos);
+  ASSERT_TRUE(normalized.find("returntl_tree_change_make_updated(left);") != td::string::npos);
+  ASSERT_EQ(td::string::npos, normalized.find("if(t==(void*)-1l){structtl_combinator_tree*left=O->left;"));
 }
 
 // V501/CWE-571 hardening: comment skipping in parse_lex must stop on EOF,

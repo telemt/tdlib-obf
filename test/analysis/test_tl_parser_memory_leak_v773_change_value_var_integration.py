@@ -1,27 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 telemt community
 # SPDX-License-Identifier: MIT
-"""
-Integration test for V773 CWE-401 memory leak fixes in tl-parser.c.
-
-This test verifies that the change_value_var function correctly deallocates
-memory on all error paths, particularly when recursive calls fail.
-
-DEFECT FIXED:
-- V773: Memory leak when change_value_var(O->left, X) returns error
-- V773: Memory leak when change_value_var(O->right, X) returns error
-
-ROOT CAUSE:
-The change_value_var function recursively calls itself on left and right subtrees.
-When these recursive calls return error (NULL/0), the code was returning immediately
-without deallocating the parent node O, causing memory leaks.
-
-FIX PATTERN:
-Before every `return 0;` on error paths from recursive calls, add:
-    O->left = 0;
-    O->right = 0;
-    tfree(O, sizeof(*O));
-    return 0;
-"""
+"""Integration test for the tagged-result change_value_var ownership fix."""
 
 import pathlib
 import re
@@ -36,29 +15,31 @@ from tl_parser_test_helper import read_tl_parser_source  # noqa: E402
 
 # Locate change_value_var function
 CHANGE_VALUE_VAR_RE = re.compile(
-    r"struct tl_combinator_tree \*change_value_var.*?\{(?P<body>.*?)^(?:struct|int|static)",
+    r"struct tl_tree_change_result\s+change_value_var.*?\{(?P<body>.*?)^(?:struct|int|static)",
     flags=re.DOTALL | re.MULTILINE,
 )
 
 # Patterns for recursive call error handling
 RECURSIVE_CALL_ERROR_PATTERN_1 = re.compile(
-    r"t\s*=\s*change_value_var\s*\(\s*O\s*->\s*left\s*,\s*X\s*\)\s*;.*?if\s*\(\s*!\s*t\s*\)",
+    r"t\s*=\s*change_value_var\s*\(\s*O\s*->\s*left\s*,\s*X\s*\)\s*;\s*"
+    r"if\s*\(\s*tl_tree_change_is_error\s*\(\s*t\s*\)\s*\)\s*\{(?P<body>.*?)\}",
     flags=re.DOTALL,
 )
 
 RECURSIVE_CALL_ERROR_PATTERN_2 = re.compile(
-    r"t\s*=\s*change_value_var\s*\(\s*O\s*->\s*right\s*,\s*X\s*\)\s*;.*?if\s*\(\s*!\s*t\s*\)",
+    r"t\s*=\s*change_value_var\s*\(\s*O\s*->\s*right\s*,\s*X\s*\)\s*;\s*"
+    r"if\s*\(\s*tl_tree_change_is_error\s*\(\s*t\s*\)\s*\)\s*\{(?P<body>.*?)\}",
     flags=re.DOTALL,
 )
 
 # Pattern for safe deallocation in error path
 SAFE_DEALLOC_PATTERN = re.compile(
-    r"O\s*->\s*left\s*=\s*0\s*;\s*O\s*->\s*right\s*=\s*0\s*;\s*tfree\s*\(\s*O\s*,\s*sizeof\s*\(\s*\*O\s*\)\s*\)\s*;"
+    r"O\s*->\s*left\s*=\s*0\s*;\s*O\s*->\s*right\s*=\s*0\s*;\s*tfree\s*\(\s*O\s*,\s*sizeof\s*\(\s*\*O\s*\)\s*\)\s*;\s*return\s+tl_tree_change_make_error\s*\(\s*\)\s*;"
 )
 
 
 class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
-    """Integration tests verifying V773 memory leak fixes in change_value_var."""
+    """Integration tests verifying tagged-result change_value_var ownership paths."""
 
     def setUp(self) -> None:
         """Load and parse tl-parser source."""
@@ -66,9 +47,23 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
         match = CHANGE_VALUE_VAR_RE.search(self.source)
         self.assertIsNotNone(
             match,
-            msg="change_value_var function not found or does not match expected structure",
+            msg=(
+                "change_value_var function not found or does not match the "
+                "expected tagged-result structure"
+            ),
         )
         self.function_body = match.group("body")
+
+    def test_change_value_var_uses_tagged_result_signature(self) -> None:
+        """CONTRACT: change_value_var must return a tagged result."""
+        self.assertIn(
+            "struct tl_tree_change_result change_value_var",
+            self.source,
+            msg=(
+                "change_value_var must return struct tl_tree_change_result so "
+                "callers do not encode control flow in raw pointer sentinels"
+            ),
+        )
 
     def test_left_recursive_call_error_path_safely_deallocates(self) -> None:
         """INTEGRATION: change_value_var(O->left, X) error path deallocates O."""
@@ -78,21 +73,22 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
             left_error_section,
             msg=(
                 "Left recursive call error path not found. Expected: "
-                "t = change_value_var(O->left, X); if (!t) { ... }"
+                "t = change_value_var(O->left, X); "
+                "if (tl_tree_change_is_error(t)) { ... }"
             ),
         )
 
         # Verify deallocation happens
-        error_handler = left_error_section.group(0)
-        after_error_check = error_handler[error_handler.find("if (!t)") :]
+        error_handler = left_error_section.group("body")
 
         self.assertRegex(
-            after_error_check,
+            error_handler,
             SAFE_DEALLOC_PATTERN,
             msg=(
                 "FIXED V773: Left recursive call error path must deallocate O "
                 "before returning. Required pattern: "
-                "O->left = 0; O->right = 0; tfree(O, sizeof(*O)); return 0;"
+                "O->left = 0; O->right = 0; tfree(O, sizeof(*O)); "
+                "return tl_tree_change_make_error();"
             ),
         )
 
@@ -104,21 +100,22 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
             right_error_section,
             msg=(
                 "Right recursive call error path not found. Expected: "
-                "t = change_value_var(O->right, X); if (!t) { ... }"
+                "t = change_value_var(O->right, X); "
+                "if (tl_tree_change_is_error(t)) { ... }"
             ),
         )
 
         # Verify deallocation happens
-        error_handler = right_error_section.group(0)
-        after_error_check = error_handler[error_handler.find("if (!t)") :]
+        error_handler = right_error_section.group("body")
 
         self.assertRegex(
-            after_error_check,
+            error_handler,
             SAFE_DEALLOC_PATTERN,
             msg=(
                 "FIXED V773: Right recursive call error path must deallocate O "
                 "before returning. Required pattern: "
-                "O->left = 0; O->right = 0; tfree(O, sizeof(*O)); return 0;"
+                "O->left = 0; O->right = 0; tfree(O, sizeof(*O)); "
+                "return tl_tree_change_make_error();"
             ),
         )
 
@@ -131,8 +128,8 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
         self.assertIsNotNone(right_match, msg="Right error path not found")
 
         # Both should have the safe deallocation pattern
-        left_section = left_match.group(0)
-        right_section = right_match.group(0)
+        left_section = left_match.group("body")
+        right_section = right_match.group("body")
 
         left_has_dealloc = SAFE_DEALLOC_PATTERN.search(left_section) is not None
         right_has_dealloc = SAFE_DEALLOC_PATTERN.search(right_section) is not None
@@ -141,7 +138,7 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
             left_has_dealloc and right_has_dealloc,
             msg=(
                 "Both left and right recursive error paths must consistently "
-                "deallocate O before returning 0. Asymmetric handling indicates "
+                "deallocate O before returning an error result. Asymmetric handling indicates "
                 "one path still leaks memory."
             ),
         )
@@ -157,7 +154,7 @@ class TlParserMemoryLeakV773ChangeValueVarIntegrationTest(unittest.TestCase):
         )
 
         for error_match in error_sections:
-            section = error_match.group(0)
+            section = error_match.group("body")
             # Find tfree call
             tfree_pos = section.find("tfree")
             self.assertGreater(tfree_pos, -1, msg="tfree must be called in error path")

@@ -57,6 +57,7 @@
 #include "td/utils/tl_helpers.h"
 
 #include <type_traits>
+#include <utility>
 
 namespace td {
 
@@ -331,7 +332,7 @@ void AuthManager::DbState::parse(ParserT &parser) {
 }
 
 AuthManager::AuthManager(int32 api_id, const string &api_hash, ActorShared<> parent)
-    : parent_(std::move(parent)), api_id_(api_id), api_hash_(api_hash) {
+    : parent_actor_(std::move(parent)), api_id_(api_id), api_hash_(api_hash) {
   string auth_str = G()->td_db()->get_binlog_pmc()->get("auth");
   if (auth_str == "ok") {
     string is_bot_str = G()->td_db()->get_binlog_pmc()->get("auth_is_bot");
@@ -346,8 +347,7 @@ AuthManager::AuthManager(int32 api_id, const string &api_hash, ActorShared<> par
       update_state(State::Ok);
     } else {
       LOG(ERROR) << "Restore unknown my_id";
-      UserManager::send_get_me_query(td_,
-                                     PromiseCreator::lambda([this](Result<Unit> result) { update_state(State::Ok); }));
+      UserManager::send_get_me_query(td_, PromiseCreator::lambda([this](Result<Unit>) { update_state(State::Ok); }));
     }
     G()->net_query_dispatcher().check_authorization_is_ok();
   } else if (auth_str == "logout") {
@@ -377,7 +377,7 @@ void AuthManager::start_up() {
   }
 }
 void AuthManager::tear_down() {
-  parent_.reset();
+  parent_actor_.reset();
 }
 
 bool AuthManager::was_authorized() const {
@@ -492,7 +492,7 @@ void AuthManager::request_qr_code_authentication(uint64 query_id, vector<UserId>
         Status::Error(400,
                       "Cannot request QR code authentication after bot token was entered. You must log out first"));
   }
-  for (auto &other_user_id : other_user_ids) {
+  for (const auto &other_user_id : other_user_ids) {
     if (!other_user_id.is_valid()) {
       return on_query_error(query_id, Status::Error(400, "Invalid user_id among other user_ids"));
     }
@@ -697,10 +697,13 @@ void AuthManager::set_premium_purchase_transaction(uint64 query_id,
         return on_query_error(query_id, Status::Error(400, "Strings must be encoded in UTF-8"));
       }
       auto receipt = telegram_api::make_object<telegram_api::dataJSON>(string());
-      receipt->data_ = json_encode<string>(json_object([&](auto &o) {
-        o("packageName", type->package_name_);
-        o("purchaseToken", type->purchase_token_);
-        o("productId", type->store_product_id_);
+      const auto &package_name = type->package_name_;
+      const auto &purchase_token = type->purchase_token_;
+      const auto &store_product_id = type->store_product_id_;
+      receipt->data_ = json_encode<string>(json_object([&package_name, &purchase_token, &store_product_id](auto &o) {
+        o("packageName", package_name);
+        o("purchaseToken", purchase_token);
+        o("productId", store_product_id);
       }));
 
       on_new_query(query_id);
@@ -983,7 +986,6 @@ void AuthManager::on_new_query(uint64 query_id) {
   net_query_id_ = 0;
   net_query_type_ = NetQueryType::None;
   query_id_ = query_id;
-  // TODO: cancel older net_query
 }
 
 void AuthManager::on_current_query_error(Status status) {
@@ -1018,7 +1020,6 @@ void AuthManager::send_ok(uint64 query_id) {
 }
 
 void AuthManager::start_net_query(NetQueryType net_query_type, NetQueryPtr net_query) {
-  // TODO: cancel old net_query?
   net_query_type_ = net_query_type;
   net_query_id_ = net_query->id();
   G()->net_query_dispatcher().dispatch_with_callback(std::move(net_query), actor_shared(this));
@@ -1521,113 +1522,181 @@ void AuthManager::on_get_authorization(tl_object_ptr<telegram_api::auth_Authoriz
 }
 
 void AuthManager::on_result(NetQueryPtr net_query) {
-  NetQueryType type = NetQueryType::None;
+  using enum NetQueryType;
+
+  NetQueryType type = None;
+  const bool is_current_query = net_query->id() == net_query_id_;
   LOG(INFO) << "Receive result of query " << net_query->id() << ", expecting " << net_query_id_ << " with type "
-            << static_cast<int32>(net_query_type_);
-  if (net_query->id() == net_query_id_) {
+            << std::to_underlying(net_query_type_);
+  if (is_current_query) {
     net_query_id_ = 0;
     type = net_query_type_;
-    net_query_type_ = NetQueryType::None;
-    if (net_query->is_error()) {
-      if ((type == NetQueryType::SendCode || type == NetQueryType::SendEmailCode ||
-           type == NetQueryType::VerifyEmailAddress || type == NetQueryType::SignIn ||
-           type == NetQueryType::RequestQrCode || type == NetQueryType::ImportQrCode ||
-           type == NetQueryType::FinishPasskeyLogin) &&
-          net_query->error().code() == 401 && net_query->error().message() == CSlice("SESSION_PASSWORD_NEEDED")) {
-        auto dc_id = DcId::main();
-        if (type == NetQueryType::ImportQrCode) {
-          CHECK(DcId::is_valid(imported_dc_id_));
-          dc_id = DcId::internal(imported_dc_id_);
-        }
-        net_query->clear();
-        start_net_query(NetQueryType::GetPassword,
-                        G()->net_query_creator().create_unauth(telegram_api::account_getPassword(), dc_id));
-        return;
-      }
-      if (net_query->error().message() == CSlice("PHONE_NUMBER_BANNED")) {
-        on_account_banned();
-      }
-      if (type != NetQueryType::LogOut && type != NetQueryType::DeleteAccount) {
-        if (query_id_ != 0) {
-          if (state_ == State::WaitPhoneNumber) {
-            other_user_ids_.clear();
-            send_code_helper_ = SendCodeHelper();
-            terms_of_service_ = TermsOfService();
-            passkey_parameters_ = {};
-            was_qr_code_request_ = false;
-            was_passkey_login_request_ = false;
-            was_check_bot_token_ = false;
-          }
-          on_current_query_error(net_query->move_as_error());
-          return;
-        }
-        if (type != NetQueryType::RequestQrCode && type != NetQueryType::ImportQrCode &&
-            type != NetQueryType::GetPassword && type != NetQueryType::FinishPasskeyLogin) {
-          LOG(INFO) << "Ignore error for net query of type " << static_cast<int32>(type);
-          type = NetQueryType::None;
-        }
-      }
+    net_query_type_ = None;
+    if (handle_expected_query_error(type, net_query)) {
+      return;
     }
+  } else if (should_accept_background_authorization_result(net_query)) {
+    type = Authentication;
   } else if (net_query->is_ok() && net_query->ok_tl_constructor() == telegram_api::auth_authorization::ID) {
-    type = NetQueryType::Authentication;
+    LOG(INFO) << "Ignore stale auth_authorization result for query " << net_query->id();
   }
+  dispatch_result(type, std::move(net_query));
+}
+
+void AuthManager::reset_wait_phone_number_query_state() {
+  other_user_ids_.clear();
+  send_code_helper_ = SendCodeHelper();
+  terms_of_service_ = TermsOfService();
+  passkey_parameters_ = {};
+  was_qr_code_request_ = false;
+  was_passkey_login_request_ = false;
+  was_check_bot_token_ = false;
+}
+
+bool AuthManager::should_request_password_on_error(NetQueryType type, const Status &error) {
+  using enum NetQueryType;
+
+  if (error.code() != 401 || error.message() != CSlice("SESSION_PASSWORD_NEEDED")) {
+    return false;
+  }
+
   switch (type) {
-    case NetQueryType::None:
+    case SendCode:
+    case SendEmailCode:
+    case VerifyEmailAddress:
+    case SignIn:
+    case RequestQrCode:
+    case ImportQrCode:
+    case FinishPasskeyLogin:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void AuthManager::start_get_password_query(NetQueryType type, NetQueryPtr &net_query) {
+  using enum NetQueryType;
+
+  auto dc_id = DcId::main();
+  if (type == ImportQrCode) {
+    CHECK(DcId::is_valid(imported_dc_id_));
+    dc_id = DcId::internal(imported_dc_id_);
+  }
+  net_query->clear();
+  start_net_query(GetPassword, G()->net_query_creator().create_unauth(telegram_api::account_getPassword(), dc_id));
+}
+
+bool AuthManager::should_ignore_background_error(NetQueryType type) {
+  using enum NetQueryType;
+
+  switch (type) {
+    case RequestQrCode:
+    case ImportQrCode:
+    case GetPassword:
+    case FinishPasskeyLogin:
+      return false;
+    default:
+      return true;
+  }
+}
+
+bool AuthManager::should_accept_background_authorization_result(const NetQueryPtr &net_query) const {
+  if (query_id_ != 0 || net_query_id_ != 0 || net_query_type_ != NetQueryType::None) {
+    return false;
+  }
+  return net_query->is_ok() && net_query->ok_tl_constructor() == telegram_api::auth_authorization::ID;
+}
+
+bool AuthManager::handle_expected_query_error(NetQueryType &type, NetQueryPtr &net_query) {
+  using enum NetQueryType;
+
+  if (!net_query->is_error()) {
+    return false;
+  }
+  if (should_request_password_on_error(type, net_query->error())) {
+    start_get_password_query(type, net_query);
+    return true;
+  }
+  if (net_query->error().message() == CSlice("PHONE_NUMBER_BANNED")) {
+    on_account_banned();
+  }
+  if (type == LogOut || type == DeleteAccount) {
+    return false;
+  }
+  if (query_id_ != 0) {
+    if (state_ == State::WaitPhoneNumber) {
+      reset_wait_phone_number_query_state();
+    }
+    on_current_query_error(net_query->move_as_error());
+    return true;
+  }
+  if (should_ignore_background_error(type)) {
+    LOG(INFO) << "Ignore error for net query of type " << std::to_underlying(type);
+    type = None;
+  }
+  return false;
+}
+
+void AuthManager::dispatch_result(NetQueryType type, NetQueryPtr &&net_query) {
+  using enum NetQueryType;
+
+  switch (type) {
+    case None:
       net_query->clear();
       break;
-    case NetQueryType::SignIn:
-    case NetQueryType::SignUp:
-    case NetQueryType::BotAuthentication:
-    case NetQueryType::CheckPassword:
-    case NetQueryType::RecoverPassword:
+    case SignIn:
+    case SignUp:
+    case BotAuthentication:
+    case CheckPassword:
+    case RecoverPassword:
       on_authentication_result(std::move(net_query), true);
       break;
-    case NetQueryType::Authentication:
+    case Authentication:
       on_authentication_result(std::move(net_query), false);
       break;
-    case NetQueryType::SendCode:
+    case SendCode:
       on_send_code_result(std::move(net_query));
       break;
-    case NetQueryType::CheckPremiumPurchase:
+    case CheckPremiumPurchase:
       on_check_premium_purchase_result(std::move(net_query));
       break;
-    case NetQueryType::SetPremiumPurchaseTransaction:
+    case SetPremiumPurchaseTransaction:
       on_set_premium_purchase_transaction_result(std::move(net_query));
       break;
-    case NetQueryType::SendEmailCode:
+    case SendEmailCode:
       on_send_email_code_result(std::move(net_query));
       break;
-    case NetQueryType::VerifyEmailAddress:
+    case VerifyEmailAddress:
       on_verify_email_address_result(std::move(net_query));
       break;
-    case NetQueryType::ResetEmailAddress:
+    case ResetEmailAddress:
       on_reset_email_address_result(std::move(net_query));
       break;
-    case NetQueryType::RequestQrCode:
+    case RequestQrCode:
       on_request_qr_code_result(std::move(net_query), false);
       break;
-    case NetQueryType::ImportQrCode:
+    case ImportQrCode:
       on_request_qr_code_result(std::move(net_query), true);
       break;
-    case NetQueryType::FinishPasskeyLogin:
+    case FinishPasskeyLogin:
       on_finish_passkey_login_result(std::move(net_query));
       break;
-    case NetQueryType::GetPassword:
+    case GetPassword:
       on_get_password_result(std::move(net_query));
       break;
-    case NetQueryType::RequestPasswordRecovery:
+    case RequestPasswordRecovery:
       on_request_password_recovery_result(std::move(net_query));
       break;
-    case NetQueryType::CheckPasswordRecoveryCode:
+    case CheckPasswordRecoveryCode:
       on_check_password_recovery_code_result(std::move(net_query));
       break;
-    case NetQueryType::RequestFirebaseSms:
+    case RequestFirebaseSms:
       on_request_firebase_sms_result(std::move(net_query));
       break;
-    case NetQueryType::LogOut:
+    case LogOut:
       on_log_out_result(std::move(net_query));
       break;
-    case NetQueryType::DeleteAccount:
+    case DeleteAccount:
       on_delete_account_result(std::move(net_query));
       break;
     default:

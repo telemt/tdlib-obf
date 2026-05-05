@@ -38,9 +38,11 @@
 #include "td/utils/algorithm.h"
 #include "td/utils/buffer.h"
 #include "td/utils/logging.h"
+
 #include "td/utils/misc.h"
 #include "td/utils/ScopeGuard.h"
 #include "td/utils/SliceBuilder.h"
+#include <utility>
 
 #include <type_traits>
 
@@ -168,7 +170,7 @@ class GetStarsTransactionsQuery final : public Td::ResultHandler {
   }
 
   void send(DialogId dialog_id, const string &subscription_id, const string &offset, int32 limit,
-            td_api::object_ptr<td_api::TransactionDirection> &&direction) {
+            const td_api::object_ptr<td_api::TransactionDirection> &direction) {
     dialog_id_ = dialog_id;
     auto input_peer = td_->dialog_manager_->get_input_peer(dialog_id, AccessRights::Write);
     if (input_peer == nullptr) {
@@ -292,13 +294,14 @@ class GetStarsTransactionsQuery final : public Td::ResultHandler {
       }
       auto get_paid_media_object = [&](DialogId dialog_id) -> vector<td_api::object_ptr<td_api::PaidMedia>> {
         auto extended_media = transform(std::move(transaction->extended_media_), [td = td_, dialog_id](auto &&media) {
-          return MessageExtendedMedia(td, std::move(media), dialog_id);
+          return MessageExtendedMedia(td, std::forward<decltype(media)>(media), dialog_id);
         });
         for (auto &media : extended_media) {
           media.append_file_ids(td_, file_ids);
         }
-        auto extended_media_objects =
-            transform(std::move(extended_media), [td = td_](auto &&media) { return media.get_paid_media_object(td); });
+        auto extended_media_objects = transform(std::move(extended_media), [td = td_](auto &&media) {
+          return std::forward<decltype(media)>(media).get_paid_media_object(td);
+        });
         transaction->extended_media_.clear();
         return extended_media_objects;
       };
@@ -823,7 +826,7 @@ class GetTonTransactionsQuery final : public Td::ResultHandler {
       : promise_(std::move(promise)) {
   }
 
-  void send(const string &offset, int32 limit, td_api::object_ptr<td_api::TransactionDirection> &&direction) {
+  void send(const string &offset, int32 limit, const td_api::object_ptr<td_api::TransactionDirection> &direction) {
     auto input_peer =
         td_->dialog_manager_->get_input_peer(td_->dialog_manager_->get_my_dialog_id(), AccessRights::Write);
     CHECK(input_peer != nullptr);
