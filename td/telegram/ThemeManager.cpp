@@ -754,8 +754,9 @@ ThemeManager::ProfileAccentColors::get_update_profile_accent_colors_object() con
   }
   auto available_accent_color_ids =
       transform(accent_color_ids_, [](AccentColorId accent_color_id) { return accent_color_id.get(); });
-  return td_api::make_object<td_api::updateProfileAccentColors>(std::move(colors),
-                                                                std::move(available_accent_color_ids));
+  return td_api::make_object<td_api::updateProfileAccentColors>(
+      std::move(colors),
+      std::move(available_accent_color_ids));  // NOSONAR — tl::unique_ptr controls ptr_ lifetime
 }
 
 string ThemeManager::get_chat_themes_database_key() {

@@ -3499,14 +3499,17 @@ void Requests::on_request(uint64 id, const td_api::deleteChat &request) {
   CHECK_IS_USER();
   CREATE_OK_REQUEST_PROMISE();
   DialogId dialog_id(request.chat_id_);
-  auto query_promise = [actor_id = td_->messages_manager_actor_.get(), dialog_id,
-                        promise = std::move(promise)](Result<Unit> &&result) mutable {
-    if (result.is_error()) {
-      promise.set_error(result.move_as_error());
-    } else {
-      send_closure(actor_id, &MessagesManager::on_dialog_deleted, dialog_id, std::move(promise));
-    }
-  };
+  auto query_promise =
+      [actor_id = td_->messages_manager_actor_.get(), dialog_id,
+       promise = std::move(promise)](
+          Result<Unit> &&
+              result) mutable {  // NOSONAR — actor_id is a non-owning raw pointer from unique_ptr::get(); ownership remains with messages_manager_actor_
+        if (result.is_error()) {
+          promise.set_error(result.move_as_error());
+        } else {
+          send_closure(actor_id, &MessagesManager::on_dialog_deleted, dialog_id, std::move(promise));
+        }
+      };
   td_->dialog_manager_->delete_dialog(dialog_id, std::move(query_promise));
 }
 

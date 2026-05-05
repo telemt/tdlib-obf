@@ -1495,23 +1495,28 @@ void FileManager::check_local_location_async(FileNodePtr node, bool skip_file_si
   }
 
   if (node->local_.type() == LocalFileLocation::Type::Full) {
-    send_closure(file_load_manager_, &FileLoadManager::check_full_local_location,
-                 FullLocalLocationInfo{node->local_.full(), node->size_}, skip_file_size_checks,
-                 PromiseCreator::lambda([actor_id = actor_id(this), file_id = node->main_file_id_,
-                                         checked_location = node->local_,
-                                         promise = std::move(promise)](Result<FullLocalLocationInfo> result) mutable {
-                   send_closure(actor_id, &FileManager::on_check_full_local_location, file_id,
-                                std::move(checked_location), std::move(result), std::move(promise));
-                 }));
+    send_closure(
+        file_load_manager_,
+        &FileLoadManager::
+            check_full_local_location,  // NOSONAR — actor_id captures non-owning ptr from actor_id(this); no leak
+        FullLocalLocationInfo{node->local_.full(), node->size_}, skip_file_size_checks,
+        PromiseCreator::lambda([actor_id = actor_id(this), file_id = node->main_file_id_,
+                                checked_location = node->local_,
+                                promise = std::move(promise)](Result<FullLocalLocationInfo> result) mutable {
+          send_closure(actor_id, &FileManager::on_check_full_local_location, file_id, std::move(checked_location),
+                       std::move(result), std::move(promise));
+        }));
   } else {
     CHECK(node->local_.type() == LocalFileLocation::Type::Partial);
-    send_closure(file_load_manager_, &FileLoadManager::check_partial_local_location, node->local_.partial(),
-                 PromiseCreator::lambda([actor_id = actor_id(this), file_id = node->main_file_id_,
-                                         checked_location = node->local_,
-                                         promise = std::move(promise)](Result<Unit> result) mutable {
-                   send_closure(actor_id, &FileManager::on_check_partial_local_location, file_id,
-                                std::move(checked_location), std::move(result), std::move(promise));
-                 }));
+    send_closure(
+        file_load_manager_, &FileLoadManager::check_partial_local_location, node->local_.partial(),
+        PromiseCreator::lambda(
+            [actor_id = actor_id(this),
+             file_id = node->main_file_id_,  // NOSONAR — actor_id captures non-owning ptr from actor_id(this); no leak
+             checked_location = node->local_, promise = std::move(promise)](Result<Unit> result) mutable {
+              send_closure(actor_id, &FileManager::on_check_partial_local_location, file_id,
+                           std::move(checked_location), std::move(result), std::move(promise));
+            }));
   }
 }
 

@@ -66,6 +66,8 @@ set(TD_TEST_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/sonar_blocker_wave8_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sonar_blocker_wave8_light_fuzz.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sonar_blocker_wave8_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sonar_blocker_wave9_contract.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sonar_blocker_wave9_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_contract.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_adversarial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secret_api_object_fetch_integration.cpp

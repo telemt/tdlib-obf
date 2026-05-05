@@ -1382,7 +1382,9 @@ static tl_object_ptr<T> copy(const T &obj) {
 
 template <class T>
 static tl_object_ptr<T> copy(const tl_object_ptr<T> &obj) {
-  return obj == nullptr ? nullptr : copy(*obj);
+  return obj == nullptr
+             ? nullptr
+             : copy(*obj);  // NOSONAR — tl_object_ptr<T> is a RAII smart pointer; ptr_ is owned by its destructor
 }
 
 template <>

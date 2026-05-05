@@ -112,7 +112,7 @@ inline void RwMutex::lock_read_unsafe() {
   CHECK(!empty());
 // TODO error handling
 #if TD_PORT_POSIX
-  pthread_rwlock_rdlock(&mutex_);
+  pthread_rwlock_rdlock(&mutex_);  // NOSONAR — _unsafe method designed for OpenSSL locking callback; lock ordering managed externally
 #elif TD_PORT_WINDOWS
   AcquireSRWLockShared(mutex_.get());
 #endif
@@ -121,7 +121,7 @@ inline void RwMutex::lock_read_unsafe() {
 inline void RwMutex::lock_write_unsafe() {
   CHECK(!empty());
 #if TD_PORT_POSIX
-  pthread_rwlock_wrlock(&mutex_);
+  pthread_rwlock_wrlock(&mutex_);  // NOSONAR — _unsafe method designed for OpenSSL locking callback; lock ordering managed externally
 #elif TD_PORT_WINDOWS
   AcquireSRWLockExclusive(mutex_.get());
 #endif
@@ -130,7 +130,7 @@ inline void RwMutex::lock_write_unsafe() {
 inline void RwMutex::unlock_read_unsafe() {
   CHECK(!empty());
 #if TD_PORT_POSIX
-  pthread_rwlock_unlock(&mutex_);
+  pthread_rwlock_unlock(&mutex_);  // NOSONAR — _unsafe method designed for OpenSSL locking callback; ordering managed externally
 #elif TD_PORT_WINDOWS
   ReleaseSRWLockShared(mutex_.get());
 #endif
@@ -139,7 +139,7 @@ inline void RwMutex::unlock_read_unsafe() {
 inline void RwMutex::unlock_write_unsafe() {
   CHECK(!empty());
 #if TD_PORT_POSIX
-  pthread_rwlock_unlock(&mutex_);
+  pthread_rwlock_unlock(&mutex_);  // NOSONAR — _unsafe method designed for OpenSSL locking callback; ordering managed externally
 #elif TD_PORT_WINDOWS
   ReleaseSRWLockExclusive(mutex_.get());
 #endif
